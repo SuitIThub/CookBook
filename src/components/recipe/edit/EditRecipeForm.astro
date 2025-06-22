@@ -4,6 +4,7 @@ import HeaderEdit from './HeaderEdit.astro';
 import IngredientsEdit from './IngredientsEdit.astro'; 
 import PreparationEdit from './PreparationEdit.astro';
 import EditFormActions from './EditFormActions.astro';
+import IngredientLinkingScript from './IngredientLinkingScript.astro';
 
 interface Props {
   recipe: Recipe;
@@ -17,4 +18,149 @@ const { recipe } = Astro.props;
   <IngredientsEdit recipe={recipe} />
   <PreparationEdit recipe={recipe} />
   <EditFormActions />
-</form> 
+</form>
+
+<div>
+  <!-- Include the ingredient linking functionality -->
+  <IngredientLinkingScript />
+</div>
+
+<script define:vars={{ recipe }}>
+  // Make recipe data available globally for ingredient linking
+  window.currentRecipe = recipe;
+  
+  // Add form submission handler
+  document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('edit-recipe-form');
+    if (form) {
+      form.addEventListener('submit', handleFormSubmit);
+    }
+  });
+
+  async function handleFormSubmit(e) {
+    e.preventDefault();
+    
+    const form = e.target;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    
+    try {
+      // Show loading state
+      submitButton.textContent = 'Speichert...';
+      submitButton.disabled = true;
+      
+      // Collect updated recipe data
+      const updatedRecipe = collectRecipeData();
+      
+      // Get current recipe ID from URL
+      const recipeId = window.location.pathname.split('/').pop();
+      
+      // Send to backend
+      const response = await fetch(`/api/recipes?id=${recipeId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedRecipe)
+      });
+      
+      if (response.ok) {
+        const savedRecipe = await response.json();
+        window.currentRecipe = savedRecipe;
+        
+        // Show success notification
+        showNotification('Rezept erfolgreich gespeichert!', 'success');
+        
+        // Reload the page to show updated content after a short delay
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+    } catch (error) {
+      console.error('Error saving recipe:', error);
+      showNotification('Fehler beim Speichern des Rezepts. Bitte versuchen Sie es erneut.', 'error');
+    } finally {
+      // Restore button state
+      submitButton.textContent = originalText;
+      submitButton.disabled = false;
+    }
+  }
+
+  function collectRecipeData() {
+    // Get updated recipe data from ingredient linker if available
+    let updatedRecipe = window.currentRecipe;
+    if (window.ingredientLinker) {
+      updatedRecipe = window.ingredientLinker.getUpdatedRecipe() || updatedRecipe;
+    }
+    
+    // Collect form data
+    const formData = {
+      ...updatedRecipe,
+      title: document.getElementById('edit-title')?.value || updatedRecipe.title,
+      subtitle: document.getElementById('edit-subtitle')?.value || updatedRecipe.subtitle,
+      description: document.getElementById('edit-description')?.value || updatedRecipe.description,
+      metadata: {
+        ...updatedRecipe.metadata,
+        servings: parseInt(document.getElementById('edit-servings')?.value) || updatedRecipe.metadata.servings,
+        preparationTime: parseInt(document.getElementById('edit-prep-time')?.value) || updatedRecipe.metadata.preparationTime,
+        cookingTime: parseInt(document.getElementById('edit-cook-time')?.value) || updatedRecipe.metadata.cookingTime,
+        difficulty: document.getElementById('edit-difficulty')?.value || updatedRecipe.metadata.difficulty
+      },
+      // Include ingredient groups and preparation groups with linked ingredients
+      ingredientGroups: collectIngredientGroups(),
+      preparationGroups: collectPreparationGroups()
+    };
+    
+    return formData;
+  }
+
+  function collectIngredientGroups() {
+    const updatedRecipe = window.ingredientLinker ? window.ingredientLinker.getUpdatedRecipe() : window.currentRecipe;
+    return updatedRecipe.ingredientGroups; // For now, return as-is - ingredient editing is complex
+  }
+
+  function collectPreparationGroups() {
+    const updatedRecipe = window.ingredientLinker ? window.ingredientLinker.getUpdatedRecipe() : window.currentRecipe;
+    
+    // Collect current text from textareas and merge with linked ingredients
+    const preparationGroups = updatedRecipe.preparationGroups.map(group => ({
+      ...group,
+      steps: group.steps.map(step => {
+        if (step.text) {
+          // Find the corresponding textarea and get current text
+          const stepElement = document.querySelector(`[data-step-id="${step.id}"]`);
+          const textArea = stepElement?.querySelector('.step-text-input');
+          const currentText = textArea?.value || step.text;
+          
+          return {
+            ...step,
+            text: currentText,
+            linkedIngredients: step.linkedIngredients || []
+          };
+        }
+        return step;
+      })
+    }));
+    
+    return preparationGroups;
+  }
+
+  function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white ${
+      type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+    }`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+  }
+
+
+</script> 

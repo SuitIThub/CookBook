@@ -1,0 +1,436 @@
+---
+// Component for handling ingredient linking functionality
+---
+
+<script>
+// Extend Window interface for our custom properties
+declare global {
+  interface Window {
+    currentRecipe: any;
+    ingredientLinker: IngredientLinker;
+    IngredientLinker: typeof IngredientLinker;
+  }
+}
+
+interface LinkedIngredient {
+  ingredientId: string;
+  selectedQuantityIndex: number;
+}
+
+interface Recipe {
+  preparationGroups: Array<{
+    steps: Array<{
+      id: string;
+      text: string;
+      linkedIngredients?: LinkedIngredient[];
+    }>;
+  }>;
+  ingredientGroups: Array<{
+    ingredients: Array<{
+      id: string;
+      name: string;
+      quantities: Array<{
+        amount: number;
+        unit: string;
+      }>;
+    }>;
+  }>;
+}
+
+class IngredientLinker {
+  private currentStepElement: HTMLElement | null = null;
+  private currentStepId: string | null = null;
+  private recipe: Recipe | null = null;
+  private linkedIngredients = new Map<string, LinkedIngredient[]>(); // stepId -> linkedIngredients array
+
+  constructor() {
+    this.init();
+  }
+
+  init(): void {
+    // Get recipe data from page context
+    if (window.currentRecipe) {
+      this.recipe = window.currentRecipe;
+      this.loadExistingLinks();
+    }
+    
+    this.bindEvents();
+    
+    // Also listen for edit mode changes to refresh displays
+    this.setupEditModeListener();
+  }
+
+  setupEditModeListener(): void {
+    // Watch for edit mode activation to refresh displays
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          const editContent = document.getElementById('edit-content');
+          if (editContent && !editContent.classList.contains('hidden')) {
+            // Edit mode activated, refresh all displays after a short delay
+            setTimeout(() => {
+              this.refreshAllDisplays();
+            }, 200);
+          }
+        }
+      });
+    });
+    
+    const editContent = document.getElementById('edit-content');
+    if (editContent) {
+      observer.observe(editContent, { attributes: true });
+    }
+  }
+
+  refreshAllDisplays(): void {
+    // Refresh all step displays with current linked ingredients
+    this.linkedIngredients.forEach((links, stepId) => {
+      const stepElement = document.querySelector(`[data-step-id="${stepId}"]`) as HTMLElement;
+      if (stepElement) {
+        this.updateStepDisplay(stepElement, stepId);
+      }
+    });
+  }
+
+  loadExistingLinks(): void {
+    // Load existing ingredient links from recipe data
+    if (this.recipe) {
+      this.recipe.preparationGroups.forEach((group: any) => {
+        group.steps.forEach((step: any) => {
+          if (step.text && step.linkedIngredients && step.linkedIngredients.length > 0) {
+            this.linkedIngredients.set(step.id, step.linkedIngredients);
+            
+            // Also update the display if the step element exists
+            setTimeout(() => {
+              const stepElement = document.querySelector(`[data-step-id="${step.id}"]`) as HTMLElement;
+              if (stepElement) {
+                this.updateStepDisplay(stepElement, step.id);
+              }
+            }, 100);
+          }
+        });
+      });
+    }
+  }
+
+  bindEvents(): void {
+    // Auto-link button click events
+    document.addEventListener('click', (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target?.closest('.auto-link-btn')) {
+        e.preventDefault();
+        const stepElement = target.closest('.step-edit-item') as HTMLElement;
+        this.autoLinkIngredients(stepElement);
+      }
+    });
+
+    // Manual link button click events
+    document.addEventListener('click', (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target?.closest('.manual-link-btn')) {
+        e.preventDefault();
+        const stepElement = target.closest('.step-edit-item') as HTMLElement;
+        this.openManualLinkModal(stepElement);
+      }
+    });
+
+    // Modal event handlers
+    const modal = document.getElementById('ingredient-link-modal');
+    const cancelBtn = document.getElementById('cancel-link-modal');
+    const saveBtn = document.getElementById('save-link-modal');
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.closeModal());
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => this.saveManualLinks());
+    }
+
+    // Close modal on outside click
+    if (modal) {
+      modal.addEventListener('click', (e: Event) => {
+        if (e.target === modal) {
+          this.closeModal();
+        }
+      });
+    }
+  }
+
+  getAllIngredients(): Array<{id: string, name: string, quantities: Array<{amount: number, unit: string}>}> {
+    if (!this.recipe) return [];
+    
+    return this.recipe.ingredientGroups.flatMap((group: any) => 
+      group.ingredients.filter((item: any) => item.id && item.name)
+    );
+  }
+
+  // Improved text analysis for automatic ingredient linking
+  autoLinkIngredients(stepElement: HTMLElement): void {
+    if (!this.recipe || !stepElement) return;
+
+    const stepId = stepElement.dataset.stepId;
+    const textArea = stepElement.querySelector('.step-text-input') as HTMLTextAreaElement;
+    if (!textArea || !stepId) return;
+
+    const stepText = textArea.value.toLowerCase();
+    const allIngredients = this.getAllIngredients();
+    const linkedIngredients: LinkedIngredient[] = [];
+
+    // Enhanced text matching algorithm
+    allIngredients.forEach((ingredient: any) => {
+      const ingredientName = ingredient.name.toLowerCase();
+      
+      // Multiple matching strategies
+      const isDirectMatch = stepText.includes(ingredientName);
+      const isPartialMatch = this.findPartialMatch(stepText, ingredientName);
+      const isPluralized = this.findPluralized(stepText, ingredientName);
+      
+      if (isDirectMatch || isPartialMatch || isPluralized) {
+        // Check if already linked to avoid duplicates
+        const alreadyLinked = linkedIngredients.some((link: LinkedIngredient) => 
+          link.ingredientId === ingredient.id
+        );
+        
+        if (!alreadyLinked) {
+          linkedIngredients.push({
+            ingredientId: ingredient.id,
+            selectedQuantityIndex: 0 // Default to first quantity
+          });
+        }
+      }
+    });
+
+    // Update the linked ingredients for this step
+    this.linkedIngredients.set(stepId, linkedIngredients);
+    this.updateStepDisplay(stepElement, stepId);
+    this.updateRecipeData();
+    
+    // Show success message
+    this.showNotification(`${linkedIngredients.length} Zutaten automatisch verlinkt!`, 'success');
+  }
+
+  // Helper methods for improved text matching
+  findPartialMatch(text: string, ingredient: string): boolean {
+    // Find partial matches (e.g., "Tomaten" matches "Tomate")
+    const words = text.split(/\s+/);
+    return words.some((word: string) => {
+      return word.includes(ingredient) || ingredient.includes(word);
+    });
+  }
+
+  findPluralized(text: string, ingredient: string): boolean {
+    // Simple German pluralization checks
+    const pluralForms = [
+      ingredient + 'n',    // Tomate -> Tomaten
+      ingredient + 'en',   // Zwiebel -> Zwiebeln  
+      ingredient + 's',    // Paprika -> Paprikas
+      ingredient.slice(0, -1) + 'en' // Replace last char + en
+    ];
+    
+    return pluralForms.some((plural: string) => text.includes(plural));
+  }
+
+  showNotification(message: string, type: string = 'info'): void {
+    // Simple notification system
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white ${
+      type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+    }`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+  }
+
+  openManualLinkModal(stepElement: HTMLElement): void {
+    if (!this.recipe || !stepElement) return;
+
+    this.currentStepElement = stepElement;
+    this.currentStepId = stepElement.dataset.stepId || null;
+    
+    const modal = document.getElementById('ingredient-link-modal');
+    const ingredientList = document.getElementById('ingredient-list');
+    
+    if (!modal || !ingredientList || !this.currentStepId) return;
+
+    // Get current linked ingredients for this step
+    const currentLinks = this.linkedIngredients.get(this.currentStepId) || [];
+    const currentLinkedIds = new Set(currentLinks.map((link: LinkedIngredient) => link.ingredientId));
+
+    // Populate ingredient list
+    const allIngredients = this.getAllIngredients();
+    ingredientList.innerHTML = '';
+
+    allIngredients.forEach((ingredient: any) => {
+      const isLinked = currentLinkedIds.has(ingredient.id);
+      const currentLink = currentLinks.find((link: LinkedIngredient) => link.ingredientId === ingredient.id);
+      
+      const ingredientDiv = document.createElement('div');
+      ingredientDiv.className = 'flex items-center space-x-3 p-2 border border-gray-200 dark:border-gray-600 rounded';
+      
+      ingredientDiv.innerHTML = `
+        <input type="checkbox" 
+               id="ingredient-${ingredient.id}" 
+               ${isLinked ? 'checked' : ''} 
+               class="ingredient-checkbox"
+               data-ingredient-id="${ingredient.id}">
+        <label for="ingredient-${ingredient.id}" class="flex-1 text-sm text-gray-900 dark:text-white">
+          ${ingredient.name}
+        </label>
+        <select class="quantity-select text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white" 
+                data-ingredient-id="${ingredient.id}" 
+                ${!isLinked ? 'disabled' : ''}>
+          ${ingredient.quantities.map((quantity: any, index: number) => 
+            `<option value="${index}" ${currentLink && currentLink.selectedQuantityIndex === index ? 'selected' : ''}>
+              ${quantity.amount} ${quantity.unit}
+            </option>`
+          ).join('')}
+        </select>
+      `;
+
+      // Add event listener for checkbox
+      const checkbox = ingredientDiv.querySelector('.ingredient-checkbox') as HTMLInputElement;
+      const select = ingredientDiv.querySelector('.quantity-select') as HTMLSelectElement;
+      
+      if (checkbox && select) {
+        checkbox.addEventListener('change', () => {
+          select.disabled = !checkbox.checked;
+        });
+      }
+
+      ingredientList.appendChild(ingredientDiv);
+    });
+
+    // Show modal
+    modal.classList.remove('hidden');
+  }
+
+  closeModal(): void {
+    const modal = document.getElementById('ingredient-link-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+    this.currentStepElement = null;
+    this.currentStepId = null;
+  }
+
+  saveManualLinks(): void {
+    if (!this.currentStepId) return;
+
+    const ingredientList = document.getElementById('ingredient-list');
+    if (!ingredientList) return;
+    
+    const checkboxes = ingredientList.querySelectorAll('.ingredient-checkbox:checked') as NodeListOf<HTMLInputElement>;
+    const linkedIngredients: LinkedIngredient[] = [];
+
+    checkboxes.forEach((checkbox: HTMLInputElement) => {
+      const ingredientId = checkbox.dataset.ingredientId;
+      if (!ingredientId) return;
+      
+      const select = ingredientList.querySelector(`.quantity-select[data-ingredient-id="${ingredientId}"]`) as HTMLSelectElement;
+      if (!select) return;
+      
+      const selectedQuantityIndex = parseInt(select.value);
+
+      linkedIngredients.push({
+        ingredientId,
+        selectedQuantityIndex
+      });
+    });
+
+    // Update the linked ingredients for this step
+    this.linkedIngredients.set(this.currentStepId, linkedIngredients);
+    if (this.currentStepElement) {
+      this.updateStepDisplay(this.currentStepElement, this.currentStepId);
+    }
+    this.updateRecipeData();
+    this.closeModal();
+    
+    this.showNotification(`${linkedIngredients.length} Zutaten manuell verlinkt!`, 'success');
+  }
+
+  updateStepDisplay(stepElement: HTMLElement, stepId: string): void {
+    const displayContainer = stepElement.querySelector('.linked-ingredients-display');
+    if (!displayContainer) return;
+
+    const linkedIngredients = this.linkedIngredients.get(stepId) || [];
+    const allIngredients = this.getAllIngredients();
+
+    if (linkedIngredients.length === 0) {
+      displayContainer.innerHTML = '';
+      return;
+    }
+
+    const tagsHtml = linkedIngredients.map((link: LinkedIngredient) => {
+      const ingredient = allIngredients.find((ing: any) => ing.id === link.ingredientId);
+      if (!ingredient) return '';
+      
+      const quantity = ingredient.quantities[link.selectedQuantityIndex];
+      return `
+        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+          ${ingredient.name} (${quantity.amount} ${quantity.unit})
+          <button type="button" class="ml-1 text-blue-600 hover:text-blue-800" onclick="window.ingredientLinker.removeIngredientLink('${stepId}', '${link.ingredientId}')">
+            ×
+          </button>
+        </span>
+      `;
+    }).join('');
+
+    displayContainer.innerHTML = `
+      <div class="flex flex-wrap gap-2 mb-2">
+        ${tagsHtml}
+      </div>
+    `;
+  }
+
+  removeIngredientLink(stepId: string, ingredientId: string): void {
+    const currentLinks = this.linkedIngredients.get(stepId) || [];
+    const updatedLinks = currentLinks.filter((link: LinkedIngredient) => link.ingredientId !== ingredientId);
+    
+    this.linkedIngredients.set(stepId, updatedLinks);
+    
+    const stepElement = document.querySelector(`[data-step-id="${stepId}"]`) as HTMLElement;
+    if (stepElement) {
+      this.updateStepDisplay(stepElement, stepId);
+      this.updateRecipeData();
+    }
+  }
+
+  updateRecipeData(): void {
+    if (!this.recipe) return;
+
+    // Update the recipe object with current linked ingredients
+    this.recipe.preparationGroups.forEach((group: any) => {
+      group.steps.forEach((step: any) => {
+        if (step.text && step.id) {
+          const linkedIngredients = this.linkedIngredients.get(step.id);
+          if (linkedIngredients) {
+            step.linkedIngredients = linkedIngredients;
+          }
+        }
+      });
+    });
+
+    // Update the global recipe object
+    window.currentRecipe = this.recipe;
+  }
+
+  // Export function to save recipe with linked ingredients
+  getUpdatedRecipe(): Recipe | null {
+    this.updateRecipeData();
+    return this.recipe;
+  }
+}
+
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  window.ingredientLinker = new IngredientLinker();
+});
+
+// Export for use in other scripts
+window.IngredientLinker = IngredientLinker;
+</script> 

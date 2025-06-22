@@ -6,6 +6,34 @@ interface Props {
 }
 
 const { recipe } = Astro.props;
+
+// Helper function to get all ingredients from the recipe
+function getAllIngredients(recipe: Recipe) {
+  return recipe.ingredientGroups.flatMap(group => 
+    group.ingredients.filter(item => 'id' in item && 'name' in item)
+  );
+}
+
+// Helper function to track used ingredients across steps
+function getUsedIngredients(preparationGroups: any[], currentStepIndex: number) {
+  const usedIngredients = new Set<string>();
+  let stepCounter = 0;
+  
+  for (const group of preparationGroups) {
+    for (const step of group.steps) {
+      if ('text' in step && stepCounter < currentStepIndex) {
+        if (step.linkedIngredients) {
+          step.linkedIngredients.forEach((link: any) => {
+            usedIngredients.add(link.ingredientId);
+          });
+        }
+      }
+      stepCounter++;
+    }
+  }
+  
+  return usedIngredients;
+}
 ---
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors duration-200">
@@ -21,49 +49,114 @@ const { recipe } = Astro.props;
       {/* First show ungrouped steps */}
       {recipe.preparationGroups.filter(group => !group.title).map((group) => (
         <ol class="space-y-4">
-          {group.steps.map((step, index) => (
-            'text' in step ? (
+          {group.steps.map((step, index) => {
+            if (!('text' in step)) return null;
+            const preparationStep = step as PreparationStep;
+            const allIngredients = getAllIngredients(recipe);
+            const usedIngredients = getUsedIngredients(recipe.preparationGroups, index);
+            
+            return (
               <li class="flex space-x-4">
                 <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
                   {index + 1}
                 </div>
                 <div class="flex-1">
-                  <p class="text-gray-900 dark:text-white leading-relaxed" set:html={(step as PreparationStep).text.replace(
+                  <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={preparationStep.text.replace(
                     /(\d+(?:[-–]\d+)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
                     '<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1">$1</button>'
                   )}></p>
+                  
+                  {/* Linked Ingredients Tags */}
+                  {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
+                    <div class="flex flex-wrap gap-2 mt-2">
+                      {preparationStep.linkedIngredients.map((link) => {
+                        const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
+                        if (!ingredient || !('name' in ingredient)) return null;
+                        const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                        const wasUsedBefore = usedIngredients.has(link.ingredientId);
+                        
+                        return (
+                          <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            wasUsedBefore 
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
+                              : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          }`}>
+                            {ingredient.name} ({quantity.amount} {quantity.unit})
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </li>
-            ) : null
-          ))}
+            );
+          })}
         </ol>
       ))}
       
       {/* Then show grouped steps */}
-      {recipe.preparationGroups.filter(group => group.title).map((group) => (
-        <div>
-          <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b border-gray-200 dark:border-gray-600 pb-1">
-            {group.title}
-          </h3>
-          <ol class="space-y-4">
-            {group.steps.map((step, index) => (
-              'text' in step ? (
-                <li class="flex space-x-4">
-                  <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    {index + 1}
-                  </div>
-                  <div class="flex-1">
-                    <p class="text-gray-900 dark:text-white leading-relaxed" set:html={(step as PreparationStep).text.replace(
-                      /(\d+(?:[-–]\d+)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
-                      '<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1">$1</button>'
-                    )}></p>
-                  </div>
-                </li>
-              ) : null
-            ))}
-          </ol>
-        </div>
-      ))}
+      {recipe.preparationGroups.filter(group => group.title).map((group) => {
+        // Calculate step offset for grouped steps
+        let stepOffset = 0;
+        for (const prevGroup of recipe.preparationGroups) {
+          if (prevGroup.title === group.title) break;
+          if (!prevGroup.title) {
+            stepOffset += prevGroup.steps.length;
+          }
+        }
+        
+        return (
+          <div>
+            <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b border-gray-200 dark:border-gray-600 pb-1">
+              {group.title}
+            </h3>
+            <ol class="space-y-4">
+              {group.steps.map((step, index) => {
+                if (!('text' in step)) return null;
+                const preparationStep = step as PreparationStep;
+                const allIngredients = getAllIngredients(recipe);
+                const usedIngredients = getUsedIngredients(recipe.preparationGroups, stepOffset + index);
+                
+                return (
+                  <li class="flex space-x-4">
+                    <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                      {index + 1}
+                    </div>
+                    <div class="flex-1">
+                      <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={preparationStep.text.replace(
+                        /(\d+(?:[-–]\d+)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+                        '<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1">$1</button>'
+                      )}></p>
+                      
+                      {/* Linked Ingredients Tags */}
+                      {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
+                        <div class="flex flex-wrap gap-2 mt-2">
+                          {preparationStep.linkedIngredients.map((link) => {
+                            const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
+                            if (!ingredient || !('name' in ingredient)) return null;
+                            const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                            const wasUsedBefore = usedIngredients.has(link.ingredientId);
+                            
+                            return (
+                              <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                wasUsedBefore 
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
+                                  : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              }`}>
+                                {ingredient.name} ({quantity.amount} {quantity.unit})
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        );
+      })}
     </div>
   </div>
 </div> 
