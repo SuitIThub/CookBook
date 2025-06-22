@@ -8,6 +8,7 @@ import RecipeHeader from '../../components/recipe/details/RecipeHeader.astro';
 import IngredientsList from '../../components/recipe/details/IngredientsList.astro';
 import PreparationSteps from '../../components/recipe/details/PreparationSteps.astro';
 import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
+import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro';
 
 const { id } = Astro.params;
 
@@ -30,12 +31,18 @@ try {
     <RecipeHeader recipe={recipe} />
 
     <!-- View Mode Content -->
-    <div id="view-content" class="grid md:grid-cols-2 gap-6">
-      <!-- Ingredients Section -->
-      <IngredientsList recipe={recipe} />
+    <div id="view-content" class="space-y-6">
+      <!-- Image Gallery -->
+      <RecipeImageGallery recipe={recipe} mode="view" />
+      
+      <!-- Recipe Sections -->
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Ingredients Section -->
+        <IngredientsList recipe={recipe} />
 
-      <!-- Preparation Section -->
-      <PreparationSteps recipe={recipe} />
+        <!-- Preparation Section -->
+        <PreparationSteps recipe={recipe} />
+      </div>
     </div>
 
     <!-- Edit Mode Content (initially hidden) -->

@@ -35,6 +35,13 @@ export interface PreparationGroup {
   steps: (PreparationStep | PreparationGroup)[];
 }
 
+export interface RecipeImage {
+  id: string;
+  filename: string;
+  url: string;
+  uploadedAt: Date;
+}
+
 export interface Recipe {
   id: string;
   title: string;
@@ -43,7 +50,8 @@ export interface Recipe {
   metadata: RecipeMetadata;
   ingredientGroups: IngredientGroup[];
   preparationGroups: PreparationGroup[];
-  imageUrl?: string;
+  imageUrl?: string; // Keep for backward compatibility
+  images?: RecipeImage[];
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,5 +1,6 @@
 ---
 import type { Recipe } from '../../types/recipe';
+import RecipeImageCarousel from './RecipeImageCarousel.astro';
 
 interface Props {
   recipe: Recipe;
@@ -9,12 +10,8 @@ const { recipe } = Astro.props;
 ---
 
 <div class="recipe-card">
-  <!-- Recipe Image Placeholder -->
-  <div class="recipe-image-placeholder">
-    <svg class="w-16 h-16 text-orange-400 dark:text-orange-300" fill="currentColor" viewBox="0 0 20 20">
-      <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
-    </svg>
-  </div>
+  <!-- Recipe Image Carousel -->
+  <RecipeImageCarousel images={recipe.images || []} />
   
   <!-- Recipe Content -->
   <div class="card-content">

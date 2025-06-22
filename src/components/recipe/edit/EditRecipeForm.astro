@@ -5,6 +5,7 @@ import IngredientsEdit from './IngredientsEdit.astro';
 import PreparationEdit from './PreparationEdit.astro';
 import EditFormActions from './EditFormActions.astro';
 import IngredientLinkingScript from './IngredientLinkingScript.astro';
+import RecipeImageGallery from '../RecipeImageGallery.astro';
 
 interface Props {
   recipe: Recipe;
@@ -15,6 +16,7 @@ const { recipe } = Astro.props;
 
 <form id="edit-recipe-form" class="space-y-6">
   <HeaderEdit recipe={recipe} />
+  <RecipeImageGallery recipe={recipe} mode="edit" />
   <IngredientsEdit recipe={recipe} />
   <PreparationEdit recipe={recipe} />
   <EditFormActions />

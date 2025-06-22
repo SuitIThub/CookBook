@@ -7,7 +7,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "db:init": "node scripts/init-db.js"
+    "db:init": "node scripts/init-db.js",
+    "db:migrate": "node scripts/migrate-db.js"
   },
   "dependencies": {
     "astro": "^5.10.0",

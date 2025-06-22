@@ -1,0 +1,157 @@
+---
+import type { RecipeImage } from '../../types/recipe';
+
+interface Props {
+  images: RecipeImage[];
+}
+
+const { images } = Astro.props;
+---
+
+{images && images.length > 0 ? (
+  <div class="recipe-image-carousel relative">
+    {images.length === 1 ? (
+      <div class="w-full h-48 bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+        <img 
+          src={images[0].url} 
+          alt="Recipe image" 
+          class="max-w-full max-h-full object-contain"
+        />
+      </div>
+    ) : (
+      <div class="relative overflow-hidden h-48">
+        <div class="flex transition-transform duration-300 carousel-container h-full">
+          {images.map((image: RecipeImage, index: number) => (
+            <div class="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+              <img 
+                src={image.url} 
+                alt={`Recipe image ${index + 1}`} 
+                class="max-w-full max-h-full object-contain"
+                style={`transform: translateX(-${0}%)`}
+              />
+            </div>
+          ))}
+        </div>
+        
+        {images.length > 1 && (
+          <div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
+            {images.map((_, index: number) => (
+              <div 
+                class={`w-2 h-2 rounded-full bg-white ${index === 0 ? 'opacity-100' : 'opacity-50'} carousel-dot`}
+                data-index={index}
+              ></div>
+            ))}
+          </div>
+        )}
+        
+        {images.length > 1 && (
+          <>
+            <button class="absolute left-2 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-black bg-opacity-50 text-white rounded-full flex items-center justify-center carousel-prev">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <button class="absolute right-2 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-black bg-opacity-50 text-white rounded-full flex items-center justify-center carousel-next">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </button>
+          </>
+        )}
+      </div>
+    )}
+  </div>
+) : (
+  <div class="recipe-image-placeholder">
+    <svg class="w-16 h-16 text-orange-400 dark:text-orange-300" fill="currentColor" viewBox="0 0 20 20">
+      <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+    </svg>
+  </div>
+)}
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const carousels = document.querySelectorAll('.recipe-image-carousel');
+    
+    carousels.forEach(carousel => {
+      const container = carousel.querySelector('.carousel-container') as HTMLElement;
+      const dots = carousel.querySelectorAll('.carousel-dot');
+      const prevBtn = carousel.querySelector('.carousel-prev') as HTMLButtonElement;
+      const nextBtn = carousel.querySelector('.carousel-next') as HTMLButtonElement;
+      
+      if (!container || dots.length === 0) return;
+      
+      let currentIndex = 0;
+      const totalImages = dots.length;
+      
+      function updateCarousel() {
+        if (container) {
+          container.style.transform = `translateX(-${currentIndex * 100}%)`;
+        }
+        
+        dots.forEach((dot, index) => {
+          if (index === currentIndex) {
+            dot.classList.remove('opacity-50');
+            dot.classList.add('opacity-100');
+          } else {
+            dot.classList.remove('opacity-100');
+            dot.classList.add('opacity-50');
+          }
+        });
+      }
+      
+      if (prevBtn) {
+        prevBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          currentIndex = (currentIndex - 1 + totalImages) % totalImages;
+          updateCarousel();
+        });
+      }
+      
+      if (nextBtn) {
+        nextBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          currentIndex = (currentIndex + 1) % totalImages;
+          updateCarousel();
+        });
+      }
+      
+      dots.forEach((dot, index) => {
+        dot.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          currentIndex = index;
+          updateCarousel();
+        });
+      });
+      
+      // Auto-advance carousel every 10 seconds
+      let autoAdvanceInterval: ReturnType<typeof setInterval> | null = null;
+      
+      function startAutoAdvance() {
+        if (totalImages > 1) {
+          autoAdvanceInterval = setInterval(() => {
+            currentIndex = (currentIndex + 1) % totalImages;
+            updateCarousel();
+          }, 10000); // 10 seconds
+        }
+      }
+      
+      function stopAutoAdvance() {
+        if (autoAdvanceInterval) {
+          clearInterval(autoAdvanceInterval);
+          autoAdvanceInterval = null;
+        }
+      }
+      
+      // Start auto-advance
+      startAutoAdvance();
+      
+      // Pause on hover, resume on mouse leave
+      carousel.addEventListener('mouseenter', stopAutoAdvance);
+      carousel.addEventListener('mouseleave', startAutoAdvance);
+    });
+  });
+</script> 

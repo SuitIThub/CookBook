@@ -1,0 +1,321 @@
+---
+import type { Recipe, RecipeImage } from '../../types/recipe';
+
+interface Props {
+  recipe: Recipe;
+  mode: 'view' | 'edit';
+}
+
+const { recipe, mode } = Astro.props;
+const images = recipe.images || [];
+---
+
+<div data-recipe-images={JSON.stringify(images)} data-recipe-id={recipe.id} data-mode={mode}>
+  {images.length > 0 && (
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 p-6">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Bilder</h2>
+      
+      <!-- Image Gallery -->
+      <div class="flex space-x-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
+        {images.map((image: RecipeImage) => (
+          <div class="flex-shrink-0 relative group">
+            <div class="w-32 h-32 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+              <img 
+                src={image.url} 
+                alt="Recipe image" 
+                class="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
+                data-lightbox="recipe-gallery"
+                data-image-id={image.id}
+              />
+            </div>
+            
+            {mode === 'edit' && (
+              <button 
+                type="button"
+                class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-md transition-colors delete-image-btn"
+                data-recipe-id={recipe.id}
+                data-image-id={image.id}
+                title="Bild löschen"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+        
+        <div class="flex-shrink-0">
+          <label class="block w-32 h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-orange-400 dark:hover:border-orange-500 transition-colors bg-gray-50 dark:bg-gray-700/50">
+            <div class="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+              <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              <span class="text-xs text-center">Bild hinzufügen</span>
+            </div>
+            <input 
+              type="file" 
+              accept="image/*" 
+              class="hidden" 
+              id="add-image-input"
+              data-recipe-id={recipe.id}
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {mode === 'view' && images.length === 0 && recipe.id && (
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 p-6">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Bilder</h2>
+        <label class="flex items-center space-x-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          <span>Erstes Bild hinzufügen</span>
+          <input 
+            type="file" 
+            accept="image/*" 
+            class="hidden" 
+            id="add-first-image-input"
+            data-recipe-id={recipe.id}
+          />
+        </label>
+      </div>
+      <p class="text-gray-600 dark:text-gray-400 text-sm mt-2">Fügen Sie Bilder hinzu, um Ihr Rezept visuell zu präsentieren.</p>
+    </div>
+  )}
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
+    <div class="relative max-w-4xl max-h-full p-4">
+      <button id="close-lightbox" class="absolute top-4 right-4 text-white hover:text-gray-300 z-10">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+      <img id="lightbox-image" src="" alt="" class="max-w-full max-h-full object-contain">
+      
+      <!-- Navigation arrows for multiple images -->
+      {images.length > 1 && (
+        <Fragment>
+          <button id="prev-image" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <button id="next-image" class="absolute right-4 top-1/2 transform -translate-y-1/2 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </Fragment>
+      )}
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    let currentImageIndex = 0;
+    let recipeImages: any[] = [];
+    let recipeId = '';
+    
+    // Initialize data from container
+    const container = document.querySelector('[data-recipe-images]') as HTMLElement;
+    if (container) {
+      recipeImages = JSON.parse(container.dataset.recipeImages || '[]');
+      recipeId = container.dataset.recipeId || '';
+    }
+
+    // File upload handlers
+    const addImageInputs = document.querySelectorAll('#add-image-input, #add-first-image-input');
+    addImageInputs.forEach(input => {
+      input.addEventListener('change', handleImageUpload);
+    });
+
+    // Delete image handlers
+    const deleteButtons = document.querySelectorAll('.delete-image-btn');
+    deleteButtons.forEach(button => {
+      button.addEventListener('click', handleImageDelete);
+    });
+
+    // Lightbox handlers
+    const lightboxImages = document.querySelectorAll('[data-lightbox="recipe-gallery"]');
+    lightboxImages.forEach(img => {
+      img.addEventListener('click', openLightbox);
+    });
+
+    const closeLightbox = document.getElementById('close-lightbox');
+    const lightboxModal = document.getElementById('lightbox-modal');
+    if (closeLightbox && lightboxModal) {
+      closeLightbox.addEventListener('click', () => {
+        lightboxModal.classList.add('hidden');
+      });
+      
+      lightboxModal.addEventListener('click', (e) => {
+        if (e.target === lightboxModal) {
+          lightboxModal.classList.add('hidden');
+        }
+      });
+    }
+
+    // Navigation handlers
+    const prevBtn = document.getElementById('prev-image');
+    const nextBtn = document.getElementById('next-image');
+    if (prevBtn) prevBtn.addEventListener('click', showPrevImage);
+    if (nextBtn) nextBtn.addEventListener('click', showNextImage);
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      const modal = document.getElementById('lightbox-modal');
+      if (!modal || modal.classList.contains('hidden')) return;
+      
+      if (e.key === 'Escape') {
+        modal.classList.add('hidden');
+      } else if (e.key === 'ArrowLeft') {
+        showPrevImage();
+      } else if (e.key === 'ArrowRight') {
+        showNextImage();
+      }
+    });
+
+    async function handleImageUpload(event: Event) {
+      const target = event.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (!file) return;
+
+      const targetRecipeId = target.dataset.recipeId || recipeId;
+      if (!targetRecipeId) return;
+
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('recipeId', targetRecipeId);
+
+      try {
+        const response = await fetch('/api/recipe-images', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          const newImage = await response.json();
+          showNotification('Bild erfolgreich hochgeladen!', 'success');
+          
+          // Reload page to show new image
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        } else {
+          const error = await response.json();
+          showNotification(error.error || 'Fehler beim Hochladen des Bildes', 'error');
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+        showNotification('Fehler beim Hochladen des Bildes', 'error');
+      }
+
+      // Reset input
+      target.value = '';
+    }
+
+    async function handleImageDelete(event: Event) {
+      const target = event.target as HTMLButtonElement;
+      const targetRecipeId = target.dataset.recipeId || recipeId;
+      const imageId = target.dataset.imageId;
+
+      if (!targetRecipeId || !imageId) return;
+      if (!confirm('Möchten Sie dieses Bild wirklich löschen?')) return;
+
+      try {
+        const response = await fetch(`/api/recipe-images?recipeId=${targetRecipeId}&imageId=${imageId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          showNotification('Bild erfolgreich gelöscht!', 'success');
+          
+          // Remove image from DOM
+          target.closest('.relative')?.remove();
+          
+          // Update local images array
+          recipeImages = recipeImages.filter(img => img.id !== imageId);
+        } else {
+          const error = await response.json();
+          showNotification(error.error || 'Fehler beim Löschen des Bildes', 'error');
+        }
+      } catch (error) {
+        console.error('Delete error:', error);
+        showNotification('Fehler beim Löschen des Bildes', 'error');
+      }
+    }
+
+    function openLightbox(event: Event) {
+      const target = event.target as HTMLImageElement;
+      const imageId = target.dataset.imageId;
+      const imageIndex = recipeImages.findIndex((img: any) => img.id === imageId);
+      
+      if (imageIndex !== -1) {
+        currentImageIndex = imageIndex;
+        showLightboxImage();
+        const modal = document.getElementById('lightbox-modal');
+        modal?.classList.remove('hidden');
+      }
+    }
+
+    function showLightboxImage() {
+      const lightboxImage = document.getElementById('lightbox-image') as HTMLImageElement;
+      if (lightboxImage && recipeImages[currentImageIndex]) {
+        lightboxImage.src = recipeImages[currentImageIndex].url;
+        lightboxImage.alt = `Recipe image ${currentImageIndex + 1}`;
+      }
+    }
+
+    function showPrevImage() {
+      if (recipeImages.length > 1) {
+        currentImageIndex = (currentImageIndex - 1 + recipeImages.length) % recipeImages.length;
+        showLightboxImage();
+      }
+    }
+
+    function showNextImage() {
+      if (recipeImages.length > 1) {
+        currentImageIndex = (currentImageIndex + 1) % recipeImages.length;
+        showLightboxImage();
+      }
+    }
+
+    function showNotification(message: string, type: string = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white ${
+        type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+      }`;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 3000);
+    }
+  });
+</script>
+
+<style>
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  
+  .scrollbar-thumb-gray-300::-webkit-scrollbar {
+    height: 6px;
+  }
+  
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+    background-color: rgb(209 213 219);
+    border-radius: 3px;
+  }
+  
+  .dark .scrollbar-thumb-gray-600::-webkit-scrollbar-thumb {
+    background-color: rgb(75 85 99);
+  }
+</style> 

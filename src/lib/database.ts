@@ -23,6 +23,7 @@ class CookbookDatabase {
         ingredient_groups TEXT,
         preparation_groups TEXT,
         image_url TEXT,
+        images TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -72,8 +73,8 @@ class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO recipes (id, title, subtitle, description, metadata, ingredient_groups, preparation_groups, image_url, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO recipes (id, title, subtitle, description, metadata, ingredient_groups, preparation_groups, image_url, images, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -85,6 +86,7 @@ class CookbookDatabase {
       JSON.stringify(newRecipe.ingredientGroups),
       JSON.stringify(newRecipe.preparationGroups),
       newRecipe.imageUrl,
+      JSON.stringify(newRecipe.images || []),
       newRecipe.createdAt.toISOString(),
       newRecipe.updatedAt.toISOString()
     );
@@ -112,6 +114,7 @@ class CookbookDatabase {
       ingredientGroups: JSON.parse(row.ingredient_groups),
       preparationGroups: JSON.parse(row.preparation_groups),
       imageUrl: row.image_url,
+      images: row.images ? JSON.parse(row.images) : [],
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -130,6 +133,7 @@ class CookbookDatabase {
       ingredientGroups: JSON.parse(row.ingredient_groups),
       preparationGroups: JSON.parse(row.preparation_groups),
       imageUrl: row.image_url,
+      images: row.images ? JSON.parse(row.images) : [],
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     }));
@@ -150,7 +154,7 @@ class CookbookDatabase {
     const stmt = this.db.prepare(`
       UPDATE recipes 
       SET title = ?, subtitle = ?, description = ?, metadata = ?, 
-          ingredient_groups = ?, preparation_groups = ?, image_url = ?, updated_at = ?
+          ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, updated_at = ?
       WHERE id = ?
     `);
 
@@ -162,6 +166,7 @@ class CookbookDatabase {
       JSON.stringify(updatedRecipe.ingredientGroups),
       JSON.stringify(updatedRecipe.preparationGroups),
       updatedRecipe.imageUrl,
+      JSON.stringify(updatedRecipe.images || []),
       updatedRecipe.updatedAt.toISOString(),
       id
     );
