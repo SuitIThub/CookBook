@@ -1,9 +1,10 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { db } from '../lib/database';
+import type { Recipe } from '../types/recipe';
 
 // Rezepte aus der Datenbank laden
-let recipes = [];
+let recipes: Recipe[] = [];
 try {
   recipes = db.getAllRecipes();
 } catch (error) {
@@ -117,13 +118,47 @@ try {
       <h3 class="mt-2 text-sm font-medium text-gray-900">Keine Rezepte vorhanden</h3>
       <p class="mt-1 text-sm text-gray-500">Erstellen Sie Ihr erstes Rezept um loszulegen.</p>
       <div class="mt-6">
-        <a href="/rezept/neu" class="btn btn-primary inline-flex items-center shadow-sm">
+        <button id="create-recipe-btn-empty" class="btn btn-primary inline-flex items-center shadow-sm">
           <svg class="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
           </svg>
           Neues Rezept
-        </a>
+        </button>
       </div>
     </div>
   </div>
+
+  <script>
+    // Create recipe functionality for empty state button
+    async function createNewRecipe() {
+      try {
+        const response = await fetch('/api/recipes?action=create-empty', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const newRecipe = await response.json();
+          // Redirect to the new recipe in edit mode
+          window.location.href = `/rezept/${newRecipe.id}?edit=true`;
+        } else {
+          console.error('Failed to create recipe');
+          alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+        }
+      } catch (error) {
+        console.error('Error creating recipe:', error);
+        alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+      }
+    }
+
+    // Initialize create recipe button when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      const createBtn = document.getElementById('create-recipe-btn-empty');
+      if (createBtn) {
+        createBtn.addEventListener('click', createNewRecipe);
+      }
+    });
+  </script>
 </Layout>

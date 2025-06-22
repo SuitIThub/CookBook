@@ -630,21 +630,33 @@ try {
           </div>
         </div>
 
-        <!-- Save/Cancel Buttons -->
-        <div class="flex justify-end space-x-3">
+        <!-- Save/Cancel/Delete Buttons -->
+        <div class="flex justify-between items-center">
           <button 
             type="button" 
-            id="cancel-edit-btn"
-            class="px-6 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            id="delete-recipe-btn"
+            class="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors flex items-center space-x-2"
           >
-            Abbrechen
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            <span>Rezept löschen</span>
           </button>
-          <button 
-            type="submit"
-            class="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors"
-          >
-            Änderungen speichern
-          </button>
+          <div class="flex space-x-3">
+            <button 
+              type="button" 
+              id="cancel-edit-btn"
+              class="px-6 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Abbrechen
+            </button>
+            <button 
+              type="submit"
+              class="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors"
+            >
+              Änderungen speichern
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -793,6 +805,64 @@ try {
     // Edit mode event handlers
     document.getElementById('cancel-edit-btn')?.addEventListener('click', () => {
       toggleEditMode(); // Switch back to view mode
+    });
+
+    // Delete recipe functionality
+    document.getElementById('delete-recipe-btn')?.addEventListener('click', async () => {
+      const recipeTitle = (document.getElementById('edit-title') as HTMLInputElement)?.value || 'Dieses Rezept';
+      
+      // Show confirmation dialog
+      const confirmed = confirm(`Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`);
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      try {
+        // Show loading state
+        const deleteBtn = document.getElementById('delete-recipe-btn');
+        if (deleteBtn) {
+          deleteBtn.textContent = 'Löschen...';
+          deleteBtn.setAttribute('disabled', 'true');
+        }
+        
+        // Get current recipe ID from URL
+        const recipeId = window.location.pathname.split('/').pop();
+        
+        // Send delete request to API
+        const response = await fetch(`/api/recipes?id=${recipeId}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          // Show success message and redirect to home page
+          alert('Rezept wurde erfolgreich gelöscht.');
+          window.location.href = '/';
+        } else {
+          const error = await response.text();
+          console.error('Server error:', error);
+          throw new Error(`Server error: ${response.status}`);
+        }
+        
+      } catch (error) {
+        console.error('Error deleting recipe:', error);
+        alert('Fehler beim Löschen des Rezepts. Bitte versuchen Sie es erneut.');
+        
+        // Reset delete button
+        const deleteBtn = document.getElementById('delete-recipe-btn');
+        if (deleteBtn) {
+          deleteBtn.innerHTML = `
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            <span>Rezept löschen</span>
+          `;
+          deleteBtn.removeAttribute('disabled');
+        }
+      }
     });
 
     // Form submission
@@ -1307,8 +1377,26 @@ try {
 
 
 
+    // Check if we should auto-enter edit mode (for new recipes)
+    function checkAutoEditMode() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const shouldEdit = urlParams.get('edit');
+      
+      if (shouldEdit === 'true') {
+        // Remove the edit parameter from URL without page reload
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+        
+        // Auto-enter edit mode
+        toggleEditMode();
+      }
+    }
+    
     // Initialize all event listeners
     initializeExistingEventListeners();
+    
+    // Check for auto-edit mode
+    checkAutoEditMode();
 
 
 

@@ -45,9 +45,9 @@ const { title } = Astro.props;
             <a href="/einkaufsliste" class="nav-link">
               Einkaufsliste
             </a>
-            <a href="/rezept/neu" class="btn btn-primary">
+            <button id="create-recipe-btn" class="btn btn-primary">
               Neues Rezept
-            </a>
+            </button>
             <!-- Theme Toggle Button -->
             <button id="theme-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
               <!-- Sun icon (visible in dark mode) -->
@@ -129,6 +129,38 @@ const { title } = Astro.props;
 
       // Initialize theme toggle when DOM is loaded
       document.addEventListener('DOMContentLoaded', initializeTheme);
+
+      // Create recipe functionality
+      async function createNewRecipe() {
+        try {
+          const response = await fetch('/api/recipes?action=create-empty', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const newRecipe = await response.json();
+            // Redirect to the new recipe in edit mode
+            window.location.href = `/rezept/${newRecipe.id}?edit=true`;
+          } else {
+            console.error('Failed to create recipe');
+            alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+          }
+        } catch (error) {
+          console.error('Error creating recipe:', error);
+          alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+        }
+      }
+
+      // Initialize create recipe button when DOM is loaded
+      document.addEventListener('DOMContentLoaded', () => {
+        const createBtn = document.getElementById('create-recipe-btn');
+        if (createBtn) {
+          createBtn.addEventListener('click', createNewRecipe);
+        }
+      });
 
       // Timer functionality
       let currentTimer: {

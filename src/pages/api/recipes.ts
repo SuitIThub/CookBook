@@ -36,15 +36,55 @@ export const GET: APIRoute = async ({ url }) => {
   }
 };
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, url }) => {
   try {
-    const recipeData = await request.json();
-    const newRecipe = db.createRecipe(recipeData);
+    const searchParams = new URL(url).searchParams;
+    const action = searchParams.get('action');
     
-    return new Response(JSON.stringify(newRecipe), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    if (action === 'create-empty') {
+      // Create a new empty recipe with minimal default values
+      const emptyRecipeData = {
+        title: 'Neues Rezept',
+        subtitle: '',
+        description: '',
+        metadata: {
+          servings: 4,
+          preparationTime: 0,
+          cookingTime: 0,
+          difficulty: 'leicht' as const
+        },
+        ingredientGroups: [
+          {
+            id: crypto.randomUUID(),
+            title: '',
+            ingredients: []
+          }
+        ],
+        preparationGroups: [
+          {
+            id: crypto.randomUUID(),
+            title: '',
+            steps: []
+          }
+        ]
+      };
+      
+      const newRecipe = db.createRecipe(emptyRecipeData);
+      
+      return new Response(JSON.stringify(newRecipe), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } else {
+      // Regular recipe creation with full data
+      const recipeData = await request.json();
+      const newRecipe = db.createRecipe(recipeData);
+      
+      return new Response(JSON.stringify(newRecipe), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
   } catch (error) {
     console.error('Error creating recipe:', error);
     return new Response(JSON.stringify({ error: 'Failed to create recipe' }), {
