@@ -44,21 +44,20 @@ try {
     </div>
   </div>
 
-  <script>
-    // Extend Window interface
-    declare global {
-      interface Window {
-        toggleEditMode: () => void;
-      }
-    }
-
+  <script define:vars={{ recipe }}>
     // Timer functionality
     document.querySelectorAll('.timer-trigger').forEach(button => {
       button.addEventListener('click', (e) => {
-        const timeText = (e.target as HTMLElement).dataset.time || '';
+        const target = e.target;
+        const timeText = target.dataset.time || '';
+        const recipeName = target.dataset.recipeName || recipe.title;
+        const stepDescription = target.dataset.stepDescription || '';
+        const stepId = target.dataset.stepId || '';
         const minutes = parseInt(timeText.match(/\d+/)?.[0] || '0');
         const seconds = minutes * 60;
-        (window as any).startTimer(timeText, seconds);
+        
+        // Call timer with recipe context and navigation info
+        window.startTimer(timeText, seconds, recipeName, stepDescription, true, recipe.id, stepId);
       });
     });
 
@@ -71,7 +70,7 @@ try {
     if (currentServingsElement && decreaseButton && increaseButton && resetButton) {
       const originalServings = parseInt(currentServingsElement.getAttribute('data-original') || '1');
       
-      function updateServings(newServings: number) {
+      function updateServings(newServings) {
         if (newServings < 1) newServings = 1;
         if (newServings > 99) newServings = 99;
         
@@ -93,7 +92,7 @@ try {
         
         // Update all ingredient amounts
         document.querySelectorAll('.ingredient-amount').forEach((element) => {
-          const htmlElement = element as HTMLElement;
+          const htmlElement = element;
           const originalAmount = parseFloat(htmlElement.getAttribute('data-original-amount') || '0');
           const amountValueElement = element.querySelector('.amount-value');
           
@@ -182,7 +181,8 @@ try {
 
     // Delete recipe functionality
     document.getElementById('delete-recipe-btn')?.addEventListener('click', async () => {
-      const recipeTitle = (document.getElementById('edit-title') as HTMLInputElement)?.value || 'Dieses Rezept';
+      const titleElement = document.getElementById('edit-title');
+      const recipeTitle = titleElement?.value || 'Dieses Rezept';
       
       const confirmed = confirm(`Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`);
       
@@ -241,5 +241,32 @@ try {
     
     // Initialize all event listeners and check for auto-edit mode
     checkAutoEditMode();
+    
+    // Check for step highlight hash on page load
+    function checkStepHighlight() {
+      const hash = window.location.hash;
+      if (hash.startsWith('#step-')) {
+        const stepId = hash.substring(6); // Remove '#step-' prefix
+        setTimeout(() => {
+          const stepElement = document.getElementById(`step-${stepId}`);
+          if (stepElement) {
+            // Add highlight class
+            stepElement.classList.add('step-highlight');
+            
+            // Scroll to element
+            stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Remove highlight after animation
+            setTimeout(() => {
+              stepElement.classList.remove('step-highlight');
+            }, 2000);
+          }
+        }, 500); // Wait a bit for page to fully load
+      }
+    }
+    
+    // Check for step highlight on load and hash change
+    checkStepHighlight();
+    window.addEventListener('hashchange', checkStepHighlight);
   </script>
 </Layout> 

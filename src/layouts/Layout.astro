@@ -1,5 +1,6 @@
 ---
 import '../styles/components.css';
+import MultiTimerManager from '../components/timer/MultiTimerManager.astro';
 
 export interface Props {
   title: string;
@@ -68,47 +69,8 @@ const { title } = Astro.props;
       <slot />
     </main>
 
-    <!-- Timer Footer (initially hidden) -->
-    <div id="timer-footer" class="timer-footer hidden">
-      <div class="container py-3">
-                  <div class="flex-between">
-            <div class="flex items-center space-x-4">
-              <span id="timer-label" class="font-medium text-gray-900 dark:text-white"></span>
-              <span id="timer-display" class="text-2xl font-mono font-bold text-orange-500"></span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <button id="timer-minus-10" class="timer-button">
-                <span class="text-sm">-10m</span>
-              </button>
-              <button id="timer-minus-5" class="timer-button">
-                <span class="text-sm">-5m</span>
-              </button>
-              <button id="timer-minus-1" class="timer-button">
-                <span class="text-sm">-1m</span>
-              </button>
-              <button id="timer-play-pause" class="btn-icon bg-orange-500 hover:bg-orange-600 text-white">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
-                </svg>
-              </button>
-              <button id="timer-plus-1" class="timer-button">
-                <span class="text-sm">+1m</span>
-              </button>
-              <button id="timer-plus-5" class="timer-button">
-                <span class="text-sm">+5m</span>
-              </button>
-              <button id="timer-plus-10" class="timer-button">
-                <span class="text-sm">+10m</span>
-              </button>
-              <button id="timer-stop" class="timer-button text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Multi-Timer Component -->
+    <MultiTimerManager />
 
     <script>
       // Theme toggle functionality
@@ -162,107 +124,11 @@ const { title } = Astro.props;
         }
       });
 
-      // Timer functionality
-      let currentTimer: {
-        id: string;
-        label: string;
-        duration: number;
-        remaining: number;
-        isRunning: boolean;
-        interval?: NodeJS.Timeout;
-      } | null = null;
-
-      function formatTime(seconds: number): string {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-      }
-
-      function updateTimerDisplay() {
-        const display = document.getElementById('timer-display');
-        if (display && currentTimer) {
-          display.textContent = formatTime(currentTimer.remaining);
-        }
-      }
-
-      function showTimer(label: string, duration: number) {
-        const footer = document.getElementById('timer-footer');
-        const labelEl = document.getElementById('timer-label');
-        
-        currentTimer = {
-          id: Date.now().toString(),
-          label,
-          duration,
-          remaining: duration,
-          isRunning: false
-        };
-
-        if (footer && labelEl) {
-          footer.classList.remove('hidden');
-          labelEl.textContent = label;
-          updateTimerDisplay();
-        }
-      }
-
-      function startPauseTimer() {
-        if (!currentTimer) return;
-
-        if (currentTimer.isRunning) {
-          // Pause
-          if (currentTimer.interval) {
-            clearInterval(currentTimer.interval);
-          }
-          currentTimer.isRunning = false;
-        } else {
-          // Start
-          currentTimer.isRunning = true;
-          currentTimer.interval = setInterval(() => {
-            if (currentTimer && currentTimer.remaining > 0) {
-              currentTimer.remaining--;
-              updateTimerDisplay();
-              
-              if (currentTimer.remaining === 0) {
-                // Timer finished
-                if (currentTimer.interval) {
-                  clearInterval(currentTimer.interval);
-                }
-                currentTimer.isRunning = false;
-                alert(`Timer beendet: ${currentTimer.label}`);
-              }
-            }
-          }, 1000);
-        }
-      }
-
-      function stopTimer() {
-        if (currentTimer && currentTimer.interval) {
-          clearInterval(currentTimer.interval);
-        }
-        currentTimer = null;
-        const footer = document.getElementById('timer-footer');
-        if (footer) {
-          footer.classList.add('hidden');
-        }
-      }
-
-      function adjustTimer(minutes: number) {
-        if (!currentTimer) return;
-        currentTimer.remaining = Math.max(0, currentTimer.remaining + (minutes * 60));
-        updateTimerDisplay();
-      }
-
-      // Event listeners
-      document.getElementById('timer-play-pause')?.addEventListener('click', startPauseTimer);
-      document.getElementById('timer-stop')?.addEventListener('click', stopTimer);
-      document.getElementById('timer-minus-10')?.addEventListener('click', () => adjustTimer(-10));
-      document.getElementById('timer-minus-5')?.addEventListener('click', () => adjustTimer(-5));
-      document.getElementById('timer-minus-1')?.addEventListener('click', () => adjustTimer(-1));
-      document.getElementById('timer-plus-1')?.addEventListener('click', () => adjustTimer(1));
-      document.getElementById('timer-plus-5')?.addEventListener('click', () => adjustTimer(5));
-      document.getElementById('timer-plus-10')?.addEventListener('click', () => adjustTimer(10));
-
-      // Global function to start timer from recipe pages
-      (window as any).startTimer = showTimer;
+      // Multi-Timer functionality will be handled by the MultiTimerManager component
+      // Placeholder for global timer function that will be overridden
+      (window as any).startTimer = (label: string, duration: number) => {
+        console.log('Timer functionality loading...');
+      };
     </script>
   </body>
 </html> 

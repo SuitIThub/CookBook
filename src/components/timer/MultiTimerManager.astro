@@ -1,0 +1,1385 @@
+---
+// Multi-Timer Manager Component
+---
+
+<!-- Timer Sidebar for landscape mode -->
+<div id="timer-sidebar" class="timer-sidebar hidden">
+  <!-- Sidebar toggle button (expand/collapse) -->
+  <button id="sidebar-toggle" class="timer-sidebar-toggle hidden" title="Timer anzeigen">
+    <svg id="sidebar-toggle-icon" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+      <!-- Left arrow (for expanding) -->
+      <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+    </svg>
+    <span class="timer-count-indicator" id="sidebar-timer-count"></span>
+  </button>
+  
+  <!-- Expanded content -->
+  <div id="timer-sidebar-content" class="timer-sidebar-content">
+    <div class="timer-sidebar-header">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Timer</h3>
+      <button id="add-timer-btn" class="btn-icon bg-orange-500 hover:bg-orange-600 text-white" title="Neuer Timer">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+    </div>
+    <div id="timer-sidebar-list" class="timer-list">
+      <!-- Timer items will be dynamically added here -->
+    </div>
+  </div>
+</div>
+
+<!-- Timer Footer for portrait mode -->
+<div id="timer-footer" class="timer-footer hidden">
+  <div class="timer-footer-toggle" id="timer-footer-toggle">
+    <div class="flex items-center justify-between w-full">
+      <div class="flex items-center space-x-3">
+        <span id="active-timer-label" class="text-sm font-medium text-gray-900 dark:text-white"></span>
+        <span id="active-timer-display" class="text-lg font-mono font-bold text-orange-500"></span>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span id="timer-count" class="text-xs text-gray-500 dark:text-gray-400"></span>
+        <svg class="w-4 h-4 text-gray-500 dark:text-gray-400 transform transition-transform" id="footer-chevron" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M14 7a1 1 0 00-1.414 0L10 9.586 7.414 7A1 1 0 006 8.414l4 4a1 1 0 001.414 0l4-4A1 1 0 0014 7z" clip-rule="evenodd"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+  
+  <div id="timer-footer-expanded" class="timer-footer-expanded hidden">
+    <div id="timer-footer-list" class="timer-list">
+      <!-- Timer items will be dynamically added here -->
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+  // Timer interface definition
+  interface Timer {
+    id: string;
+    label: string;
+    duration: number; // in seconds
+    remaining: number; // in seconds
+    isRunning: boolean;
+    isCompleted: boolean;
+    recipeName?: string; // Name of the recipe
+    stepDescription?: string; // Description of the preparation step
+    autoStarted?: boolean; // Whether this timer was auto-started from a recipe step
+    startTime?: number; // Timestamp when timer was started (for persistence)
+    pauseTime?: number; // Timestamp when timer was paused (for persistence)
+    recipeId?: string; // ID of the recipe for navigation
+    stepId?: string; // ID of the preparation step for navigation
+  }
+  
+  class MultiTimerManager {
+    private timers: Map<string, Timer> = new Map();
+    private intervals: Map<string, NodeJS.Timeout> = new Map();
+    private alarmIntervals: Map<string, NodeJS.Timeout> = new Map();
+    private isExpanded = false;
+    private isPortraitMode = false;
+
+    constructor() {
+      this.init();
+      this.setupEventListeners();
+      this.updateOrientation();
+      // Ensure timer UI is always available
+      this.showTimerUI();
+    }
+
+    private init() {
+      // Check for existing timers in localStorage
+      const savedTimers = localStorage.getItem('active-timers');
+      if (savedTimers) {
+        try {
+          const parsedTimers = JSON.parse(savedTimers);
+          const expiredTimers: Timer[] = [];
+          const currentTime = Date.now();
+          
+          parsedTimers.forEach((timer: Timer) => {
+            // Restore timer with time calculations
+            this.restoreTimerFromStorage(timer, currentTime, expiredTimers);
+          });
+          
+          this.renderTimers();
+          
+          // Show notifications for expired timers sequentially
+          if (expiredTimers.length > 0) {
+            this.showExpiredTimerNotifications(expiredTimers);
+          }
+        } catch (e) {
+          console.error('Failed to restore timers:', e);
+        }
+      }
+    }
+
+    private restoreTimerFromStorage(savedTimer: Timer, currentTime: number, expiredTimers: Timer[]) {
+      const timer = { ...savedTimer };
+      
+      if (timer.isRunning && timer.startTime) {
+        // Calculate elapsed time since the timer was running
+        const elapsedTime = Math.floor((currentTime - timer.startTime) / 1000);
+        const newRemaining = timer.remaining - elapsedTime;
+        
+        if (newRemaining <= 0) {
+          // Timer has expired while away
+          timer.remaining = 0;
+          timer.isRunning = false;
+          timer.isCompleted = true;
+          
+          // Calculate how long it's been expired
+          const expiredDuration = Math.abs(newRemaining);
+          (timer as any).expiredDuration = expiredDuration;
+          
+          expiredTimers.push(timer);
+        } else {
+          // Timer is still running
+          timer.remaining = newRemaining;
+          timer.startTime = currentTime; // Reset start time for continued counting
+        }
+      } else if (timer.pauseTime) {
+        // Timer was paused, no time calculation needed
+        // Just restore as-is
+      }
+      
+      this.timers.set(timer.id, timer);
+      
+      // Start the timer if it's still running
+      if (timer.isRunning && timer.remaining > 0) {
+        // Don't use startTimer() as it would reset the startTime
+        // Instead, directly start the interval for the restored timer
+        this.startTimerInterval(timer.id);
+      }
+    }
+
+    private showExpiredTimerNotifications(expiredTimers: Timer[]) {
+      // Show notifications one by one with delay
+      expiredTimers.forEach((timer, index) => {
+        setTimeout(() => {
+          this.showExpiredTimerNotification(timer);
+        }, index * 500); // 500ms delay between notifications
+      });
+    }
+
+    private setupEventListeners() {
+      // Orientation change
+      window.addEventListener('resize', () => this.updateOrientation());
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => this.updateOrientation(), 100);
+      });
+
+      // Footer toggle
+      document.getElementById('timer-footer-toggle')?.addEventListener('click', () => {
+        this.toggleFooterExpansion();
+      });
+
+      // Sidebar toggle (expand/collapse)
+      document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
+        this.toggleSidebar();
+      });
+
+      // Add timer buttons
+      document.getElementById('add-timer-btn')?.addEventListener('click', () => {
+        this.showAddTimerDialog();
+      });
+    }
+
+    private updateOrientation() {
+      const isLandscape = window.innerWidth > window.innerHeight;
+      this.isPortraitMode = !isLandscape;
+      
+      const sidebar = document.getElementById('timer-sidebar');
+      const footer = document.getElementById('timer-footer');
+      
+      // Always show timer UI for manual timer creation
+      if (isLandscape) {
+        sidebar?.classList.remove('hidden');
+        footer?.classList.add('hidden');
+        // Start collapsed by default in landscape mode
+        this.collapseSidebar();
+      } else {
+        sidebar?.classList.add('hidden');
+        footer?.classList.remove('hidden');
+        document.body.classList.remove('timer-sidebar-active');
+        // Keep footer collapsed by default in portrait mode
+        this.isExpanded = false;
+        const expanded = document.getElementById('timer-footer-expanded');
+        const chevron = document.getElementById('footer-chevron');
+        if (expanded && chevron) {
+          expanded.classList.add('hidden');
+          chevron.style.transform = 'rotate(0deg)';
+        }
+      }
+    }
+
+    public addTimer(label: string, duration: number, recipeName?: string, stepDescription?: string, autoStart: boolean = false, recipeId?: string, stepId?: string): string {
+      const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+      const timer: Timer = {
+        id,
+        label,
+        duration,
+        remaining: duration,
+        isRunning: false,
+        isCompleted: false,
+        recipeName,
+        stepDescription,
+        autoStarted: autoStart,
+        recipeId,
+        stepId
+      };
+
+      this.timers.set(id, timer);
+      this.saveTimers();
+      this.renderTimers();
+      this.showTimerUI(); // Make sure UI is visible when adding timer
+      
+      // Auto-start timer if requested
+      if (autoStart) {
+        this.startTimer(id);
+      }
+      
+      return id;
+    }
+
+    public removeTimer(id: string) {
+      const timer = this.timers.get(id);
+      if (timer) {
+        this.stopTimer(id);
+        this.stopContinuousAlarm(id);
+        this.timers.delete(id);
+        this.saveTimers();
+        this.renderTimers();
+        
+        // Don't hide UI when no timers - keep it available for manual timer creation
+        this.renderTimers();
+      }
+    }
+
+    public startTimer(id: string) {
+      const timer = this.timers.get(id);
+      if (!timer || timer.isRunning) return;
+
+      timer.isRunning = true;
+      timer.startTime = Date.now();
+      timer.pauseTime = undefined;
+      
+      this.startTimerInterval(id);
+      this.saveTimers();
+      this.renderTimers();
+    }
+
+    private startTimerInterval(id: string) {
+      const timer = this.timers.get(id);
+      if (!timer) return;
+
+      // Clear any existing interval for this timer
+      const existingInterval = this.intervals.get(id);
+      if (existingInterval) {
+        clearInterval(existingInterval);
+      }
+
+      const interval = setInterval(() => {
+        if (timer.remaining > 0) {
+          timer.remaining--;
+          this.renderTimers();
+          
+          if (timer.remaining === 0) {
+            timer.isCompleted = true;
+            timer.isRunning = false;
+            timer.startTime = undefined;
+            this.intervals.delete(id);
+            clearInterval(interval);
+            this.onTimerComplete(timer);
+          }
+        } else {
+          // Safety check - stop interval if timer is not running or completed
+          clearInterval(interval);
+          this.intervals.delete(id);
+        }
+      }, 1000);
+
+      this.intervals.set(id, interval);
+    }
+
+    public pauseTimer(id: string) {
+      const timer = this.timers.get(id);
+      if (!timer || !timer.isRunning) return;
+
+      timer.isRunning = false;
+      timer.pauseTime = Date.now();
+      timer.startTime = undefined;
+      
+      const interval = this.intervals.get(id);
+      if (interval) {
+        clearInterval(interval);
+        this.intervals.delete(id);
+      }
+      
+      this.saveTimers();
+      this.renderTimers();
+    }
+
+    public stopTimer(id: string) {
+      const timer = this.timers.get(id);
+      if (!timer) return;
+
+      timer.isRunning = false;
+      timer.remaining = timer.duration;
+      timer.isCompleted = false;
+      timer.startTime = undefined;
+      timer.pauseTime = undefined;
+      
+      const interval = this.intervals.get(id);
+      if (interval) {
+        clearInterval(interval);
+        this.intervals.delete(id);
+      }
+      
+      this.saveTimers();
+      this.renderTimers();
+    }
+
+    public adjustTimer(id: string, minutes: number) {
+      const timer = this.timers.get(id);
+      if (!timer) return;
+
+      timer.remaining = Math.max(0, timer.remaining + (minutes * 60));
+      timer.duration = Math.max(timer.duration, timer.remaining);
+      
+      this.saveTimers();
+      this.renderTimers();
+    }
+
+    public extendCompletedTimer(id: string, minutes: number) {
+      const timer = this.timers.get(id);
+      if (!timer) return;
+
+      // Reset timer state and add the extension time
+      timer.remaining = minutes * 60;
+      timer.duration = Math.max(timer.duration, timer.remaining);
+      timer.isCompleted = false;
+      timer.isRunning = false;
+      timer.startTime = undefined;
+      timer.pauseTime = undefined;
+      
+      // Start the extended timer
+      this.startTimer(id);
+      
+      this.saveTimers();
+      this.renderTimers();
+    }
+
+    public restartTimer(id: string) {
+      const timer = this.timers.get(id);
+      if (!timer) return;
+
+      // Reset to original duration
+      timer.remaining = timer.duration;
+      timer.isCompleted = false;
+      timer.isRunning = false;
+      timer.startTime = undefined;
+      timer.pauseTime = undefined;
+      
+      // Start the restarted timer
+      this.startTimer(id);
+      
+      this.saveTimers();
+      this.renderTimers();
+    }
+
+    private onTimerComplete(timer: Timer) {
+      // Show in-page notification with actions
+      this.showTimerCompleteNotification(timer);
+      
+      // Start continuous notification sound
+      this.startContinuousAlarm(timer.id);
+      
+      this.renderTimers();
+    }
+
+    private navigateToRecipeStep(timer: Timer) {
+      if (timer.recipeId && timer.stepId) {
+        const currentPath = window.location.pathname;
+        const targetPath = `/rezept/${timer.recipeId}`;
+        
+        if (currentPath === targetPath) {
+          // We're already on the right page, just highlight the step
+          this.highlightStep(timer.stepId);
+        } else {
+          // Navigate to recipe page with step highlight
+          const url = `${targetPath}#step-${timer.stepId}`;
+          window.location.href = url;
+        }
+      }
+    }
+
+    private highlightStep(stepId: string) {
+      const stepElement = document.getElementById(`step-${stepId}`);
+      if (stepElement) {
+        // Add highlight class
+        stepElement.classList.add('step-highlight');
+        
+        // Scroll to element
+        stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Remove highlight after animation
+        setTimeout(() => {
+          stepElement.classList.remove('step-highlight');
+        }, 2000);
+      }
+    }
+
+    private renderTimers() {
+      this.renderSidebarTimers();
+      this.renderFooterTimers();
+      this.updateActiveTimerDisplay();
+      this.updateSidebarToggleDisplay();
+    }
+
+    private renderSidebarTimers() {
+      const container = document.getElementById('timer-sidebar-list');
+      if (!container) return;
+
+      container.innerHTML = '';
+      
+      Array.from(this.timers.values()).forEach(timer => {
+        container.appendChild(this.createTimerElement(timer, 'sidebar'));
+      });
+      
+      // Add "Add Timer" button if no timers exist or at the bottom
+      if (this.timers.size === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'text-center py-8 text-gray-500 dark:text-gray-400';
+        emptyState.innerHTML = `
+          <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.414L11 9.586V6z" clip-rule="evenodd"/>
+          </svg>
+          <p class="text-sm">Keine Timer aktiv</p>
+        `;
+        container.appendChild(emptyState);
+      }
+      
+      // Always show add timer button in sidebar
+      const addButton = document.createElement('button');
+      addButton.className = 'w-full mt-4 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2';
+      addButton.innerHTML = `
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+        </svg>
+        <span>Neuer Timer</span>
+      `;
+      addButton.addEventListener('click', () => {
+        this.showAddTimerDialog();
+      });
+      container.appendChild(addButton);
+    }
+
+    private renderFooterTimers() {
+      const container = document.getElementById('timer-footer-list');
+      if (!container) return;
+
+      container.innerHTML = '';
+      
+      // Add all timer elements
+      Array.from(this.timers.values()).forEach(timer => {
+        container.appendChild(this.createTimerElement(timer, 'footer'));
+      });
+      
+      // Always add the "Add Timer" button at the bottom for manual timer creation
+      container.appendChild(this.createAddTimerButton());
+    }
+
+    private updateActiveTimerDisplay() {
+      const labelEl = document.getElementById('active-timer-label');
+      const displayEl = document.getElementById('active-timer-display');
+      const countEl = document.getElementById('timer-count');
+      
+      if (!labelEl || !displayEl || !countEl) return;
+
+      const activeTimers = Array.from(this.timers.values()).filter(t => !t.isCompleted);
+      
+      if (activeTimers.length === 0) {
+        // Show placeholder text when no timers
+        labelEl.textContent = 'Keine aktiven Timer';
+        displayEl.textContent = '--:--';
+        countEl.textContent = '';
+        return;
+      }
+
+      // Show timer with least remaining time
+      const nextTimer = activeTimers.reduce((min, timer) => 
+        timer.remaining < min.remaining ? timer : min
+      );
+
+      labelEl.textContent = nextTimer.label;
+      displayEl.textContent = this.formatTime(nextTimer.remaining);
+      countEl.textContent = activeTimers.length > 1 ? `+${activeTimers.length - 1}` : '';
+    }
+
+    private updateSidebarToggleDisplay() {
+      const sidebarCountEl = document.getElementById('sidebar-timer-count');
+      if (!sidebarCountEl) return;
+
+      const activeTimers = Array.from(this.timers.values()).filter(t => !t.isCompleted);
+      sidebarCountEl.textContent = activeTimers.length.toString();
+      
+      // Show toggle button even with 0 timers for manual timer creation
+      const toggleBtn = document.getElementById('sidebar-toggle');
+      if (toggleBtn) {
+        toggleBtn.style.display = 'flex';
+      }
+    }
+
+    private createAddTimerButton(): HTMLElement {
+      const button = document.createElement('button');
+      button.className = 'w-full mt-4 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2';
+      button.innerHTML = `
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+        </svg>
+        <span>Neuer Timer</span>
+      `;
+      
+      button.addEventListener('click', () => {
+        this.showAddTimerDialog();
+      });
+      
+      return button;
+    }
+
+    private createTimerElement(timer: Timer, context: 'sidebar' | 'footer'): HTMLElement {
+      const div = document.createElement('div');
+      div.className = `timer-item ${timer.isCompleted ? 'timer-completed' : ''} ${timer.autoStarted ? 'timer-recipe-based' : ''}`;
+      
+      const statusClass = timer.isCompleted ? 'text-green-500' : 
+                         timer.isRunning ? 'text-orange-500' : 'text-gray-500';
+
+      // Build context information
+      let contextInfo = '';
+      if (timer.recipeName || timer.stepDescription) {
+        const isClickable = timer.recipeId && timer.stepId;
+        contextInfo = `
+          <div class="timer-context-info ${isClickable ? 'timer-context-clickable' : ''}" ${isClickable ? `data-timer-id="${timer.id}"` : ''}>
+            ${timer.recipeName ? `<div class="timer-recipe-name">${timer.recipeName}</div>` : ''}
+            ${timer.stepDescription ? `<div class="timer-step-description">${timer.stepDescription}</div>` : ''}
+            ${isClickable ? '<div class="timer-context-hint">Klicken zum Rezept</div>' : ''}
+          </div>
+        `;
+      }
+
+      div.innerHTML = `
+        <div class="timer-item-header">
+          <div class="timer-item-title">
+            <span class="timer-item-label">${timer.label}</span>
+            ${timer.autoStarted ? '<span class="timer-auto-badge">Auto</span>' : ''}
+          </div>
+          <button class="timer-remove-btn" data-timer-id="${timer.id}" title="Entfernen">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+        </div>
+        ${contextInfo}
+        <div class="timer-item-display ${statusClass}">
+          ${this.formatTime(timer.remaining)}
+        </div>
+        <div class="timer-controls">
+          <button class="timer-control-btn ${timer.remaining < 60 ? 'disabled' : ''}" data-action="adjust" data-timer-id="${timer.id}" data-minutes="-1" title="-1m" ${timer.remaining < 60 ? 'disabled' : ''}>
+            <span class="text-xs">-1m</span>
+          </button>
+          <button class="timer-control-btn primary" data-action="${timer.isRunning ? 'pause' : 'start'}" data-timer-id="${timer.id}" title="${timer.isRunning ? 'Pause' : 'Start'}">
+            ${timer.isRunning ? '⏸' : '▶'}
+          </button>
+          <button class="timer-control-btn" data-action="adjust" data-timer-id="${timer.id}" data-minutes="1" title="+1m">
+            <span class="text-xs">+1m</span>
+          </button>
+          <button class="timer-control-btn" data-action="stop" data-timer-id="${timer.id}" title="Stop">
+            ⏹
+          </button>
+        </div>
+      `;
+
+      // Add event listeners
+      div.querySelectorAll('.timer-control-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => this.handleTimerAction(e));
+      });
+
+      div.querySelector('.timer-remove-btn')?.addEventListener('click', (e) => {
+        const timerId = (e.currentTarget as HTMLElement).dataset.timerId;
+        if (timerId) this.removeTimer(timerId);
+      });
+
+      // Add click listener for context info navigation
+      div.querySelector('.timer-context-clickable')?.addEventListener('click', (e) => {
+        const timerId = (e.currentTarget as HTMLElement).dataset.timerId;
+        if (timerId) {
+          const timer = this.timers.get(timerId);
+          if (timer) {
+            this.navigateToRecipeStep(timer);
+          }
+        }
+      });
+
+      return div;
+    }
+
+    private handleTimerAction(e: Event) {
+      const target = e.currentTarget as HTMLElement;
+      const action = target.dataset.action;
+      const timerId = target.dataset.timerId;
+      
+      if (!timerId) return;
+
+      // Check if button is disabled
+      if ((target as HTMLButtonElement).disabled || target.classList.contains('disabled')) {
+        e.preventDefault();
+        return;
+      }
+
+      switch (action) {
+        case 'start':
+          this.startTimer(timerId);
+          break;
+        case 'pause':
+          this.pauseTimer(timerId);
+          break;
+        case 'stop':
+          this.stopTimer(timerId);
+          break;
+        case 'adjust':
+          const minutes = parseInt(target.dataset.minutes || '0');
+          this.adjustTimer(timerId, minutes);
+          break;
+      }
+    }
+
+    private toggleFooterExpansion() {
+      this.isExpanded = !this.isExpanded;
+      const expanded = document.getElementById('timer-footer-expanded');
+      const chevron = document.getElementById('footer-chevron');
+      
+      if (expanded && chevron) {
+        if (this.isExpanded) {
+          expanded.classList.remove('hidden');
+          chevron.style.transform = 'rotate(180deg)';
+        } else {
+          expanded.classList.add('hidden');
+          chevron.style.transform = 'rotate(0deg)';
+        }
+      }
+    }
+
+    private toggleSidebar() {
+      const sidebarContent = document.getElementById('timer-sidebar-content');
+      const isCollapsed = sidebarContent?.classList.contains('hidden');
+      
+      if (isCollapsed) {
+        this.expandSidebar();
+      } else {
+        this.collapseSidebar();
+      }
+    }
+
+    private collapseSidebar() {
+      const sidebar = document.getElementById('timer-sidebar');
+      const sidebarContent = document.getElementById('timer-sidebar-content');
+      const toggleBtn = document.getElementById('sidebar-toggle');
+      const toggleIcon = document.getElementById('sidebar-toggle-icon');
+      
+      sidebarContent?.classList.add('hidden');
+      toggleBtn?.classList.remove('hidden');
+      toggleBtn?.classList.remove('positioned-left'); // Position at right edge
+      
+      // Update icon to point left (for expanding)
+      if (toggleIcon) {
+        toggleIcon.innerHTML = '<path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>';
+      }
+      
+      // Update title
+      toggleBtn?.setAttribute('title', 'Timer anzeigen');
+      
+      sidebar?.classList.add('collapsed'); // Fallback for browsers without :has() support
+      document.body.classList.remove('timer-sidebar-active');
+    }
+
+    private expandSidebar() {
+      const sidebar = document.getElementById('timer-sidebar');
+      const sidebarContent = document.getElementById('timer-sidebar-content');
+      const toggleBtn = document.getElementById('sidebar-toggle');
+      const toggleIcon = document.getElementById('sidebar-toggle-icon');
+      
+      sidebarContent?.classList.remove('hidden');
+      toggleBtn?.classList.remove('hidden'); // Keep button visible when expanded
+      toggleBtn?.classList.add('positioned-left'); // Position left of sidebar
+      
+      // Update icon to point right (for collapsing)
+      if (toggleIcon) {
+        toggleIcon.innerHTML = '<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>';
+      }
+      
+      // Update title
+      toggleBtn?.setAttribute('title', 'Timer einklappen');
+      
+      sidebar?.classList.remove('collapsed');
+      document.body.classList.add('timer-sidebar-active');
+    }
+
+    private hideSidebar() {
+      const sidebar = document.getElementById('timer-sidebar');
+      sidebar?.classList.add('hidden');
+      document.body.classList.remove('timer-sidebar-active');
+    }
+
+    private showTimerUI() {
+      this.updateOrientation();
+      // If in landscape mode and we have timers, expand the sidebar
+      if (!this.isPortraitMode && this.timers.size > 0) {
+        this.expandSidebar();
+      }
+      // In portrait mode, expand footer if we have timers
+      if (this.isPortraitMode && this.timers.size > 0) {
+        this.isExpanded = true;
+        const expanded = document.getElementById('timer-footer-expanded');
+        const chevron = document.getElementById('footer-chevron');
+        if (expanded && chevron) {
+          expanded.classList.remove('hidden');
+          chevron.style.transform = 'rotate(180deg)';
+        }
+      }
+    }
+
+    private hideTimerUI() {
+      // Never hide the timer UI completely - just collapse it
+      // Users need access to create manual timers
+      this.updateOrientation();
+    }
+
+    private showAddTimerDialog() {
+      this.showAddTimerModal();
+    }
+
+    private showAddTimerModal() {
+      // Remove any existing add timer modals
+      document.querySelectorAll('.add-timer-modal').forEach(el => el.remove());
+      document.querySelectorAll('.add-timer-overlay').forEach(el => el.remove());
+      
+      // Create overlay background
+      const overlay = document.createElement('div');
+      overlay.className = 'add-timer-overlay fixed inset-0 bg-black bg-opacity-50 z-40 cursor-pointer';
+      overlay.addEventListener('click', () => {
+        modal.remove();
+        overlay.remove();
+      });
+      document.body.appendChild(overlay);
+      
+      const modal = document.createElement('div');
+      modal.className = 'add-timer-modal fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4';
+      
+      modal.innerHTML = `
+        <div class="mb-4">
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+            <svg class="w-6 h-6 mr-2 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+            </svg>
+            Neuer Timer
+          </h3>
+          
+          <!-- Timer Title -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Titel
+            </label>
+            <input 
+              type="text" 
+              id="timer-title-input"
+              placeholder="z.B. Nudeln kochen"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+              value="Timer"
+            />
+          </div>
+          
+          <!-- Timer Description -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Beschreibung (optional)
+            </label>
+            <textarea 
+              id="timer-description-input"
+              placeholder="z.B. Al dente kochen und dann abgießen"
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            ></textarea>
+          </div>
+          
+          <!-- Time Presets -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Schnellauswahl
+            </label>
+            <div class="grid grid-cols-4 gap-2">
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="1">
+                1 Min
+              </button>
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="2">
+                2 Min
+              </button>
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="5">
+                5 Min
+              </button>
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="10">
+                10 Min
+              </button>
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="20">
+                20 Min
+              </button>
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="25">
+                25 Min
+              </button>
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="30">
+                30 Min
+              </button>
+              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="60">
+                1 Std
+              </button>
+            </div>
+          </div>
+          
+          <!-- Manual Time Input -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Zeit einstellen
+            </label>
+            <div class="flex items-center space-x-4">
+              <!-- Minutes -->
+              <div class="flex-1">
+                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Minuten</label>
+                <div class="flex items-center border border-gray-300 dark:border-gray-600 rounded-md">
+                  <button type="button" id="minutes-decrement" class="px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                  </button>
+                  <input 
+                    type="number" 
+                    id="minutes-input"
+                    min="0" 
+                    max="999"
+                    value="5"
+                    class="flex-1 px-2 py-2 text-center border-0 focus:outline-none focus:ring-0 bg-transparent text-gray-900 dark:text-white"
+                  />
+                  <button type="button" id="minutes-increment" class="px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Seconds -->
+              <div class="flex-1">
+                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Sekunden</label>
+                <div class="flex items-center border border-gray-300 dark:border-gray-600 rounded-md">
+                  <button type="button" id="seconds-decrement" class="px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                  </button>
+                  <input 
+                    type="number" 
+                    id="seconds-input"
+                    min="0" 
+                    max="59"
+                    value="0"
+                    class="flex-1 px-2 py-2 text-center border-0 focus:outline-none focus:ring-0 bg-transparent text-gray-900 dark:text-white"
+                  />
+                  <button type="button" id="seconds-increment" class="px-3 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div class="flex space-x-3">
+            <button id="cancel-timer-btn" class="flex-1 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md font-medium transition-colors">
+              Abbrechen
+            </button>
+            <button id="create-timer-btn" class="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md font-medium transition-colors">
+              Timer erstellen
+            </button>
+          </div>
+        </div>
+      `;
+      
+      this.setupAddTimerModalEvents(modal, overlay);
+      document.body.appendChild(modal);
+    }
+
+    private showExpiredTimerNotification(timer: Timer) {
+      const expiredDuration = (timer as any).expiredDuration || 0;
+      const expiredMinutes = Math.floor(expiredDuration / 60);
+      const expiredSeconds = expiredDuration % 60;
+      
+      let expiredTimeText = '';
+      if (expiredMinutes > 0) {
+        expiredTimeText = `${expiredMinutes} Min ${expiredSeconds} Sek`;
+      } else {
+        expiredTimeText = `${expiredSeconds} Sek`;
+      }
+      
+      // Remove any existing expired timer notifications
+      document.querySelectorAll('.expired-timer-notification').forEach(el => el.remove());
+      document.querySelectorAll('.expired-timer-overlay').forEach(el => el.remove());
+      
+      // Create overlay background
+      const overlay = document.createElement('div');
+      overlay.className = 'expired-timer-overlay fixed inset-0 bg-black bg-opacity-50 z-40 cursor-pointer';
+      overlay.addEventListener('click', () => {
+        this.removeTimer(timer.id);
+        notification.remove();
+        overlay.remove();
+      });
+      document.body.appendChild(overlay);
+      
+      const notification = document.createElement('div');
+      notification.className = 'expired-timer-notification fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border-2 border-red-500 rounded-lg shadow-2xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto';
+      
+      // Build context information with full step description
+      let contextInfo = '';
+      if (timer.recipeName || timer.stepDescription) {
+        contextInfo = `
+          <div class="mb-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md border-l-4 border-red-500">
+            ${timer.recipeName ? `<div class="font-semibold text-red-700 dark:text-red-300 mb-2 text-lg">${timer.recipeName}</div>` : ''}
+            ${timer.stepDescription ? `
+              <div class="text-gray-700 dark:text-gray-300 leading-relaxed">
+                <div class="font-medium text-gray-800 dark:text-gray-200 mb-1">Zubereitungsschritt:</div>
+                <div class="text-base">${timer.stepDescription}</div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+      
+      notification.innerHTML = `
+        <div class="text-center mb-4">
+          <div class="mx-auto w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mb-3">
+            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Timer abgelaufen!</h3>
+          <p class="text-lg font-medium text-red-600 dark:text-red-400 mb-2">${timer.label}</p>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            Abgelaufen seit: <span class="font-medium text-red-600 dark:text-red-400">${expiredTimeText}</span>
+          </p>
+        </div>
+        
+        ${contextInfo}
+        
+        <div class="space-y-3">
+          <div class="grid grid-cols-3 gap-2">
+            <button class="extend-expired-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="1">
+              +1 Min
+            </button>
+            <button class="extend-expired-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="5">
+              +5 Min
+            </button>
+            <button class="extend-expired-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="10">
+              +10 Min
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <button class="restart-expired-timer-btn px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+              Neu starten
+            </button>
+            <button class="close-expired-timer-btn px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+              Schließen
+            </button>
+          </div>
+        </div>
+      `;
+      
+      // Add event listeners
+      notification.querySelectorAll('.extend-expired-timer-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const target = e.currentTarget as HTMLElement;
+          const timerId = target.dataset.timerId;
+          const minutes = parseInt(target.dataset.minutes || '0');
+          if (timerId) {
+            this.extendCompletedTimer(timerId, minutes);
+            notification.remove();
+            overlay.remove();
+          }
+        });
+      });
+      
+      notification.querySelector('.restart-expired-timer-btn')?.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const timerId = target.dataset.timerId;
+        if (timerId) {
+          this.restartTimer(timerId);
+          notification.remove();
+          overlay.remove();
+        }
+      });
+      
+      notification.querySelector('.close-expired-timer-btn')?.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const timerId = target.dataset.timerId;
+        if (timerId) {
+          this.removeTimer(timerId);
+          notification.remove();
+          overlay.remove();
+        }
+      });
+      
+      document.body.appendChild(notification);
+      
+      // Auto-remove after 30 seconds if no action taken
+      setTimeout(() => {
+        if (notification.parentNode) {
+          this.removeTimer(timer.id);
+          notification.remove();
+        }
+        if (overlay.parentNode) {
+          overlay.remove();
+        }
+      }, 30000);
+    }
+
+    private setupAddTimerModalEvents(modal: HTMLElement, overlay: HTMLElement) {
+      const titleInput = modal.querySelector('#timer-title-input') as HTMLInputElement;
+      const descriptionInput = modal.querySelector('#timer-description-input') as HTMLTextAreaElement;
+      const minutesInput = modal.querySelector('#minutes-input') as HTMLInputElement;
+      const secondsInput = modal.querySelector('#seconds-input') as HTMLInputElement;
+      
+      // Time preset buttons
+      modal.querySelectorAll('.time-preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const minutes = parseInt((btn as HTMLElement).dataset.minutes || '0');
+          minutesInput.value = minutes.toString();
+          secondsInput.value = '0';
+        });
+      });
+      
+      // Increment/Decrement buttons
+      modal.querySelector('#minutes-increment')?.addEventListener('click', () => {
+        const current = parseInt(minutesInput.value) || 0;
+        minutesInput.value = Math.min(999, current + 1).toString();
+      });
+      
+      modal.querySelector('#minutes-decrement')?.addEventListener('click', () => {
+        const current = parseInt(minutesInput.value) || 0;
+        minutesInput.value = Math.max(0, current - 1).toString();
+      });
+      
+      modal.querySelector('#seconds-increment')?.addEventListener('click', () => {
+        const current = parseInt(secondsInput.value) || 0;
+        if (current >= 59) {
+          secondsInput.value = '0';
+          const minutes = parseInt(minutesInput.value) || 0;
+          minutesInput.value = Math.min(999, minutes + 1).toString();
+        } else {
+          secondsInput.value = (current + 1).toString();
+        }
+      });
+      
+      modal.querySelector('#seconds-decrement')?.addEventListener('click', () => {
+        const current = parseInt(secondsInput.value) || 0;
+        if (current <= 0) {
+          const minutes = parseInt(minutesInput.value) || 0;
+          if (minutes > 0) {
+            minutesInput.value = (minutes - 1).toString();
+            secondsInput.value = '59';
+          }
+        } else {
+          secondsInput.value = (current - 1).toString();
+        }
+      });
+      
+      // Cancel button
+      modal.querySelector('#cancel-timer-btn')?.addEventListener('click', () => {
+        modal.remove();
+        overlay.remove();
+      });
+      
+      // Create timer button
+      modal.querySelector('#create-timer-btn')?.addEventListener('click', () => {
+        const title = titleInput.value.trim() || 'Timer';
+        const description = descriptionInput.value.trim();
+        const minutes = parseInt(minutesInput.value) || 0;
+        const seconds = parseInt(secondsInput.value) || 0;
+        const totalSeconds = (minutes * 60) + seconds;
+        
+        if (totalSeconds > 0) {
+          // Manual timers don't auto-start and use custom title/description
+          this.addTimer(title, totalSeconds, title, description, false);
+          modal.remove();
+          overlay.remove();
+        } else {
+          // Show error for invalid time
+          const errorMsg = document.createElement('div');
+          errorMsg.className = 'mt-2 text-red-600 dark:text-red-400 text-sm';
+          errorMsg.textContent = 'Bitte geben Sie eine gültige Zeit ein.';
+          modal.querySelector('#create-timer-btn')?.parentNode?.appendChild(errorMsg);
+          setTimeout(() => errorMsg.remove(), 3000);
+        }
+      });
+      
+      // Focus title input
+      titleInput.focus();
+      titleInput.select();
+    }
+
+    private formatTime(seconds: number): string {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    private saveTimers() {
+      const timersArray = Array.from(this.timers.values());
+      localStorage.setItem('active-timers', JSON.stringify(timersArray));
+    }
+
+    private showTimerCompleteNotification(timer: Timer) {
+      // Remove any existing timer complete notifications
+      document.querySelectorAll('.timer-complete-notification').forEach(el => el.remove());
+      document.querySelectorAll('.timer-notification-overlay').forEach(el => el.remove());
+      
+      // Create overlay background
+      const overlay = document.createElement('div');
+      overlay.className = 'timer-notification-overlay fixed inset-0 bg-black bg-opacity-50 z-40 cursor-pointer';
+      overlay.addEventListener('click', () => {
+        // Stop alarm and remove timer when clicking overlay (same as close button)
+        this.stopContinuousAlarm(timer.id);
+        this.removeTimer(timer.id);
+        notification.remove();
+        overlay.remove();
+      });
+      document.body.appendChild(overlay);
+      
+      const notification = document.createElement('div');
+      notification.className = 'timer-complete-notification fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border-2 border-orange-500 rounded-lg shadow-2xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto';
+      
+      // Build context information with full step description
+      let contextInfo = '';
+      if (timer.recipeName || timer.stepDescription) {
+        const hasNavigation = timer.recipeId && timer.stepId;
+        contextInfo = `
+          <div class="mb-4 p-4 bg-orange-50 dark:bg-orange-900/20 rounded-md border-l-4 border-orange-500 ${hasNavigation ? 'cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors' : ''}" ${hasNavigation ? `data-timer-id="${timer.id}"` : ''}>
+            ${timer.recipeName ? `<div class="font-semibold text-orange-700 dark:text-orange-300 mb-2 text-lg">${timer.recipeName}</div>` : ''}
+            ${timer.stepDescription ? `
+              <div class="text-gray-700 dark:text-gray-300 leading-relaxed">
+                <div class="font-medium text-gray-800 dark:text-gray-200 mb-1">Zubereitungsschritt:</div>
+                <div class="text-base">${timer.stepDescription}</div>
+              </div>
+            ` : ''}
+            ${hasNavigation ? '<div class="text-sm text-orange-600 dark:text-orange-400 mt-2 font-medium">🔗 Klicken zum Rezept</div>' : ''}
+          </div>
+        `;
+      }
+      
+      notification.innerHTML = `
+        <div class="text-center mb-4">
+          <div class="mx-auto w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center mb-3">
+            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 1.414L10.586 9.5 9.293 8.207a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4a1 1 0 00-1.414-1.414L11 9.586z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Timer abgelaufen!</h3>
+          <p class="text-lg font-medium text-orange-600 dark:text-orange-400">${timer.label}</p>
+        </div>
+        
+        ${contextInfo}
+        
+        <div class="space-y-3">
+          <div class="grid grid-cols-3 gap-2">
+            <button class="extend-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="1">
+              +1 Min
+            </button>
+            <button class="extend-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="5">
+              +5 Min
+            </button>
+            <button class="extend-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="10">
+              +10 Min
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <button class="restart-timer-btn px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+              Neu starten
+            </button>
+            <button class="close-timer-btn px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+              Schließen
+            </button>
+          </div>
+        </div>
+      `;
+      
+      // Add event listeners
+      notification.querySelectorAll('.extend-timer-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const target = e.currentTarget as HTMLElement;
+          const timerId = target.dataset.timerId;
+          const minutes = parseInt(target.dataset.minutes || '0');
+          if (timerId) {
+            this.stopContinuousAlarm(timerId);
+            this.extendCompletedTimer(timerId, minutes);
+            notification.remove();
+            overlay.remove();
+          }
+        });
+      });
+      
+      notification.querySelector('.restart-timer-btn')?.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const timerId = target.dataset.timerId;
+        if (timerId) {
+          this.stopContinuousAlarm(timerId);
+          this.restartTimer(timerId);
+          notification.remove();
+          overlay.remove();
+        }
+      });
+      
+      notification.querySelector('.close-timer-btn')?.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const timerId = target.dataset.timerId;
+        if (timerId) {
+          this.stopContinuousAlarm(timerId);
+          this.removeTimer(timerId);
+          notification.remove();
+          overlay.remove();
+        }
+      });
+
+      // Add navigation listener for context info
+      const contextElement = notification.querySelector('[data-timer-id]');
+      if (contextElement && timer.recipeId && timer.stepId) {
+        contextElement.addEventListener('click', (e) => {
+          e.stopPropagation(); // Prevent overlay click
+          this.stopContinuousAlarm(timer.id);
+          this.navigateToRecipeStep(timer);
+          notification.remove();
+          overlay.remove();
+        });
+      }
+      
+      document.body.appendChild(notification);
+      
+      // Auto-remove after 30 seconds if no action taken
+      setTimeout(() => {
+        if (notification.parentNode) {
+          this.stopContinuousAlarm(timer.id);
+          this.removeTimer(timer.id);
+          notification.remove();
+        }
+        if (overlay.parentNode) {
+          overlay.remove();
+        }
+      }, 30000);
+    }
+
+    private showNotification(message: string, type: string = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white max-w-sm ${
+        type === 'timer-complete' ? 'bg-green-500 animate-pulse' : 
+        type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+      }`;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 5000);
+    }
+
+    private startContinuousAlarm(timerId: string) {
+      // Stop any existing alarm for this timer
+      this.stopContinuousAlarm(timerId);
+      
+      // Start continuous alarm
+      const playAlarmCycle = () => {
+        this.playNotificationSound();
+      };
+      
+      // Play immediately
+      playAlarmCycle();
+      
+      // Then repeat every 3 seconds
+      const alarmInterval = setInterval(playAlarmCycle, 3000);
+      this.alarmIntervals.set(timerId, alarmInterval);
+    }
+
+    private stopContinuousAlarm(timerId: string) {
+      const alarmInterval = this.alarmIntervals.get(timerId);
+      if (alarmInterval) {
+        clearInterval(alarmInterval);
+        this.alarmIntervals.delete(timerId);
+      }
+    }
+
+    private playNotificationSound() {
+      try {
+        // Create a more prominent alarm sound
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        // Play multiple beeps for attention
+        const playBeep = (frequency: number, startTime: number, duration: number) => {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime + startTime);
+          oscillator.type = 'sine';
+          gainNode.gain.setValueAtTime(0, audioContext.currentTime + startTime);
+          gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + startTime + 0.05);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + startTime + duration);
+          
+          oscillator.start(audioContext.currentTime + startTime);
+          oscillator.stop(audioContext.currentTime + startTime + duration);
+        };
+        
+        // Play alarm pattern: high-low-high beeps
+        playBeep(1000, 0, 0.3);     // High beep
+        playBeep(600, 0.4, 0.3);    // Low beep  
+        playBeep(1000, 0.8, 0.3);   // High beep
+        playBeep(600, 1.2, 0.3);    // Low beep
+        playBeep(1000, 1.6, 0.5);   // Final high beep
+        
+      } catch (error) {
+        console.warn('Could not play notification sound:', error);
+        // Fallback: try to use system notification sound
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Timer abgelaufen!', { 
+            body: 'Ein Timer ist abgelaufen.',
+            icon: '/favicon.svg'
+          });
+        }
+      }
+    }
+  }
+
+  // Initialize multi-timer manager
+  let timerManager: MultiTimerManager;
+  
+  document.addEventListener('DOMContentLoaded', () => {
+    timerManager = new MultiTimerManager();
+  });
+
+  // Global function to start timer from recipe pages
+  (window as any).startTimer = (label: string, duration: number, recipeName?: string, stepDescription?: string, autoStart: boolean = true, recipeId?: string, stepId?: string) => {
+    if (timerManager) {
+      timerManager.addTimer(label, duration, recipeName, stepDescription, autoStart, recipeId, stepId);
+    }
+  };
+</script> 
