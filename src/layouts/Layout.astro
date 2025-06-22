@@ -10,7 +10,30 @@ const { title } = Astro.props;
 ---
 
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" style="background-color: #111827; color: #f9fafb;">
+  <script>
+    // Theme detection script (runs immediately to prevent flash)
+    (function() {
+      const theme = localStorage.getItem('theme') || 
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      
+      // Apply theme class immediately
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      document.documentElement.classList.add(theme);
+      
+      // Apply correct colors based on theme
+      if (theme === 'dark') {
+        document.documentElement.style.backgroundColor = '#111827'; // gray-900
+        document.documentElement.style.color = '#f9fafb'; // gray-100
+      } else {
+        document.documentElement.style.backgroundColor = '#f9fafb'; // gray-50
+        document.documentElement.style.color = '#111827'; // gray-900
+      }
+      
+      // Ensure visibility is set
+      document.documentElement.style.visibility = 'visible';
+    })();
+  </script>
   <head>
     <meta charset="UTF-8" />
     <meta name="description" content="Digitales Kochbuch für Rezepte und Einkaufslisten" />
@@ -18,14 +41,21 @@ const { title } = Astro.props;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
-    <script>
-      // Theme detection script (runs before page loads to prevent flash)
-      (function() {
-        const theme = localStorage.getItem('theme') || 
-          (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.classList.toggle('dark', theme === 'dark');
-      })();
-    </script>
+    <style>
+      /* Prevent flash of unstyled content during theme initialization */
+      html:not(.dark):not(.light) {
+        visibility: hidden;
+      }
+      /* Ensure smooth transition once CSS loads */
+      html {
+        transition: background-color 0.2s ease, color 0.2s ease;
+      }
+      /* Remove inline styles once CSS loads */
+      html.css-loaded {
+        background-color: unset !important;
+        color: unset !important;
+      }
+    </style>
   </head>
   <body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
     <header class="nav-header">
@@ -83,14 +113,29 @@ const { title } = Astro.props;
           const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
           
           document.documentElement.classList.toggle('dark', newTheme === 'dark');
+          document.documentElement.classList.remove(currentTheme);
+          document.documentElement.classList.add(newTheme);
           localStorage.setItem('theme', newTheme);
         }
 
         themeToggle.addEventListener('click', toggleTheme);
       }
 
+      // Remove inline styles once CSS is loaded and mark as loaded
+      function cleanupInlineStyles() {
+        document.documentElement.classList.add('css-loaded');
+        // Small delay to ensure CSS transitions work properly
+        setTimeout(() => {
+          document.documentElement.style.backgroundColor = '';
+          document.documentElement.style.color = '';
+        }, 100);
+      }
+
       // Initialize theme toggle when DOM is loaded
-      document.addEventListener('DOMContentLoaded', initializeTheme);
+      document.addEventListener('DOMContentLoaded', () => {
+        initializeTheme();
+        cleanupInlineStyles();
+      });
 
       // Create recipe functionality
       async function createNewRecipe() {
