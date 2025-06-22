@@ -91,7 +91,9 @@ const { title } = Astro.props;
               <span class="text-xl font-semibold text-gray-900 dark:text-white">Kochbuch</span>
             </a>
           </div>
-          <div class="flex items-center space-x-4">
+          
+          <!-- Desktop navigation -->
+          <div class="hidden portrait:hidden landscape:flex items-center space-x-4">
             <a href="/" class="nav-link">
               Rezepte
             </a>
@@ -109,8 +111,50 @@ const { title } = Astro.props;
               </svg>
               <!-- Moon icon (visible in light mode) -->
               <svg id="theme-toggle-dark-icon" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                <path d="M17.293 13.293A8 8 0 616.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
               </svg>
+            </button>
+          </div>
+
+          <!-- Mobile hamburger button -->
+          <div class="flex items-center space-x-2 portrait:flex landscape:hidden">
+            <!-- Theme Toggle Button for Mobile -->
+            <button id="theme-toggle-mobile" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
+              <!-- Sun icon (visible in dark mode) -->
+              <svg id="theme-toggle-light-icon-mobile" class="hidden dark:block w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+              </svg>
+              <!-- Moon icon (visible in light mode) -->
+              <svg id="theme-toggle-dark-icon-mobile" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.293 13.293A8 8 0 616.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+              </svg>
+            </button>
+            
+            <!-- Hamburger menu button -->
+            <button id="mobile-menu-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle mobile menu">
+              <!-- Hamburger icon -->
+              <svg id="mobile-menu-open" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+              <!-- Close icon -->
+              <svg id="mobile-menu-close" class="hidden w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Mobile menu -->
+        <div id="mobile-menu" class="hidden border-t border-gray-200 dark:border-gray-700 mt-2 pt-4 pb-4">
+          <div class="flex flex-col space-y-3">
+            <a href="/" class="nav-link text-base">
+              Rezepte
+            </a>
+            <a href="/einkaufsliste" class="nav-link text-base">
+              Einkaufsliste
+            </a>
+            <button id="create-recipe-btn-mobile" class="btn btn-primary text-left">
+              Neues Rezept
             </button>
           </div>
         </div>
@@ -128,7 +172,7 @@ const { title } = Astro.props;
       // Theme toggle functionality
       function initializeTheme() {
         const themeToggle = document.getElementById('theme-toggle');
-        if (!themeToggle) return;
+        const themeToggleMobile = document.getElementById('theme-toggle-mobile');
 
         function toggleTheme() {
           const currentTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
@@ -140,7 +184,72 @@ const { title } = Astro.props;
           localStorage.setItem('theme', newTheme);
         }
 
-        themeToggle.addEventListener('click', toggleTheme);
+        if (themeToggle) {
+          themeToggle.addEventListener('click', toggleTheme);
+        }
+        if (themeToggleMobile) {
+          themeToggleMobile.addEventListener('click', toggleTheme);
+        }
+      }
+
+      // Mobile menu toggle functionality
+      function initializeMobileMenu() {
+        const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+        const mobileMenu = document.getElementById('mobile-menu');
+        const openIcon = document.getElementById('mobile-menu-open');
+        const closeIcon = document.getElementById('mobile-menu-close');
+
+        if (!mobileMenuToggle || !mobileMenu || !openIcon || !closeIcon) return;
+
+        // Ensure menu starts in closed state
+        mobileMenu.classList.add('hidden');
+        openIcon.classList.remove('hidden');
+        closeIcon.classList.add('hidden');
+
+        function toggleMobileMenu() {
+          if (!mobileMenu || !openIcon || !closeIcon) return;
+          
+          const isHidden = mobileMenu.classList.contains('hidden');
+          
+          if (isHidden) {
+            // Show menu
+            mobileMenu.classList.remove('hidden');
+            openIcon.classList.add('hidden');
+            closeIcon.classList.remove('hidden');
+          } else {
+            // Hide menu
+            mobileMenu.classList.add('hidden');
+            openIcon.classList.remove('hidden');
+            closeIcon.classList.add('hidden');
+          }
+        }
+
+        mobileMenuToggle.addEventListener('click', toggleMobileMenu);
+
+        // Close mobile menu when clicking on links
+        const mobileLinks = mobileMenu.querySelectorAll('a, button');
+        mobileLinks.forEach(link => {
+          link.addEventListener('click', () => {
+            if (!mobileMenu || !openIcon || !closeIcon) return;
+            mobileMenu.classList.add('hidden');
+            openIcon.classList.remove('hidden');
+            closeIcon.classList.add('hidden');
+          });
+        });
+
+        // Close mobile menu when screen orientation changes
+        const handleOrientationChange = () => {
+          setTimeout(() => {
+            if (!mobileMenu || !openIcon || !closeIcon) return;
+            // Always close menu and reset icons on orientation change
+            mobileMenu.classList.add('hidden');
+            openIcon.classList.remove('hidden');
+            closeIcon.classList.add('hidden');
+          }, 100);
+        };
+
+        window.addEventListener('orientationchange', handleOrientationChange);
+        window.addEventListener('resize', handleOrientationChange);
       }
 
       // Remove inline styles once CSS is loaded and mark as loaded
@@ -153,9 +262,10 @@ const { title } = Astro.props;
         }, 100);
       }
 
-      // Initialize theme toggle when DOM is loaded
+      // Initialize theme toggle and mobile menu when DOM is loaded
       document.addEventListener('DOMContentLoaded', () => {
         initializeTheme();
+        initializeMobileMenu();
         cleanupInlineStyles();
       });
 
@@ -183,11 +293,16 @@ const { title } = Astro.props;
         }
       }
 
-      // Initialize create recipe button when DOM is loaded
+      // Initialize create recipe buttons when DOM is loaded
       document.addEventListener('DOMContentLoaded', () => {
         const createBtn = document.getElementById('create-recipe-btn');
+        const createBtnMobile = document.getElementById('create-recipe-btn-mobile');
+        
         if (createBtn) {
           createBtn.addEventListener('click', createNewRecipe);
+        }
+        if (createBtnMobile) {
+          createBtnMobile.addEventListener('click', createNewRecipe);
         }
       });
 

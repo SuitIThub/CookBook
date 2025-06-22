@@ -75,8 +75,27 @@ export const PUT: APIRoute = async ({ request, url }) => {
       });
     }
 
-    const updateData = await request.json();
-    const updatedShoppingList = db.updateShoppingList(id, updateData);
+    const requestData = await request.json();
+    
+    // Handle add-item action
+    if (requestData.action === 'add-item' && requestData.item) {
+      const updatedShoppingList = db.addItemToShoppingList(id, requestData.item);
+      
+      if (!updatedShoppingList) {
+        return new Response(JSON.stringify({ error: 'Shopping list not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      return new Response(JSON.stringify(updatedShoppingList), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Handle regular update
+    const updatedShoppingList = db.updateShoppingList(id, requestData);
     
     if (!updatedShoppingList) {
       return new Response(JSON.stringify({ error: 'Shopping list not found' }), {

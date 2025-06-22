@@ -143,8 +143,31 @@ try {
     // Edit mode functionality
     let isEditMode = false;
     const editBtn = document.getElementById('edit-btn');
+    const editBtnMobile = document.getElementById('edit-btn-mobile');
     const viewContent = document.getElementById('view-content');
     const editContent = document.getElementById('edit-content');
+
+    function updateEditButton(button, isEdit) {
+      if (!button) return;
+      
+      if (isEdit) {
+        button.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+          <span>Abbrechen</span>
+        `;
+        button.className = button.className.replace('bg-blue-500 hover:bg-blue-600', 'bg-gray-500 hover:bg-gray-600');
+      } else {
+        button.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+          </svg>
+          <span>Bearbeiten</span>
+        `;
+        button.className = button.className.replace('bg-gray-500 hover:bg-gray-600', 'bg-blue-500 hover:bg-blue-600');
+      }
+    }
 
     function toggleEditMode() {
       isEditMode = !isEditMode;
@@ -152,27 +175,13 @@ try {
       if (isEditMode) {
         viewContent?.classList.add('hidden');
         editContent?.classList.remove('hidden');
-        if (editBtn) {
-          editBtn.innerHTML = `
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-            <span>Abbrechen</span>
-          `;
-          editBtn.className = 'flex items-center space-x-2 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm font-medium transition-colors';
-        }
+        updateEditButton(editBtn, true);
+        updateEditButton(editBtnMobile, true);
       } else {
         viewContent?.classList.remove('hidden');
         editContent?.classList.add('hidden');
-        if (editBtn) {
-          editBtn.innerHTML = `
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-            </svg>
-            <span>Bearbeiten</span>
-          `;
-          editBtn.className = 'flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors';
-        }
+        updateEditButton(editBtn, false);
+        updateEditButton(editBtnMobile, false);
       }
     }
 
@@ -180,6 +189,78 @@ try {
     window.toggleEditMode = toggleEditMode;
 
     editBtn?.addEventListener('click', toggleEditMode);
+    editBtnMobile?.addEventListener('click', toggleEditMode);
+
+    // Shopping list functionality
+    const addToShoppingBtn = document.getElementById('add-to-shopping');
+    const addToShoppingBtnMobile = document.getElementById('add-to-shopping-mobile');
+
+    async function addRecipeToShoppingList() {
+      try {
+        // Get or create default shopping list
+        let shoppingListId = localStorage.getItem('defaultShoppingListId');
+        
+        if (!shoppingListId) {
+          // Create default shopping list if it doesn't exist
+          const createResponse = await fetch('/api/shopping-lists', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ title: 'Meine Einkaufsliste' })
+          });
+          
+          if (createResponse.ok) {
+            const newList = await createResponse.json();
+            shoppingListId = newList.id;
+            localStorage.setItem('defaultShoppingListId', shoppingListId);
+          } else {
+            throw new Error('Failed to create shopping list');
+          }
+        }
+
+        // Add each ingredient to the shopping list
+        const ingredients = recipe.ingredients || [];
+        let addedCount = 0;
+        
+        for (const ingredient of ingredients) {
+          if (ingredient.name) {
+            const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                action: 'add-item',
+                item: {
+                  name: ingredient.name,
+                  amount: ingredient.amount || '',
+                  unit: ingredient.unit || '',
+                  isChecked: false
+                }
+              })
+            });
+            
+            if (response.ok) {
+              addedCount++;
+            }
+          }
+        }
+        
+        if (addedCount > 0) {
+          alert(`${addedCount} Zutat(en) zur Einkaufsliste hinzugefügt!`);
+        } else {
+          alert('Keine Zutaten zum Hinzufügen gefunden.');
+        }
+        
+      } catch (error) {
+        console.error('Error adding to shopping list:', error);
+        alert('Fehler beim Hinzufügen zur Einkaufsliste. Bitte versuchen Sie es erneut.');
+      }
+    }
+
+    addToShoppingBtn?.addEventListener('click', addRecipeToShoppingList);
+    addToShoppingBtnMobile?.addEventListener('click', addRecipeToShoppingList);
 
     // Edit mode event handlers
     document.getElementById('cancel-edit-btn')?.addEventListener('click', () => {

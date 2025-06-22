@@ -124,6 +124,75 @@
   @apply bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors duration-200;
 }
 
+/* Mobile Navigation */
+#mobile-menu {
+  animation: mobileMenuSlide 0.2s ease-out;
+}
+
+#mobile-menu.hidden {
+  animation: mobileMenuSlideOut 0.2s ease-in;
+}
+
+@keyframes mobileMenuSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mobileMenuSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* Portrait mode specific styles */
+@media (orientation: portrait) {
+  .nav-header .container {
+    position: relative;
+  }
+  
+  #mobile-menu {
+    background: inherit;
+  }
+  
+  /* Ensure mobile menu is properly hidden in portrait when not active */
+  #mobile-menu.hidden {
+    display: none !important;
+  }
+}
+
+/* Recipe header mobile responsive styles */
+@media (orientation: portrait) {
+  /* Mobile buttons should be slightly larger and more touch-friendly */
+  #edit-btn-mobile,
+  #add-to-shopping-mobile {
+    min-height: 48px;
+    touch-action: manipulation;
+  }
+  
+  /* Better spacing for mobile recipe titles */
+  .recipe-header-mobile h1 {
+    line-height: 1.2;
+  }
+}
+
+/* Landscape mode - always hide mobile menu */
+@media (orientation: landscape) {
+  #mobile-menu {
+    display: none !important;
+  }
+}
+
 /* Utility Components */
 .flex-center {
   @apply flex items-center justify-center;
