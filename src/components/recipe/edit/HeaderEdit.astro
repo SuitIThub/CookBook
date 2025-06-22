@@ -1,0 +1,90 @@
+---
+import type { Recipe } from '../../../types/recipe';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+---
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 transition-colors duration-200">
+  <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Grundinformationen bearbeiten</h2>
+  
+  <div class="space-y-4">
+    <div>
+      <label for="edit-title" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Titel</label>
+      <input 
+        type="text" 
+        id="edit-title" 
+        value={recipe.title}
+        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+      />
+    </div>
+    
+    <div>
+      <label for="edit-subtitle" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Untertitel</label>
+      <input 
+        type="text" 
+        id="edit-subtitle" 
+        value={recipe.subtitle || ''}
+        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+      />
+    </div>
+    
+    <div>
+      <label for="edit-description" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Beschreibung</label>
+      <textarea 
+        id="edit-description" 
+        rows="3"
+        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+      >{recipe.description || ''}</textarea>
+    </div>
+    
+    <!-- Metadata -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>
+        <label for="edit-servings" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Portionen</label>
+        <input 
+          type="number" 
+          id="edit-servings" 
+          value={recipe.metadata.servings || ''}
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        />
+      </div>
+      
+      <div>
+        <label for="edit-prep-time" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Vorbereitung (Min)</label>
+        <input 
+          type="number" 
+          id="edit-prep-time" 
+          value={recipe.metadata.preparationTime || ''}
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        />
+      </div>
+      
+      <div>
+        <label for="edit-cook-time" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Kochzeit (Min)</label>
+        <input 
+          type="number" 
+          id="edit-cook-time" 
+          value={recipe.metadata.cookingTime || ''}
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        />
+      </div>
+      
+      <div>
+        <label for="edit-difficulty" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Schwierigkeit</label>
+        <select 
+          id="edit-difficulty" 
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        >
+          <option value="">Wählen...</option>
+          <option value="leicht" selected={recipe.metadata.difficulty === 'leicht'}>Leicht</option>
+          <option value="mittel" selected={recipe.metadata.difficulty === 'mittel'}>Mittel</option>
+          <option value="schwer" selected={recipe.metadata.difficulty === 'schwer'}>Schwer</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div> 

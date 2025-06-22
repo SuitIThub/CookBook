@@ -1,0 +1,160 @@
+---
+import type { Recipe, PreparationStep } from '../../../types/recipe';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+---
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 transition-colors duration-200">
+  <div class="flex justify-between items-center mb-4">
+    <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Zubereitung bearbeiten</h2>
+    <div class="flex space-x-2">
+      <button 
+        type="button" 
+        id="add-preparation-group-btn"
+        class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+      >
+        + Gruppe hinzufügen
+      </button>
+      <button 
+        type="button" 
+        id="add-step-btn"
+        class="px-3 py-1 text-sm bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
+      >
+        + Schritt hinzufügen
+      </button>
+    </div>
+  </div>
+  
+  <div id="preparation-edit-container" class="space-y-6">
+    <!-- Default ungrouped steps section -->
+    <div class="preparation-group-edit default-group border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-is-default="true">
+      <div class="flex justify-between items-center mb-3">
+        <div class="flex-1 px-3 py-2 text-lg font-medium text-gray-600 dark:text-gray-300">
+          Zubereitungsschritte (ungruppiert)
+        </div>
+      </div>
+      
+      <div class="steps-list space-y-4 min-h-[60px] relative">
+        {recipe.preparationGroups.map((group) => 
+          !group.title ? group.steps.map((step, stepIndex) => (
+            'text' in step ? (
+              <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true">
+                <div class="flex items-start space-x-3">
+                  <div class="flex items-center space-x-2">
+                    <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                      </svg>
+                    </div>
+                    <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                      {stepIndex + 1}
+                    </div>
+                  </div>
+                  <div class="flex-1 space-y-3">
+                    <textarea 
+                      rows="3"
+                      placeholder="Zubereitungsschritt..."
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                    >{(step as PreparationStep).text}</textarea>
+                    
+                    <div class="flex justify-end items-center">
+                      <button 
+                        type="button" 
+                        class="remove-step-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null
+          )) : null
+        )}
+      </div>
+      
+      <button 
+        type="button" 
+        class="add-step-to-group-btn mt-3 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
+      >
+        + Schritt zu ungruppiert hinzufügen
+      </button>
+    </div>
+
+    <!-- Named preparation groups -->
+    {recipe.preparationGroups.map((group, groupIndex) => 
+      group.title ? (
+        <div class="preparation-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200">
+          <div class="flex justify-between items-center mb-3">
+            <input 
+              type="text" 
+              value={group.title || ''}
+              placeholder="Gruppenname (optional)"
+              class="group-title-input flex-1 px-3 py-2 text-lg font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-green-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            />
+            <button 
+              type="button" 
+              class="remove-prep-group-btn ml-3 px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="steps-list space-y-4 min-h-[60px] relative">
+            {group.steps.map((step, stepIndex) => (
+              'text' in step ? (
+                <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true">
+                  <div class="flex items-start space-x-3">
+                    <div class="flex items-center space-x-2">
+                      <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                        </svg>
+                      </div>
+                      <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                        {stepIndex + 1}
+                      </div>
+                    </div>
+                    <div class="flex-1 space-y-3">
+                      <textarea 
+                        rows="3"
+                        placeholder="Zubereitungsschritt..."
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                      >{(step as PreparationStep).text}</textarea>
+                      
+                      <div class="flex justify-end items-center">
+                        <button 
+                          type="button" 
+                          class="remove-step-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                        >
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null
+            ))}
+          </div>
+          
+          <button 
+            type="button" 
+            class="add-step-to-group-btn mt-3 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
+          >
+            + Schritt zu dieser Gruppe hinzufügen
+          </button>
+        </div>
+      ) : null
+    )}
+  </div>
+</div> 

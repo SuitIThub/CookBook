@@ -1,0 +1,71 @@
+---
+import type { Recipe, Ingredient } from '../../../types/recipe';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+---
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors duration-200">
+  <div class="p-6">
+    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+      <svg class="w-6 h-6 mr-2 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+      </svg>
+      Zutaten
+    </h2>
+    
+    <div class="space-y-4">
+      {/* First show ungrouped ingredients */}
+      {recipe.ingredientGroups.filter(group => !group.title).map((group) => (
+        <ul class="space-y-2">
+          {group.ingredients.map((ingredient) => (
+            'name' in ingredient ? (
+              <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <span class="font-medium text-gray-900 dark:text-white">{(ingredient as Ingredient).name}</span>
+                <div class="flex space-x-2">
+                  {(ingredient as Ingredient).quantities.map((qty, index) => (
+                    <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
+                          data-original-amount={qty.amount} 
+                          data-unit={qty.unit}>
+                      <span class="amount-value">{qty.amount}</span> {qty.unit}
+                    </span>
+                  ))}
+                </div>
+              </li>
+            ) : null
+          ))}
+        </ul>
+      ))}
+      
+      {/* Then show grouped ingredients */}
+      {recipe.ingredientGroups.filter(group => group.title).map((group) => (
+        <div>
+          <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2 border-b border-gray-200 dark:border-gray-600 pb-1">
+            {group.title}
+          </h3>
+          <ul class="space-y-2">
+            {group.ingredients.map((ingredient) => (
+              'name' in ingredient ? (
+                <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <span class="font-medium text-gray-900 dark:text-white">{(ingredient as Ingredient).name}</span>
+                  <div class="flex space-x-2">
+                    {(ingredient as Ingredient).quantities.map((qty, index) => (
+                      <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
+                            data-original-amount={qty.amount} 
+                            data-unit={qty.unit}>
+                        <span class="amount-value">{qty.amount}</span> {qty.unit}
+                      </span>
+                    ))}
+                  </div>
+                </li>
+              ) : null
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </div>
+</div> 

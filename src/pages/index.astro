@@ -2,6 +2,9 @@
 import Layout from '../layouts/Layout.astro';
 import { db } from '../lib/database';
 import type { Recipe } from '../types/recipe';
+import RecipeListHeader from '../components/recipe_list/RecipeListHeader.astro';
+import RecipeCard from '../components/recipe_list/RecipeCard.astro';
+import EmptyState from '../components/recipe_list/EmptyState.astro';
 
 // Rezepte aus der Datenbank laden
 let recipes: Recipe[] = [];
@@ -16,149 +19,18 @@ try {
 <Layout title="Kochbuch - Alle Rezepte">
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex-between">
-      <div>
-        <h1 class="heading-primary">Meine Rezepte</h1>
-        <p class="text-muted mt-1">{recipes.length} Rezepte gefunden</p>
-      </div>
-      <div class="flex space-x-3">
-        <button class="btn btn-secondary flex items-center space-x-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-          <span>Suchen</span>
-        </button>
-        <button class="btn btn-secondary flex items-center space-x-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"/>
-          </svg>
-          <span>Filter</span>
-        </button>
-      </div>
-    </div>
+    <RecipeListHeader recipeCount={recipes.length} />
 
-    <!-- Recipe Grid -->
-    <div class="grid-responsive">
-      {recipes.map((recipe) => (
-        <div class="recipe-card">
-          <!-- Recipe Image Placeholder -->
-          <div class="recipe-image-placeholder">
-            <svg class="w-16 h-16 text-orange-400 dark:text-orange-300" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
-            </svg>
-          </div>
-          
-          <!-- Recipe Content -->
-          <div class="card-content">
-            <div class="mb-3">
-              <h3 class="heading-tertiary mb-1">
-                <a href={`/rezept/${recipe.id}`} class="hover:text-orange-600 dark:hover:text-orange-400 transition-colors">
-                  {recipe.title}
-                </a>
-              </h3>
-              {recipe.subtitle && (
-                <p class="text-sm text-muted">{recipe.subtitle}</p>
-              )}
-            </div>
-            
-            {recipe.description && (
-              <p class="text-body text-sm mb-4 line-clamp-2">{recipe.description}</p>
-            )}
-            
-            <!-- Recipe Metadata -->
-            <div class="flex flex-wrap gap-2 mb-4">
-              {recipe.metadata.servings && (
-                <span class="badge badge-gray">
-                  <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
-                  </svg>
-                  {recipe.metadata.servings} Portionen
-                </span>
-              )}
-              {recipe.metadata.preparationTime && (
-                <span class="badge badge-blue">
-                  <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-                  </svg>
-                  {recipe.metadata.preparationTime} Min
-                </span>
-              )}
-              {recipe.metadata.difficulty && (
-                <span class={`badge ${
-                  recipe.metadata.difficulty === 'leicht' ? 'badge-green' :
-                  recipe.metadata.difficulty === 'mittel' ? 'badge-yellow' :
-                  'badge-red'
-                }`}>
-                  {recipe.metadata.difficulty}
-                </span>
-              )}
-            </div>
-            
-            <!-- Action Buttons -->
-            <div class="flex space-x-2">
-              <a href={`/rezept/${recipe.id}`} class="btn btn-primary flex-1 text-center">
-                Anzeigen
-              </a>
-              <button class="btn btn-icon text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-
-    <!-- Empty State (hidden when recipes exist) -->
-    <div class="text-center py-12 hidden">
-      <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-      </svg>
-      <h3 class="mt-2 text-sm font-medium text-gray-900">Keine Rezepte vorhanden</h3>
-      <p class="mt-1 text-sm text-gray-500">Erstellen Sie Ihr erstes Rezept um loszulegen.</p>
-      <div class="mt-6">
-        <button id="create-recipe-btn-empty" class="btn btn-primary inline-flex items-center shadow-sm">
-          <svg class="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
-          </svg>
-          Neues Rezept
-        </button>
+    {recipes.length > 0 ? (
+      <!-- Recipe Grid -->
+      <div class="grid-responsive">
+        {recipes.map((recipe) => (
+          <RecipeCard recipe={recipe} />
+        ))}
       </div>
-    </div>
+    ) : (
+      <!-- Empty State -->
+      <EmptyState />
+    )}
   </div>
-
-  <script>
-    // Create recipe functionality for empty state button
-    async function createNewRecipe() {
-      try {
-        const response = await fetch('/api/recipes?action=create-empty', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          const newRecipe = await response.json();
-          // Redirect to the new recipe in edit mode
-          window.location.href = `/rezept/${newRecipe.id}?edit=true`;
-        } else {
-          console.error('Failed to create recipe');
-          alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
-        }
-      } catch (error) {
-        console.error('Error creating recipe:', error);
-        alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
-      }
-    }
-
-    // Initialize create recipe button when DOM is loaded
-    document.addEventListener('DOMContentLoaded', () => {
-      const createBtn = document.getElementById('create-recipe-btn-empty');
-      if (createBtn) {
-        createBtn.addEventListener('click', createNewRecipe);
-      }
-    });
-  </script>
 </Layout>

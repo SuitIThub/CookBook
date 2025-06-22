@@ -1,6 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { db } from '../lib/database';
+import ShoppingListHeader from '../components/shopping_list/ShoppingListHeader.astro';
+import ShoppingListSection from '../components/shopping_list/ShoppingListSection.astro';
 
 // Einkaufslisten aus der Datenbank laden
 let shoppingLists = [];
@@ -27,80 +29,28 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 <Layout title="Einkaufsliste - Kochbuch">
   <div class="container-narrow">
     <!-- Header -->
-    <div class="flex-between mb-6">
-      <div>
-        <h1 class="heading-primary">Einkaufsliste</h1>
-        <p class="text-muted mt-1">
-          {uncheckedItems.length} von {shoppingList.items.length} Artikeln offen
-        </p>
-      </div>
-      <div>
-        <button id="add-item-btn" class="btn btn-success flex items-center space-x-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-          </svg>
-          <span>Artikel hinzufügen</span>
-        </button>
-      </div>
-    </div>
+    <ShoppingListHeader 
+      title="Einkaufsliste"
+      openItemsCount={uncheckedItems.length}
+      totalItemsCount={shoppingList.items.length}
+    />
 
     <div class="grid-two-cols">
       <!-- Unchecked Items -->
-      <div class="card">
-        <div class="card-content">
-          <h2 class="heading-secondary mb-4">
-            Noch zu kaufen ({uncheckedItems.length})
-          </h2>
-          
-          <div class="space-y-2">
-            {uncheckedItems.map((item) => (
-              <div class="shopping-item-unchecked flex items-center space-x-3 p-3">
-                <input 
-                  type="checkbox" 
-                  class="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
-                />
-                <div class="flex-1 min-w-0">
-                  <div class="flex-between">
-                    <span class="font-medium text-gray-900 dark:text-white">{item.ingredientName}</span>
-                    <span class="quantity-badge">
-                      {item.quantity.amount} {item.quantity.unit}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ShoppingListSection 
+        title="Noch zu kaufen"
+        count={uncheckedItems.length}
+        items={uncheckedItems}
+        isChecked={false}
+      />
 
       <!-- Checked Items -->
-      <div class="card">
-        <div class="card-content">
-          <h2 class="heading-secondary mb-4">
-            Erledigt ({checkedItems.length})
-          </h2>
-          
-          <div class="space-y-2">
-            {checkedItems.map((item) => (
-              <div class="shopping-item-checked flex items-center space-x-3 p-3">
-                <input 
-                  type="checkbox" 
-                  checked
-                  class="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
-                />
-                <div class="flex-1 min-w-0">
-                  <div class="flex-between">
-                    <span class="font-medium text-green-800 dark:text-green-300 line-through">{item.ingredientName}</span>
-                    <span class="text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-2 py-1 rounded">
-                      {item.quantity.amount} {item.quantity.unit}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ShoppingListSection 
+        title="Erledigt"
+        count={checkedItems.length}
+        items={checkedItems}
+        isChecked={true}
+      />
     </div>
   </div>
 </Layout> 

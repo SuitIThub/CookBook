@@ -1,0 +1,188 @@
+<script>
+  // Timer functionality
+  document.querySelectorAll('.timer-trigger').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const timeText = (e.target as HTMLElement).dataset.time || '';
+      const minutes = parseInt(timeText.match(/\d+/)?.[0] || '0');
+      const seconds = minutes * 60;
+      (window as any).startTimer(timeText, seconds);
+    });
+  });
+
+  // Portion scaling functionality
+  const currentServingsElement = document.getElementById('current-servings');
+  const decreaseButton = document.getElementById('decrease-servings');
+  const increaseButton = document.getElementById('increase-servings');
+  const resetButton = document.getElementById('reset-servings');
+  
+  if (currentServingsElement && decreaseButton && increaseButton && resetButton) {
+    const originalServings = parseInt(currentServingsElement.getAttribute('data-original') || '1');
+    
+    function updateServings(newServings: number) {
+      if (newServings < 1) newServings = 1;
+      if (newServings > 99) newServings = 99;
+      
+      if (currentServingsElement) {
+        currentServingsElement.textContent = newServings.toString();
+      }
+      
+      // Show/hide reset button
+      if (resetButton) {
+        if (newServings !== originalServings) {
+          resetButton.style.display = 'inline-block';
+        } else {
+          resetButton.style.display = 'none';
+        }
+      }
+      
+      // Calculate scaling factor
+      const scalingFactor = newServings / originalServings;
+      
+      // Update all ingredient amounts
+      document.querySelectorAll('.ingredient-amount').forEach((element) => {
+        const htmlElement = element as HTMLElement;
+        const originalAmount = parseFloat(htmlElement.getAttribute('data-original-amount') || '0');
+        const amountValueElement = element.querySelector('.amount-value');
+        
+        if (amountValueElement && !isNaN(originalAmount)) {
+          let scaledAmount = originalAmount * scalingFactor;
+          
+          // Round to reasonable decimal places
+          if (scaledAmount < 1) {
+            scaledAmount = Math.round(scaledAmount * 100) / 100;
+          } else if (scaledAmount < 10) {
+            scaledAmount = Math.round(scaledAmount * 10) / 10;
+          } else {
+            scaledAmount = Math.round(scaledAmount);
+          }
+          
+          const formattedAmount = scaledAmount % 1 === 0 ? scaledAmount.toString() : scaledAmount.toString();
+          amountValueElement.textContent = formattedAmount;
+        }
+      });
+    }
+    
+    decreaseButton.addEventListener('click', () => {
+      if (currentServingsElement) {
+        const current = parseInt(currentServingsElement.textContent || '1');
+        updateServings(current - 1);
+      }
+    });
+    
+    increaseButton.addEventListener('click', () => {
+      if (currentServingsElement) {
+        const current = parseInt(currentServingsElement.textContent || '1');
+        updateServings(current + 1);
+      }
+    });
+    
+    resetButton.addEventListener('click', () => {
+      updateServings(originalServings);
+    });
+  }
+
+  // Edit mode functionality
+  let isEditMode = false;
+  const editBtn = document.getElementById('edit-btn');
+  const viewContent = document.getElementById('view-content');
+  const editContent = document.getElementById('edit-content');
+
+  function toggleEditMode() {
+    isEditMode = !isEditMode;
+    
+    if (isEditMode) {
+      viewContent?.classList.add('hidden');
+      editContent?.classList.remove('hidden');
+      if (editBtn) {
+        editBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+          <span>Abbrechen</span>
+        `;
+        editBtn.className = 'flex items-center space-x-2 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm font-medium transition-colors';
+      }
+    } else {
+      viewContent?.classList.remove('hidden');
+      editContent?.classList.add('hidden');
+      if (editBtn) {
+        editBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+          </svg>
+          <span>Bearbeiten</span>
+        `;
+        editBtn.className = 'flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors';
+      }
+    }
+  }
+
+  editBtn?.addEventListener('click', toggleEditMode);
+
+  // Edit mode event handlers
+  document.getElementById('cancel-edit-btn')?.addEventListener('click', () => {
+    toggleEditMode(); // Switch back to view mode
+  });
+
+  // Delete recipe functionality
+  document.getElementById('delete-recipe-btn')?.addEventListener('click', async () => {
+    const recipeTitle = (document.getElementById('edit-title') as HTMLInputElement)?.value || 'Dieses Rezept';
+    
+    const confirmed = confirm(`Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`);
+    
+    if (!confirmed) {
+      return;
+    }
+    
+    try {
+      const deleteBtn = document.getElementById('delete-recipe-btn');
+      if (deleteBtn) {
+        deleteBtn.textContent = 'Löschen...';
+        deleteBtn.setAttribute('disabled', 'true');
+      }
+      
+      const recipeId = window.location.pathname.split('/').pop();
+      
+      const response = await fetch(`/api/recipes?id=${recipeId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        alert('Rezept wurde erfolgreich gelöscht.');
+        window.location.href = '/';
+      } else {
+        const error = await response.text();
+        console.error('Server error:', error);
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
+    } catch (error) {
+      console.error('Error deleting recipe:', error);
+      alert('Fehler beim Löschen des Rezepts. Bitte versuchen Sie es erneut.');
+      
+      const deleteBtn = document.getElementById('delete-recipe-btn');
+      if (deleteBtn) {
+        deleteBtn.textContent = 'Rezept löschen';
+        deleteBtn.removeAttribute('disabled');
+      }
+    }
+  });
+
+  // Check if we should auto-enter edit mode (for new recipes)
+  function checkAutoEditMode() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const shouldEdit = urlParams.get('edit');
+    
+    if (shouldEdit === 'true') {
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      toggleEditMode();
+    }
+  }
+  
+  // Initialize all event listeners and check for auto-edit mode
+  checkAutoEditMode();
+</script> 

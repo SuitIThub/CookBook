@@ -1,0 +1,174 @@
+---
+import type { Recipe, Ingredient } from '../../../types/recipe';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+---
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 transition-colors duration-200">
+  <div class="flex justify-between items-center mb-4">
+    <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Zutaten bearbeiten</h2>
+    <div class="flex space-x-2">
+      <button 
+        type="button" 
+        id="add-ingredient-group-btn"
+        class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+      >
+        + Gruppe hinzufügen
+      </button>
+      <button 
+        type="button" 
+        id="add-ingredient-btn"
+        class="px-3 py-1 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded transition-colors"
+      >
+        + Zutat hinzufügen
+      </button>
+    </div>
+  </div>
+  
+  <div id="ingredients-edit-container" class="space-y-6">
+    <!-- Default ungrouped ingredients section -->
+    <div class="ingredient-group-edit default-group border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-is-default="true">
+      <div class="flex justify-between items-center mb-3">
+        <div class="flex-1 px-3 py-2 text-lg font-medium text-gray-600 dark:text-gray-300">
+          Zutaten (ungruppiert)
+        </div>
+      </div>
+      
+      <div class="ingredients-list space-y-3">
+        {recipe.ingredientGroups.map((group) => 
+          !group.title ? group.ingredients.map((ingredient) => (
+            'name' in ingredient ? (
+              <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200">
+                <div class="flex space-x-3 items-center">
+                  <input 
+                    type="text" 
+                    value={(ingredient as Ingredient).name}
+                    placeholder="Zutatename"
+                    class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                  <input 
+                    type="number" 
+                    value={(ingredient as Ingredient).quantities[0]?.amount || ''}
+                    placeholder="Menge"
+                    step="0.1"
+                    class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  />
+                  <select class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
+                      {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
+                    </option>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="ml">ml</option>
+                    <option value="l">l</option>
+                    <option value="Stück">Stück</option>
+                    <option value="TL">TL</option>
+                    <option value="EL">EL</option>
+                    <option value="Tasse">Tasse</option>
+                    <option value="Prise">Prise</option>
+                  </select>
+                  <button 
+                    type="button" 
+                    class="remove-ingredient-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : null
+          )) : null
+        )}
+      </div>
+      
+      <button 
+        type="button" 
+        class="add-ingredient-to-group-btn mt-3 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
+      >
+        + Zutat zu ungruppiert hinzufügen
+      </button>
+    </div>
+
+    <!-- Named ingredient groups -->
+    {recipe.ingredientGroups.map((group, groupIndex) => 
+      group.title ? (
+        <div class="ingredient-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200">
+          <div class="flex justify-between items-center mb-3">
+            <input 
+              type="text" 
+              value={group.title || ''}
+              placeholder="Gruppenname (optional)"
+              class="group-title-input flex-1 px-3 py-2 text-lg font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-orange-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            />
+            <button 
+              type="button" 
+              class="remove-group-btn ml-3 px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="ingredients-list space-y-3">
+            {group.ingredients.map((ingredient) => (
+              'name' in ingredient ? (
+                <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200">
+                  <div class="flex space-x-3 items-center">
+                    <input 
+                      type="text" 
+                      value={(ingredient as Ingredient).name}
+                      placeholder="Zutatename"
+                      class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                    />
+                    <input 
+                      type="number" 
+                      value={(ingredient as Ingredient).quantities[0]?.amount || ''}
+                      placeholder="Menge"
+                      step="0.1"
+                      class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                    />
+                    <select class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                      <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
+                        {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
+                      </option>
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="l">l</option>
+                      <option value="Stück">Stück</option>
+                      <option value="TL">TL</option>
+                      <option value="EL">EL</option>
+                      <option value="Tasse">Tasse</option>
+                      <option value="Prise">Prise</option>
+                    </select>
+                    <button 
+                      type="button" 
+                      class="remove-ingredient-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ) : null
+            ))}
+          </div>
+          
+          <button 
+            type="button" 
+            class="add-ingredient-to-group-btn mt-3 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
+          >
+            + Zutat zu dieser Gruppe hinzufügen
+          </button>
+        </div>
+      ) : null
+    )}
+  </div>
+</div> 

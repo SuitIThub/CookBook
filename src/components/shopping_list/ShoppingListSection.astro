@@ -1,0 +1,47 @@
+---
+interface Props {
+  title: string;
+  count: number;
+  items: any[];
+  isChecked: boolean;
+}
+
+const { title, count, items, isChecked } = Astro.props;
+---
+
+<div class="card">
+  <div class="card-content">
+    <h2 class="heading-secondary mb-4">
+      {title} ({count})
+    </h2>
+    
+    <div class="space-y-2">
+      {items.map((item) => (
+        <div class={`shopping-item-${isChecked ? 'checked' : 'unchecked'} flex items-center space-x-3 p-3`}>
+          <input 
+            type="checkbox" 
+            checked={isChecked}
+            class="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+          />
+          <div class="flex-1 min-w-0">
+            <div class="flex-between">
+              <span class={`font-medium ${
+                isChecked 
+                  ? 'text-green-800 dark:text-green-300 line-through' 
+                  : 'text-gray-900 dark:text-white'
+              }`}>
+                {item.ingredientName}
+              </span>
+              <span class={isChecked 
+                ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-2 py-1 rounded'
+                : 'quantity-badge'
+              }>
+                {item.quantity.amount} {item.quantity.unit}
+              </span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</div> 

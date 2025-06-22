@@ -1,0 +1,20 @@
+---
+import type { Recipe } from '../../../types/recipe';
+import HeaderEdit from './HeaderEdit.astro';
+import IngredientsEdit from './IngredientsEdit.astro'; 
+import PreparationEdit from './PreparationEdit.astro';
+import EditFormActions from './EditFormActions.astro';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+---
+
+<form id="edit-recipe-form" class="space-y-6">
+  <HeaderEdit recipe={recipe} />
+  <IngredientsEdit recipe={recipe} />
+  <PreparationEdit recipe={recipe} />
+  <EditFormActions />
+</form> 
