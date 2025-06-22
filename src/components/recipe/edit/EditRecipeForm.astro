@@ -37,7 +37,507 @@ const { recipe } = Astro.props;
     if (form) {
       form.addEventListener('submit', handleFormSubmit);
     }
+    
+    // Initialize edit functionality
+    initializeEditHandlers();
   });
+
+  function initializeEditHandlers() {
+    // Ingredient functionality
+    const addIngredientBtn = document.getElementById('add-ingredient-btn');
+    const addIngredientGroupBtn = document.getElementById('add-ingredient-group-btn');
+    
+    // Preparation functionality
+    const addStepBtn = document.getElementById('add-step-btn');
+    const addPreparationGroupBtn = document.getElementById('add-preparation-group-btn');
+    
+    if (addIngredientBtn) {
+      addIngredientBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        addIngredientToDefaultGroup();
+      });
+    }
+    
+    if (addIngredientGroupBtn) {
+      addIngredientGroupBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        addIngredientGroup();
+      });
+    }
+    
+    if (addStepBtn) {
+      addStepBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        addStepToDefaultGroup();
+      });
+    }
+    
+    if (addPreparationGroupBtn) {
+      addPreparationGroupBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        addPreparationGroup();
+      });
+    }
+    
+    // Delegate events for dynamically created buttons
+    document.addEventListener('click', handleDelegatedClicks);
+    
+    // Add event listeners for ingredient changes to keep linker updated
+    document.addEventListener('input', (e) => {
+      const target = e.target;
+      if (target.closest('.ingredient-edit-item')) {
+        // Debounce the update to avoid too many calls
+        clearTimeout(window.ingredientUpdateTimeout);
+        window.ingredientUpdateTimeout = setTimeout(() => {
+          updateIngredientLinker();
+        }, 300);
+      }
+    });
+  }
+
+  function handleDelegatedClicks(e) {
+    const target = e.target.closest('button');
+    if (!target) return;
+
+    if (target.classList.contains('add-ingredient-to-group-btn')) {
+      e.preventDefault();
+      const groupElement = target.closest('.ingredient-group-edit');
+      addIngredientToGroup(groupElement);
+    }
+    
+    if (target.classList.contains('remove-ingredient-btn')) {
+      e.preventDefault();
+      removeIngredient(target);
+    }
+    
+    if (target.classList.contains('remove-group-btn')) {
+      e.preventDefault();
+      const groupElement = target.closest('.ingredient-group-edit');
+      removeIngredientGroup(groupElement);
+    }
+    
+    if (target.classList.contains('add-step-to-group-btn')) {
+      e.preventDefault();
+      const groupElement = target.closest('.preparation-group-edit');
+      addStepToGroup(groupElement);
+    }
+    
+    if (target.classList.contains('remove-step-btn')) {
+      e.preventDefault();
+      removePreparationStep(target);
+    }
+    
+    if (target.classList.contains('remove-prep-group-btn')) {
+      e.preventDefault();
+      const groupElement = target.closest('.preparation-group-edit');
+      removePreparationGroup(groupElement);
+    }
+  }
+
+  // Ingredient functions
+  function addIngredientToDefaultGroup() {
+    const defaultGroup = document.querySelector('.ingredient-group-edit.default-group');
+    if (defaultGroup) {
+      addIngredientToGroup(defaultGroup);
+    }
+  }
+
+  function addIngredientToGroup(groupElement) {
+    const ingredientsList = groupElement.querySelector('.ingredients-list');
+    if (!ingredientsList) return;
+
+    const ingredientId = generateId();
+    const ingredientHtml = createIngredientEditElement(ingredientId, '', '', '');
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = ingredientHtml;
+    const ingredientElement = tempDiv.firstElementChild;
+    
+    ingredientsList.appendChild(ingredientElement);
+    
+    // Focus on the name input
+    const nameInput = ingredientElement.querySelector('input[type="text"]');
+    if (nameInput) {
+      nameInput.focus();
+    }
+    
+    // Update ingredient linker with current DOM state
+    updateIngredientLinker();
+  }
+
+  function createIngredientEditElement(id, name, amount, unit) {
+    return `
+      <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" data-ingredient-id="${id}">
+        <div class="flex space-x-3 items-center">
+          <input 
+            type="text" 
+            value="${name}"
+            placeholder="Zutatename"
+            class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+          />
+          <input 
+            type="number" 
+            value="${amount}"
+            placeholder="Menge"
+            step="0.1"
+            class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+          />
+          <select class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+            <option value="${unit}" selected>${unit || 'Einheit'}</option>
+            <option value="g">g</option>
+            <option value="kg">kg</option>
+            <option value="ml">ml</option>
+            <option value="l">l</option>
+            <option value="Stück">Stück</option>
+            <option value="TL">TL</option>
+            <option value="EL">EL</option>
+            <option value="Tasse">Tasse</option>
+            <option value="Prise">Prise</option>
+          </select>
+          <button 
+            type="button" 
+            class="remove-ingredient-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function addIngredientGroup() {
+    const container = document.getElementById('ingredients-edit-container');
+    if (!container) return;
+
+    const groupId = generateId();
+    const groupHtml = createIngredientGroupElement(groupId, '');
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = groupHtml;
+    const groupElement = tempDiv.firstElementChild;
+    
+    container.appendChild(groupElement);
+    
+    // Focus on the group title input
+    const titleInput = groupElement.querySelector('.group-title-input');
+    if (titleInput) {
+      titleInput.focus();
+    }
+  }
+
+  function createIngredientGroupElement(id, title) {
+    return `
+      <div class="ingredient-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-group-id="${id}">
+        <div class="flex justify-between items-center mb-3">
+          <input 
+            type="text" 
+            value="${title}"
+            placeholder="Gruppenname"
+            class="group-title-input flex-1 px-3 py-2 text-lg font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-orange-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+          />
+          <button 
+            type="button" 
+            class="remove-group-btn ml-3 px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="ingredients-list space-y-3">
+        </div>
+        
+        <button 
+          type="button" 
+          class="add-ingredient-to-group-btn mt-3 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
+        >
+          + Zutat zu dieser Gruppe hinzufügen
+        </button>
+      </div>
+    `;
+  }
+
+  function removeIngredient(button) {
+    const ingredientElement = button.closest('.ingredient-edit-item');
+    if (ingredientElement) {
+      ingredientElement.remove();
+      // Update ingredient linker with current DOM state
+      updateIngredientLinker();
+    }
+  }
+
+  function removeIngredientGroup(groupElement) {
+    if (groupElement && !groupElement.classList.contains('default-group')) {
+      groupElement.remove();
+      // Update ingredient linker with current DOM state
+      updateIngredientLinker();
+    }
+  }
+
+  // Preparation functions
+  function addStepToDefaultGroup() {
+    const defaultGroup = document.querySelector('.preparation-group-edit.default-group');
+    if (defaultGroup) {
+      addStepToGroup(defaultGroup);
+    }
+  }
+
+  function addStepToGroup(groupElement) {
+    const stepsList = groupElement.querySelector('.steps-list');
+    if (!stepsList) return;
+
+    const stepId = generateId();
+    const stepNumber = stepsList.children.length + 1;
+    const stepHtml = createStepEditElement(stepId, '', stepNumber);
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = stepHtml;
+    const stepElement = tempDiv.firstElementChild;
+    
+    stepsList.appendChild(stepElement);
+    
+    // Focus on the textarea
+    const textarea = stepElement.querySelector('.step-text-input');
+    if (textarea) {
+      textarea.focus();
+    }
+
+    // Update step numbers
+    updateStepNumbers(groupElement);
+  }
+
+  function createStepEditElement(id, text, stepNumber) {
+    return `
+      <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id="${id}">
+        <div class="flex items-start space-x-3">
+          <div class="flex items-center space-x-2">
+            <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+              </svg>
+            </div>
+            <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+              ${stepNumber}
+            </div>
+          </div>
+          <div class="flex-1 space-y-3">
+            <textarea 
+              rows="3"
+              placeholder="Zubereitungsschritt..."
+              class="step-text-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            >${text}</textarea>
+            
+            <!-- Linked Ingredients Display -->
+            <div class="linked-ingredients-display">
+            </div>
+            
+            <!-- Ingredient Linking Buttons -->
+            <div class="flex justify-between items-center">
+              <div class="flex space-x-2">
+                <button 
+                  type="button" 
+                  class="auto-link-btn px-3 py-1 text-xs bg-purple-500 hover:bg-purple-600 text-white rounded transition-colors flex items-center space-x-1"
+                  title="Zutaten automatisch verlinken"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                  </svg>
+                  <span>Auto-Link</span>
+                </button>
+                <button 
+                  type="button" 
+                  class="manual-link-btn px-3 py-1 text-xs bg-indigo-500 hover:bg-indigo-600 text-white rounded transition-colors flex items-center space-x-1"
+                  title="Zutaten manuell verlinken"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                  </svg>
+                  <span>Manual-Link</span>
+                </button>
+              </div>
+              <button 
+                type="button" 
+                class="remove-step-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function addPreparationGroup() {
+    const container = document.getElementById('preparation-edit-container');
+    if (!container) return;
+
+    const groupId = generateId();
+    const groupHtml = createPreparationGroupElement(groupId, '');
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = groupHtml;
+    const groupElement = tempDiv.firstElementChild;
+    
+    container.appendChild(groupElement);
+    
+    // Focus on the group title input
+    const titleInput = groupElement.querySelector('.group-title-input');
+    if (titleInput) {
+      titleInput.focus();
+    }
+  }
+
+  function createPreparationGroupElement(id, title) {
+    return `
+      <div class="preparation-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-group-id="${id}">
+        <div class="flex justify-between items-center mb-3">
+          <input 
+            type="text" 
+            value="${title}"
+            placeholder="Gruppenname"
+            class="group-title-input flex-1 px-3 py-2 text-lg font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-green-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+          />
+          <button 
+            type="button" 
+            class="remove-prep-group-btn ml-3 px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="steps-list space-y-4 min-h-[60px] relative">
+        </div>
+        
+        <button 
+          type="button" 
+          class="add-step-to-group-btn mt-3 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
+        >
+          + Schritt zu dieser Gruppe hinzufügen
+        </button>
+      </div>
+    `;
+  }
+
+  function removePreparationStep(button) {
+    const stepElement = button.closest('.step-edit-item');
+    if (stepElement) {
+      const groupElement = stepElement.closest('.preparation-group-edit');
+      stepElement.remove();
+      if (groupElement) {
+        updateStepNumbers(groupElement);
+      }
+    }
+  }
+
+  function removePreparationGroup(groupElement) {
+    if (groupElement && !groupElement.classList.contains('default-group')) {
+      groupElement.remove();
+    }
+  }
+
+  function updateStepNumbers(groupElement) {
+    const steps = groupElement.querySelectorAll('.step-edit-item');
+    steps.forEach((step, index) => {
+      const numberElement = step.querySelector('.bg-orange-500');
+      if (numberElement) {
+        numberElement.textContent = index + 1;
+      }
+    });
+  }
+
+  // Utility function to generate IDs
+  function generateId() {
+    return 'id-' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+  }
+
+  // Update ingredient linker with current DOM state
+  function updateIngredientLinker() {
+    if (window.ingredientLinker) {
+      // Update the recipe object in the ingredient linker with current ingredient groups
+      const currentIngredientGroups = collectIngredientGroups();
+      const currentPreparationGroups = collectPreparationGroupsForLinker();
+      
+      // Update the recipe data
+      window.currentRecipe = {
+        ...window.currentRecipe,
+        ingredientGroups: currentIngredientGroups,
+        preparationGroups: currentPreparationGroups
+      };
+      
+      // Update the linker's internal recipe reference
+      window.ingredientLinker.recipe = window.currentRecipe;
+    }
+  }
+
+  // Collect preparation groups while preserving existing linked ingredients
+  function collectPreparationGroupsForLinker() {
+    const preparationGroups = [];
+    
+    // Collect all preparation group elements from the DOM
+    const groupElements = document.querySelectorAll('.preparation-group-edit');
+    
+    groupElements.forEach((groupElement) => {
+      const titleInput = groupElement.querySelector('.group-title-input');
+      const isDefaultGroup = groupElement.classList.contains('default-group');
+      
+      // Get group title (null for default group)
+      const groupTitle = isDefaultGroup ? null : (titleInput?.value.trim() || null);
+      
+      // Collect steps from this group
+      const steps = [];
+      const stepElements = groupElement.querySelectorAll('.step-edit-item');
+      
+      stepElements.forEach((stepElement, index) => {
+        const textArea = stepElement.querySelector('.step-text-input');
+        const stepId = stepElement.dataset.stepId;
+        
+        const stepText = textArea?.value.trim();
+        
+        // Only add steps with text or existing IDs
+        if (stepText || stepId) {
+          // Get existing linked ingredients from the linker's memory
+          let linkedIngredients = [];
+          if (window.ingredientLinker && stepId) {
+            linkedIngredients = window.ingredientLinker.linkedIngredients.get(stepId) || [];
+          }
+          
+          steps.push({
+            id: stepId || generateId(),
+            text: stepText || '',
+            linkedIngredients: linkedIngredients
+          });
+        }
+      });
+      
+      // Add group if it has steps or a title
+      if (steps.length > 0 || (groupTitle && groupTitle.length > 0)) {
+        preparationGroups.push({
+          id: groupElement.dataset.groupId || generateId(),
+          title: groupTitle,
+          steps: steps
+        });
+      }
+    });
+    
+    // Ensure we always have at least one group (default group)
+    if (preparationGroups.length === 0) {
+      preparationGroups.push({
+        id: generateId(),
+        title: null,
+        steps: []
+      });
+    }
+    
+    return preparationGroups;
+  }
 
   async function handleFormSubmit(e) {
     e.preventDefault();
@@ -120,34 +620,73 @@ const { recipe } = Astro.props;
   }
 
   function collectIngredientGroups() {
-    const updatedRecipe = window.ingredientLinker ? window.ingredientLinker.getUpdatedRecipe() : window.currentRecipe;
-    return updatedRecipe.ingredientGroups; // For now, return as-is - ingredient editing is complex
+    const ingredientGroups = [];
+    
+    // Collect all ingredient group elements from the DOM
+    const groupElements = document.querySelectorAll('.ingredient-group-edit');
+    
+    groupElements.forEach((groupElement) => {
+      const titleInput = groupElement.querySelector('.group-title-input');
+      const isDefaultGroup = groupElement.classList.contains('default-group');
+      
+      // Get group title (null for default group)
+      const groupTitle = isDefaultGroup ? null : (titleInput?.value.trim() || null);
+      
+      // Collect ingredients from this group
+      const ingredients = [];
+      const ingredientElements = groupElement.querySelectorAll('.ingredient-edit-item');
+      
+      ingredientElements.forEach((ingredientElement) => {
+        const nameInput = ingredientElement.querySelector('input[type="text"]');
+        const amountInput = ingredientElement.querySelector('input[type="number"]');
+        const unitSelect = ingredientElement.querySelector('select');
+        const ingredientId = ingredientElement.dataset.ingredientId;
+        
+        const name = nameInput?.value.trim();
+        const amount = parseFloat(amountInput?.value) || 0;
+        const unit = unitSelect?.value || '';
+        
+        // Only add ingredients with a name
+        if (name) {
+          ingredients.push({
+            id: ingredientId || generateId(),
+            name: name,
+            quantities: [{
+              amount: amount,
+              unit: unit
+            }]
+          });
+        }
+      });
+      
+      // Only add groups that have ingredients or a title
+      if (ingredients.length > 0 || (groupTitle && groupTitle.length > 0)) {
+        ingredientGroups.push({
+          id: groupElement.dataset.groupId || generateId(),
+          title: groupTitle,
+          ingredients: ingredients
+        });
+      }
+    });
+    
+    // Ensure we always have at least one group (default group)
+    if (ingredientGroups.length === 0) {
+      ingredientGroups.push({
+        id: generateId(),
+        title: null,
+        ingredients: []
+      });
+    }
+    
+    return ingredientGroups;
   }
 
   function collectPreparationGroups() {
-    const updatedRecipe = window.ingredientLinker ? window.ingredientLinker.getUpdatedRecipe() : window.currentRecipe;
+    // Ensure the ingredient linker is up to date first
+    updateIngredientLinker();
     
-    // Collect current text from textareas and merge with linked ingredients
-    const preparationGroups = updatedRecipe.preparationGroups.map(group => ({
-      ...group,
-      steps: group.steps.map(step => {
-        if (step.text) {
-          // Find the corresponding textarea and get current text
-          const stepElement = document.querySelector(`[data-step-id="${step.id}"]`);
-          const textArea = stepElement?.querySelector('.step-text-input');
-          const currentText = textArea?.value || step.text;
-          
-          return {
-            ...step,
-            text: currentText,
-            linkedIngredients: step.linkedIngredients || []
-          };
-        }
-        return step;
-      })
-    }));
-    
-    return preparationGroups;
+    // Now collect preparation groups with the preserved linked ingredients
+    return collectPreparationGroupsForLinker();
   }
 
   function showNotification(message, type = 'info') {
@@ -163,6 +702,4 @@ const { recipe } = Astro.props;
       notification.remove();
     }, 3000);
   }
-
-
 </script> 

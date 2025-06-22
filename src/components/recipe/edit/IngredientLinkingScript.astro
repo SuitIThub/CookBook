@@ -2,6 +2,42 @@
 // Component for handling ingredient linking functionality
 ---
 
+<!-- Ingredient Linking Modal -->
+<div id="ingredient-link-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+          Zutaten manuell verlinken
+        </h3>
+        <button type="button" id="cancel-link-modal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="mb-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Wählen Sie die Zutaten aus, die in diesem Zubereitungsschritt verwendet werden:
+        </p>
+        <div id="ingredient-list" class="space-y-2 max-h-60 overflow-y-auto">
+          <!-- Ingredients will be populated dynamically -->
+        </div>
+      </div>
+      
+      <div class="flex justify-end space-x-3">
+        <button type="button" id="cancel-link-modal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 rounded-md transition-colors">
+          Abbrechen
+        </button>
+        <button type="button" id="save-link-modal" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors">
+          Verknüpfungen speichern
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // Extend Window interface for our custom properties
 declare global {
@@ -158,11 +194,43 @@ class IngredientLinker {
   }
 
   getAllIngredients(): Array<{id: string, name: string, quantities: Array<{amount: number, unit: string}>}> {
-    if (!this.recipe) return [];
+    // Read current ingredients from DOM instead of cached recipe data
+    const ingredients: Array<{id: string, name: string, quantities: Array<{amount: number, unit: string}>}> = [];
     
-    return this.recipe.ingredientGroups.flatMap((group: any) => 
-      group.ingredients.filter((item: any) => item.id && item.name)
-    );
+    // Get all ingredient elements from the DOM
+    const ingredientElements = document.querySelectorAll('.ingredient-edit-item');
+    
+    ingredientElements.forEach((ingredientElement: Element) => {
+      const nameInput = ingredientElement.querySelector('input[type="text"]') as HTMLInputElement;
+      const amountInput = ingredientElement.querySelector('input[type="number"]') as HTMLInputElement;
+      const unitSelect = ingredientElement.querySelector('select') as HTMLSelectElement;
+      const ingredientId = (ingredientElement as HTMLElement).dataset.ingredientId;
+      
+      const name = nameInput?.value.trim();
+      const amount = parseFloat(amountInput?.value) || 0;
+      const unit = unitSelect?.value || '';
+      
+      // Only include ingredients with a name and id
+      if (name && ingredientId) {
+        ingredients.push({
+          id: ingredientId,
+          name: name,
+          quantities: [{
+            amount: amount,
+            unit: unit
+          }]
+        });
+      }
+    });
+    
+    // If no ingredients found in DOM, fallback to recipe data
+    if (ingredients.length === 0 && this.recipe) {
+      return this.recipe.ingredientGroups.flatMap((group: any) => 
+        group.ingredients.filter((item: any) => item.id && item.name)
+      );
+    }
+    
+    return ingredients;
   }
 
   // Improved text analysis for automatic ingredient linking
@@ -181,12 +249,18 @@ class IngredientLinker {
     allIngredients.forEach((ingredient: any) => {
       const ingredientName = ingredient.name.toLowerCase();
       
-      // Multiple matching strategies
-      const isDirectMatch = stepText.includes(ingredientName);
+      // Skip very short ingredient names (less than 3 characters) for partial matching
+      if (ingredientName.length < 3) return;
+      
+      // Multiple matching strategies with improved logic
+      const isDirectMatch = this.findDirectMatch(stepText, ingredientName);
       const isPartialMatch = this.findPartialMatch(stepText, ingredientName);
       const isPluralized = this.findPluralized(stepText, ingredientName);
+      const isStemMatch = this.findStemMatch(stepText, ingredientName);
+      const isMultiWordMatch = this.findMultiWordMatch(stepText, ingredientName);
+      const isGermanCaseMatch = this.findGermanCaseMatch(stepText, ingredientName);
       
-      if (isDirectMatch || isPartialMatch || isPluralized) {
+      if (isDirectMatch || isPartialMatch || isPluralized || isStemMatch || isMultiWordMatch || isGermanCaseMatch) {
         // Check if already linked to avoid duplicates
         const alreadyLinked = linkedIngredients.some((link: LinkedIngredient) => 
           link.ingredientId === ingredient.id
@@ -211,24 +285,209 @@ class IngredientLinker {
   }
 
   // Helper methods for improved text matching
+  findDirectMatch(text: string, ingredient: string): boolean {
+    // Direct substring match with word boundaries
+    const regex = new RegExp(`\\b${this.escapeRegex(ingredient)}\\b`, 'i');
+    return regex.test(text);
+  }
+
   findPartialMatch(text: string, ingredient: string): boolean {
-    // Find partial matches (e.g., "Tomaten" matches "Tomate")
+    // More intelligent partial matching
     const words = text.split(/\s+/);
+    const minLength = Math.max(3, Math.floor(ingredient.length * 0.6)); // At least 60% of ingredient name or 3 chars
+    
     return words.some((word: string) => {
-      return word.includes(ingredient) || ingredient.includes(word);
+      // Clean word (remove punctuation)
+      const cleanWord = word.replace(/[.,!?;:()]/g, '');
+      
+      // Only match if the word is long enough and has significant overlap
+      if (cleanWord.length < 3 || ingredient.length < 3) return false;
+      
+      // Check if word starts with ingredient (e.g., "Tomaten" starts with "Tomate")
+      if (cleanWord.startsWith(ingredient) && cleanWord.length >= minLength) return true;
+      
+      // Check if ingredient starts with word (e.g., "Tomat" matches "Tomate")
+      if (ingredient.startsWith(cleanWord) && cleanWord.length >= minLength) return true;
+      
+      // Check for strong similarity (Levenshtein-like)
+      return this.isSimilar(cleanWord, ingredient);
     });
   }
 
   findPluralized(text: string, ingredient: string): boolean {
-    // Simple German pluralization checks
+    // German pluralization patterns with word boundaries
     const pluralForms = [
       ingredient + 'n',    // Tomate -> Tomaten
       ingredient + 'en',   // Zwiebel -> Zwiebeln  
       ingredient + 's',    // Paprika -> Paprikas
-      ingredient.slice(0, -1) + 'en' // Replace last char + en
+      ingredient.slice(0, -1) + 'en', // Replace last char + en
+      ingredient.slice(0, -2) + 'er'  // Ei -> Eier
     ];
     
-    return pluralForms.some((plural: string) => text.includes(plural));
+    return pluralForms.some((plural: string) => {
+      const regex = new RegExp(`\\b${this.escapeRegex(plural)}\\b`, 'i');
+      return regex.test(text);
+    });
+  }
+
+  findStemMatch(text: string, ingredient: string): boolean {
+    // Match common German word stems
+    if (ingredient.length < 4) return false;
+    
+    const stem = ingredient.slice(0, -2); // Remove last 2 characters for stem
+    if (stem.length < 3) return false;
+    
+    const regex = new RegExp(`\\b${this.escapeRegex(stem)}\\w{0,3}\\b`, 'i');
+    return regex.test(text);
+  }
+
+  isSimilar(word1: string, word2: string): boolean {
+    // Improved similarity check to avoid false positives
+    if (word1.length < 4 || word2.length < 4) return false;
+    
+    const longer = word1.length > word2.length ? word1 : word2;
+    const shorter = word1.length <= word2.length ? word1 : word2;
+    
+    // Don't match if length difference is too big (> 50%)
+    if (Math.abs(word1.length - word2.length) / longer.length > 0.5) return false;
+    
+    // Calculate Levenshtein-like distance with position awareness
+    let matches = 0;
+    let sequentialMatches = 0;
+    
+    for (let i = 0; i < shorter.length; i++) {
+      const char = shorter[i];
+      const index = longer.indexOf(char, i > 0 ? i - 1 : 0);
+      
+      if (index !== -1 && Math.abs(index - i) <= 2) {
+        matches++;
+        if (index === i) sequentialMatches++;
+      }
+    }
+    
+    const similarity = matches / longer.length;
+    const sequentialBonus = sequentialMatches / shorter.length;
+    
+    // Require higher similarity + some sequential matches to avoid false positives
+    return similarity >= 0.75 && sequentialBonus >= 0.4;
+  }
+
+    findMultiWordMatch(text: string, ingredient: string): boolean {
+    // Handle multi-word ingredient names like "Guanciale oder Pancetta"
+    // Split ingredient by common separators (oder, or, und, and, /, ,)
+    const separators = /\s+(oder|or|und|and|\/|,)\s+/i;
+    const ingredientParts = ingredient.split(separators);
+    
+    // Check if any individual word from the ingredient matches the text
+    return ingredientParts.some((part: string) => {
+      const trimmedPart = part.trim();
+      
+      // Skip common connecting words
+      if (['oder', 'or', 'und', 'and'].includes(trimmedPart.toLowerCase())) {
+        return false;
+      }
+      
+      // Only check meaningful words (3+ characters)
+      if (trimmedPart.length < 3) return false;
+      
+      // Use the same matching strategies for each part
+      return this.findDirectMatch(text, trimmedPart) ||
+             this.findPartialMatch(text, trimmedPart) ||
+             this.findPluralized(text, trimmedPart) ||
+             this.findStemMatch(text, trimmedPart) ||
+             this.findGermanCaseMatch(text, trimmedPart);
+    });
+  }
+
+  findGermanCaseMatch(text: string, ingredient: string): boolean {
+    // Handle German grammatical cases and adjective declensions
+    // Common patterns for adjectives and nouns in different cases
+    
+    // Split ingredient into words to handle multi-word ingredients
+    const ingredientWords = ingredient.split(/\s+/);
+    const textWords = text.split(/\s+/);
+    
+    // Check if we can match word by word with case variations
+    return ingredientWords.some((ingredientWord: string) => {
+      if (ingredientWord.length < 3) return false;
+      
+      return textWords.some((textWord: string) => {
+        const cleanTextWord = textWord.replace(/[.,!?;:()]/g, '').toLowerCase();
+        const cleanIngredientWord = ingredientWord.toLowerCase();
+        
+        if (cleanTextWord.length < 3) return false;
+        
+        // Direct match
+        if (cleanTextWord === cleanIngredientWord) return true;
+        
+        // German adjective declensions (schwarzer -> schwarzem, schwarzen, schwarze, etc.)
+        if (this.isGermanAdjectiveDeclension(cleanTextWord, cleanIngredientWord)) return true;
+        
+        // German noun declensions (Pfeffer -> Pfeffers, etc.)
+        if (this.isGermanNounDeclension(cleanTextWord, cleanIngredientWord)) return true;
+        
+        return false;
+      });
+    });
+  }
+
+  isGermanAdjectiveDeclension(word1: string, word2: string): boolean {
+    // Common German adjective endings
+    const adjEndings = ['er', 'en', 'em', 'es', 'e'];
+    
+    // Check if removing endings makes them match
+    for (const ending1 of adjEndings) {
+      if (word1.endsWith(ending1)) {
+        const stem1 = word1.slice(0, -ending1.length);
+        
+        for (const ending2 of adjEndings) {
+          if (word2.endsWith(ending2)) {
+            const stem2 = word2.slice(0, -ending2.length);
+            if (stem1 === stem2 && stem1.length >= 3) {
+              return true;
+            }
+          }
+        }
+        
+        // Also check if stem matches the full word2
+        if (stem1 === word2 && stem1.length >= 3) return true;
+      }
+    }
+    
+    // Check the reverse too
+    for (const ending of adjEndings) {
+      if (word2.endsWith(ending)) {
+        const stem = word2.slice(0, -ending.length);
+        if (stem === word1 && stem.length >= 3) return true;
+      }
+    }
+    
+    return false;
+  }
+
+  isGermanNounDeclension(word1: string, word2: string): boolean {
+    // Common German noun case endings
+    const nounEndings = ['s', 'es', 'n', 'en'];
+    
+    // Check if removing endings makes them match
+    for (const ending of nounEndings) {
+      if (word1.endsWith(ending) && word1.length > ending.length + 2) {
+        const stem = word1.slice(0, -ending.length);
+        if (stem === word2 && stem.length >= 3) return true;
+      }
+      
+      if (word2.endsWith(ending) && word2.length > ending.length + 2) {
+        const stem = word2.slice(0, -ending.length);
+        if (stem === word1 && stem.length >= 3) return true;
+      }
+    }
+    
+    return false;
+  }
+
+  escapeRegex(string: string): string {
+    // Escape special regex characters
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   showNotification(message: string, type: string = 'info'): void {

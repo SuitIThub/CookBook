@@ -128,10 +128,29 @@ export const DELETE: APIRoute = async ({ request, url }) => {
 
     // Remove image from database
     const updatedImages = recipe.images?.filter((img: RecipeImage) => img.id !== imageId) || [];
+    console.log('Original images count:', recipe.images?.length || 0);
+    console.log('Updated images count:', updatedImages.length);
+    console.log('Image ID to delete:', imageId);
+    
     const updatedRecipe = db.updateRecipe(recipeId, { images: updatedImages });
 
     if (!updatedRecipe) {
+      console.error('Failed to update recipe in database');
       return new Response(JSON.stringify({ error: 'Failed to update recipe' }), { 
+        status: 500, 
+        headers: { 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    console.log('Successfully updated recipe with new images array');
+
+    // Verify the update by re-fetching the recipe
+    const verificationRecipe = db.getRecipe(recipeId);
+    const remainingImageIds = verificationRecipe?.images?.map(img => img.id) || [];
+    
+    if (remainingImageIds.includes(imageId)) {
+      console.error('Database update verification failed - image ID still present');
+      return new Response(JSON.stringify({ error: 'Failed to remove image from database' }), { 
         status: 500, 
         headers: { 'Content-Type': 'application/json' } 
       });
@@ -141,8 +160,10 @@ export const DELETE: APIRoute = async ({ request, url }) => {
     const filePath = path.join(UPLOADS_DIR, imageToDelete.filename);
     await fs.unlink(filePath).catch(() => {
       // File might not exist, continue anyway
+      console.log('File already deleted or not found:', filePath);
     });
 
+    console.log('Image deletion completed successfully');
     return new Response(JSON.stringify({ success: true }), { 
       status: 200, 
       headers: { 'Content-Type': 'application/json' } 

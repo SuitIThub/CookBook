@@ -158,7 +158,7 @@ class CookbookDatabase {
       WHERE id = ?
     `);
 
-    stmt.run(
+    const result = stmt.run(
       updatedRecipe.title,
       updatedRecipe.subtitle,
       updatedRecipe.description,
@@ -170,6 +170,12 @@ class CookbookDatabase {
       updatedRecipe.updatedAt.toISOString(),
       id
     );
+
+    // Check if the update actually affected any rows
+    if (result.changes === 0) {
+      console.error('Database update failed - no rows affected');
+      return null;
+    }
 
     // Update ingredients autocomplete
     if (updates.ingredientGroups) {

@@ -235,13 +235,14 @@ const images = recipe.images || [];
         if (response.ok) {
           showNotification('Bild erfolgreich gelöscht!', 'success');
           
-          // Remove image from DOM
+          // Remove image from DOM immediately for better UX
           target.closest('.relative')?.remove();
           
           // Update local images array
           recipeImages = recipeImages.filter(img => img.id !== imageId);
         } else {
           const error = await response.json();
+          console.error('Delete error response:', error);
           showNotification(error.error || 'Fehler beim Löschen des Bildes', 'error');
         }
       } catch (error) {
