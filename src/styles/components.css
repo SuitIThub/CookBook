@@ -1,0 +1,210 @@
+/* Button Components */
+.btn {
+  @apply px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn-primary {
+  @apply bg-orange-500 hover:bg-orange-600 text-white focus:ring-orange-500;
+}
+
+.btn-secondary {
+  @apply text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 focus:ring-orange-500;
+}
+
+.btn-success {
+  @apply bg-green-500 hover:bg-green-600 text-white focus:ring-green-500;
+}
+
+.btn-blue {
+  @apply bg-blue-500 hover:bg-blue-600 text-white focus:ring-blue-500;
+}
+
+.btn-danger {
+  @apply text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 focus:ring-red-500;
+}
+
+.btn-small {
+  @apply px-3 py-1 text-sm;
+}
+
+.btn-icon {
+  @apply p-2 rounded-md transition-colors;
+}
+
+/* Card Components */
+.card {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors duration-200;
+}
+
+.card-hover {
+  @apply hover:shadow-lg transition-shadow;
+}
+
+.card-header {
+  @apply p-6 border-b border-gray-200 dark:border-gray-700;
+}
+
+.card-content {
+  @apply p-6;
+}
+
+.card-footer {
+  @apply p-6 border-t border-gray-200 dark:border-gray-700;
+}
+
+/* Form Components */
+.form-input {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400;
+}
+
+.form-select {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white;
+}
+
+.form-textarea {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-y;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2;
+}
+
+.form-group {
+  @apply space-y-2;
+}
+
+/* Layout Components */
+.container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.container-narrow {
+  @apply max-w-4xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.grid-responsive {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+}
+
+.grid-two-cols {
+  @apply grid md:grid-cols-2 gap-6;
+}
+
+.grid-four-cols {
+  @apply grid grid-cols-2 md:grid-cols-4 gap-4;
+}
+
+/* Typography Components */
+.heading-primary {
+  @apply text-3xl font-bold text-gray-900 dark:text-white;
+}
+
+.heading-secondary {
+  @apply text-2xl font-bold text-gray-900 dark:text-white;
+}
+
+.heading-tertiary {
+  @apply text-xl font-semibold text-gray-900 dark:text-white;
+}
+
+.text-muted {
+  @apply text-gray-600 dark:text-gray-400;
+}
+
+.text-body {
+  @apply text-gray-700 dark:text-gray-300;
+}
+
+/* Navigation Components */
+.nav-link {
+  @apply text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 px-3 py-2 rounded-md text-sm font-medium transition-colors;
+}
+
+.nav-header {
+  @apply bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors duration-200;
+}
+
+/* Utility Components */
+.flex-center {
+  @apply flex items-center justify-center;
+}
+
+.flex-between {
+  @apply flex justify-between items-center;
+}
+
+.space-x-standard {
+  @apply space-x-4;
+}
+
+.space-y-standard {
+  @apply space-y-4;
+}
+
+/* Badge/Tag Components */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-gray {
+  @apply bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200;
+}
+
+.badge-blue {
+  @apply bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200;
+}
+
+.badge-green {
+  @apply bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200;
+}
+
+.badge-yellow {
+  @apply bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200;
+}
+
+.badge-red {
+  @apply bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200;
+}
+
+/* Recipe-specific Components */
+.recipe-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden border border-gray-200 dark:border-gray-700;
+}
+
+.recipe-image-placeholder {
+  @apply h-48 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-800 dark:to-orange-900 flex items-center justify-center;
+}
+
+.recipe-step-number {
+  @apply flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold;
+}
+
+.ingredient-item {
+  @apply flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
+}
+
+.quantity-badge {
+  @apply text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded;
+}
+
+/* Shopping list specific */
+.shopping-item-checked {
+  @apply bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md;
+}
+
+.shopping-item-unchecked {
+  @apply hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors;
+}
+
+/* Timer Components */
+.timer-footer {
+  @apply fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg transition-colors duration-200;
+}
+
+.timer-button {
+  @apply p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors;
+}
+
+.timer-trigger {
+  @apply text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium;
+} 

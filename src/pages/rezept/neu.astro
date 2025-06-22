@@ -3,53 +3,53 @@ import Layout from '../../layouts/Layout.astro';
 ---
 
 <Layout title="Neues Rezept - Kochbuch">
-  <div class="max-w-4xl mx-auto">
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-      <div class="p-6">
-        <h1 class="text-3xl font-bold text-gray-900 mb-6">Neues Rezept erstellen</h1>
+  <div class="container-narrow">
+    <div class="card">
+      <div class="card-content">
+        <h1 class="heading-primary mb-6">Neues Rezept erstellen</h1>
         
         <form id="recipe-form" class="space-y-8">
           <!-- Header Section -->
-          <div class="border-b border-gray-200 pb-6">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">Grundinformationen</h2>
+          <div class="border-b border-gray-200 dark:border-gray-600 pb-6">
+            <h2 class="heading-tertiary mb-4">Grundinformationen</h2>
             
-            <div class="space-y-4">
-              <div>
-                <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+            <div class="space-y-standard">
+              <div class="form-group">
+                <label for="title" class="form-label">
                   Titel <span class="text-red-500">*</span>
                 </label>
                 <input 
                   type="text" 
                   id="title" 
                   name="title" 
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  class="form-input"
                   placeholder="z.B. Spaghetti Carbonara"
                   required
                 />
               </div>
               
-              <div>
-                <label for="subtitle" class="block text-sm font-medium text-gray-700 mb-2">
+              <div class="form-group">
+                <label for="subtitle" class="form-label">
                   Untertitel
                 </label>
                 <input 
                   type="text" 
                   id="subtitle" 
                   name="subtitle" 
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  class="form-input"
                   placeholder="z.B. Klassisch italienisch"
                 />
               </div>
               
-              <div>
-                <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+              <div class="form-group">
+                <label for="description" class="form-label">
                   Beschreibung
                 </label>
                 <textarea 
                   id="description" 
                   name="description" 
                   rows="3"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  class="form-textarea"
                   placeholder="Kurze Beschreibung des Rezepts..."
                 ></textarea>
               </div>
@@ -57,12 +57,12 @@ import Layout from '../../layouts/Layout.astro';
           </div>
 
           <!-- Metadata Section -->
-          <div class="border-b border-gray-200 pb-6">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">Metadaten</h2>
+          <div class="border-b border-gray-200 dark:border-gray-600 pb-6">
+            <h2 class="heading-tertiary mb-4">Metadaten</h2>
             
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label for="servings" class="block text-sm font-medium text-gray-700 mb-2">
+            <div class="grid-four-cols">
+              <div class="form-group">
+                <label for="servings" class="form-label">
                   Portionen
                 </label>
                 <input 
@@ -70,13 +70,13 @@ import Layout from '../../layouts/Layout.astro';
                   id="servings" 
                   name="servings" 
                   min="1"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  class="form-input"
                   placeholder="4"
                 />
               </div>
               
-              <div>
-                <label for="preparationTime" class="block text-sm font-medium text-gray-700 mb-2">
+              <div class="form-group">
+                <label for="preparationTime" class="form-label">
                   Vorbereitungszeit (Min)
                 </label>
                 <input 
@@ -84,13 +84,13 @@ import Layout from '../../layouts/Layout.astro';
                   id="preparationTime" 
                   name="preparationTime" 
                   min="0"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  class="form-input"
                   placeholder="20"
                 />
               </div>
               
-              <div>
-                <label for="cookingTime" class="block text-sm font-medium text-gray-700 mb-2">
+              <div class="form-group">
+                <label for="cookingTime" class="form-label">
                   Kochzeit (Min)
                 </label>
                 <input 
@@ -98,19 +98,19 @@ import Layout from '../../layouts/Layout.astro';
                   id="cookingTime" 
                   name="cookingTime" 
                   min="0"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  class="form-input"
                   placeholder="15"
                 />
               </div>
               
-              <div>
-                <label for="difficulty" class="block text-sm font-medium text-gray-700 mb-2">
+              <div class="form-group">
+                <label for="difficulty" class="form-label">
                   Schwierigkeit
                 </label>
                 <select 
                   id="difficulty" 
                   name="difficulty" 
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  class="form-select"
                 >
                   <option value="">Wählen...</option>
                   <option value="leicht">Leicht</option>
@@ -266,13 +266,13 @@ import Layout from '../../layouts/Layout.astro';
           <div class="flex justify-end space-x-3">
             <button 
               type="button" 
-              class="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              class="btn btn-secondary px-6 py-2"
             >
               Abbrechen
             </button>
             <button 
               type="submit"
-              class="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors"
+              class="btn btn-primary px-6 py-2"
             >
               Rezept speichern
             </button>

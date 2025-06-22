@@ -1,4 +1,6 @@
 ---
+import '../styles/components.css';
+
 export interface Props {
   title: string;
 }
@@ -25,8 +27,8 @@ const { title } = Astro.props;
     </script>
   </head>
   <body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
-    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors duration-200">
-      <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header class="nav-header">
+      <nav class="container">
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <a href="/" class="flex items-center space-x-2">
@@ -37,17 +39,17 @@ const { title } = Astro.props;
             </a>
           </div>
           <div class="flex items-center space-x-4">
-            <a href="/" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+            <a href="/" class="nav-link">
               Rezepte
             </a>
-            <a href="/einkaufsliste" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+            <a href="/einkaufsliste" class="nav-link">
               Einkaufsliste
             </a>
-            <a href="/rezept/neu" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+            <a href="/rezept/neu" class="btn btn-primary">
               Neues Rezept
             </a>
             <!-- Theme Toggle Button -->
-            <button id="theme-toggle" class="p-2 text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 rounded-md transition-colors" aria-label="Toggle dark mode">
+            <button id="theme-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
               <!-- Sun icon (visible in dark mode) -->
               <svg id="theme-toggle-light-icon" class="hidden dark:block w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                 <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
@@ -62,43 +64,43 @@ const { title } = Astro.props;
       </nav>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="container py-8">
       <slot />
     </main>
 
     <!-- Timer Footer (initially hidden) -->
-    <div id="timer-footer" class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg hidden transition-colors duration-200">
-      <div class="max-w-7xl mx-auto px-4 py-3">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-4">
-            <span id="timer-label" class="font-medium text-gray-900 dark:text-white"></span>
-            <span id="timer-display" class="text-2xl font-mono font-bold text-orange-500"></span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <button id="timer-minus-10" class="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors">
-              <span class="text-sm">-10m</span>
-            </button>
-            <button id="timer-minus-5" class="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors">
-              <span class="text-sm">-5m</span>
-            </button>
-            <button id="timer-minus-1" class="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors">
-              <span class="text-sm">-1m</span>
-            </button>
-            <button id="timer-play-pause" class="p-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
-              </svg>
-            </button>
-            <button id="timer-plus-1" class="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors">
-              <span class="text-sm">+1m</span>
-            </button>
-            <button id="timer-plus-5" class="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors">
-              <span class="text-sm">+5m</span>
-            </button>
-            <button id="timer-plus-10" class="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors">
-              <span class="text-sm">+10m</span>
-            </button>
-            <button id="timer-stop" class="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 rounded-md transition-colors">
+    <div id="timer-footer" class="timer-footer hidden">
+      <div class="container py-3">
+                  <div class="flex-between">
+            <div class="flex items-center space-x-4">
+              <span id="timer-label" class="font-medium text-gray-900 dark:text-white"></span>
+              <span id="timer-display" class="text-2xl font-mono font-bold text-orange-500"></span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button id="timer-minus-10" class="timer-button">
+                <span class="text-sm">-10m</span>
+              </button>
+              <button id="timer-minus-5" class="timer-button">
+                <span class="text-sm">-5m</span>
+              </button>
+              <button id="timer-minus-1" class="timer-button">
+                <span class="text-sm">-1m</span>
+              </button>
+              <button id="timer-play-pause" class="btn-icon bg-orange-500 hover:bg-orange-600 text-white">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+              <button id="timer-plus-1" class="timer-button">
+                <span class="text-sm">+1m</span>
+              </button>
+              <button id="timer-plus-5" class="timer-button">
+                <span class="text-sm">+5m</span>
+              </button>
+              <button id="timer-plus-10" class="timer-button">
+                <span class="text-sm">+10m</span>
+              </button>
+              <button id="timer-stop" class="timer-button text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"/>
               </svg>
