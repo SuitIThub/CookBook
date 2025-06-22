@@ -25,3 +25,5 @@ pnpm-debug.log*
 cookbook.db
 cookbook.db-shm
 cookbook.db-wal
+
+public/uploads/
