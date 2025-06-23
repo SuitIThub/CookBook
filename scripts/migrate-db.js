@@ -14,6 +14,8 @@ const EXPECTED_SCHEMA = {
         { name: 'subtitle', type: 'TEXT', nullable: true },
         { name: 'description', type: 'TEXT', nullable: true },
         { name: 'metadata', type: 'TEXT', nullable: true },
+        { name: 'category', type: 'TEXT', nullable: true },
+        { name: 'tags', type: 'TEXT', nullable: true, defaultValue: "'[]'" },
         { name: 'ingredient_groups', type: 'TEXT', nullable: true },
         { name: 'preparation_groups', type: 'TEXT', nullable: true },
         { name: 'image_url', type: 'TEXT', nullable: true },
@@ -46,6 +48,20 @@ const EXPECTED_SCHEMA = {
         { name: 'category', type: 'TEXT', nullable: true },
         { name: 'base_unit', type: 'TEXT', nullable: true },
         { name: 'conversion_factor', type: 'REAL', nullable: true }
+      ]
+    },
+    categories: {
+      columns: [
+        { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+        { name: 'name', type: 'TEXT', nullable: false, unique: true },
+        { name: 'usage_count', type: 'INTEGER', nullable: true, defaultValue: '0' }
+      ]
+    },
+    recipe_tags: {
+      columns: [
+        { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+        { name: 'name', type: 'TEXT', nullable: false, unique: true },
+        { name: 'usage_count', type: 'INTEGER', nullable: true, defaultValue: '1' }
       ]
     }
   },
@@ -232,6 +248,110 @@ function performDataMigrations(db) {
       updateImageStmt.run(JSON.stringify([imageObject]), recipe.id);
       console.log(`  ✅ Migrated image for recipe: ${recipe.title}`);
     }
+  }
+
+  // Migration 3: Initialize default categories
+  console.log('🏷️  Checking for default categories...');
+  const existingCategoriesCount = db.prepare('SELECT COUNT(*) as count FROM categories').get();
+  
+  if (existingCategoriesCount.count === 0) {
+    console.log('➕ Adding default categories...');
+    
+    const insertCategory = db.prepare(`
+      INSERT OR IGNORE INTO categories (id, name, usage_count) 
+      VALUES (?, ?, ?)
+    `);
+    
+    const defaultCategories = [
+      'Hauptgericht',
+      'Vorspeise',
+      'Dessert',
+      'Getränk',
+      'Snack',
+      'Salat',
+      'Suppe',
+      'Beilage',
+      'Frühstück',
+      'Kuchen & Gebäck'
+    ];
+    
+    let categoriesAdded = 0;
+    defaultCategories.forEach(category => {
+      const result = insertCategory.run(generateId(), category, 0);
+      if (result.changes > 0) categoriesAdded++;
+    });
+    
+    console.log(`✅ Added ${categoriesAdded} default categories.`);
+  } else {
+    console.log(`✅ Categories table already has ${existingCategoriesCount.count} entries.`);
+  }
+
+  // Migration 4: Ensure recipes have tags field set to empty array if null
+  const updateTagsResult = db.prepare(`
+    UPDATE recipes 
+    SET tags = '[]' 
+    WHERE tags IS NULL OR tags = ''
+  `).run();
+
+  if (updateTagsResult.changes > 0) {
+    console.log(`✅ Updated ${updateTagsResult.changes} recipes with empty tags array.`);
+  }
+
+  // Migration 5: Convert old time structure to new flexible time entries
+  console.log('⏰ Migrating recipe time data to new flexible structure...');
+  const recipesWithOldTimeFormat = db.prepare(`
+    SELECT id, title, metadata 
+    FROM recipes 
+    WHERE metadata IS NOT NULL AND metadata != ''
+  `).all();
+
+  let timeUpdatesCount = 0;
+  
+  for (const recipe of recipesWithOldTimeFormat) {
+    try {
+      const metadata = JSON.parse(recipe.metadata);
+      
+      // Check if it's using old format (has preparationTime or cookingTime but no timeEntries)
+      if ((metadata.preparationTime || metadata.cookingTime) && !metadata.timeEntries) {
+        const timeEntries = [];
+        
+        if (metadata.preparationTime && metadata.preparationTime > 0) {
+          timeEntries.push({
+            id: generateId(),
+            label: 'Vorbereitung',
+            minutes: metadata.preparationTime
+          });
+        }
+        
+        if (metadata.cookingTime && metadata.cookingTime > 0) {
+          timeEntries.push({
+            id: generateId(),
+            label: 'Kochzeit',
+            minutes: metadata.cookingTime
+          });
+        }
+        
+        // Remove old fields and add new timeEntries
+        delete metadata.preparationTime;
+        delete metadata.cookingTime;
+        metadata.timeEntries = timeEntries;
+        
+        // Update the recipe
+        db.prepare('UPDATE recipes SET metadata = ? WHERE id = ?')
+          .run(JSON.stringify(metadata), recipe.id);
+        
+        timeUpdatesCount++;
+        console.log(`  ✅ Migrated time data for recipe: ${recipe.title}`);
+      }
+    } catch (error) {
+      console.log(`  ⚠️  Failed to migrate time data for recipe ${recipe.title}: ${error.message}`);
+    }
+  }
+  
+  if (timeUpdatesCount > 0) {
+    console.log(`✅ Migrated time data for ${timeUpdatesCount} recipes to new format.`);
+  } else {
+    console.log(`✅ No recipes needed time data migration.`);
   }
 
   // Add more data migrations here as needed...

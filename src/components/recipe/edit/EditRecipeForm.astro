@@ -1,10 +1,12 @@
 ---
 import type { Recipe } from '../../../types/recipe';
 import HeaderEdit from './HeaderEdit.astro';
+import RecipeTagsEdit from './RecipeTagsEdit.astro';
 import IngredientsEdit from './IngredientsEdit.astro'; 
 import PreparationEdit from './PreparationEdit.astro';
 import EditFormActions from './EditFormActions.astro';
 import IngredientLinkingScript from './IngredientLinkingScript.astro';
+import IngredientSuggestionScript from './IngredientSuggestionScript.astro';
 import RecipeImageGallery from '../RecipeImageGallery.astro';
 
 interface Props {
@@ -16,6 +18,7 @@ const { recipe } = Astro.props;
 
 <form id="edit-recipe-form" class="space-y-6">
   <HeaderEdit recipe={recipe} />
+  <RecipeTagsEdit recipe={recipe} />
   <RecipeImageGallery recipe={recipe} mode="edit" />
   <IngredientsEdit recipe={recipe} />
   <PreparationEdit recipe={recipe} />
@@ -25,6 +28,9 @@ const { recipe } = Astro.props;
 <div>
   <!-- Include the ingredient linking functionality -->
   <IngredientLinkingScript />
+  
+  <!-- Include the ingredient suggestion functionality -->
+  <IngredientSuggestionScript />
 </div>
 
 <script define:vars={{ recipe }}>
@@ -156,9 +162,14 @@ const { recipe } = Astro.props;
     ingredientsList.appendChild(ingredientElement);
     
     // Focus on the name input
-    const nameInput = ingredientElement.querySelector('input[type="text"]');
+    const nameInput = ingredientElement.querySelector('.ingredient-name-input');
     if (nameInput) {
       nameInput.focus();
+      
+      // Attach suggestion handlers to the new input
+      if (window.attachIngredientSuggestionHandlers) {
+        window.attachIngredientSuggestionHandlers(nameInput);
+      }
     }
     
     // Update ingredient linker with current DOM state
@@ -170,12 +181,16 @@ const { recipe } = Astro.props;
       <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" data-ingredient-id="${id}">
         <div class="space-y-3">
           <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
-            <input 
-              type="text" 
-              value="${name}"
-              placeholder="Zutatename"
-              class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-            />
+            <div class="flex-1 relative">
+              <input 
+                type="text" 
+                value="${name}"
+                placeholder="Zutatename"
+                class="ingredient-name-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+              />
+              <div class="ingredient-suggestions absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-20 max-h-32 overflow-y-auto">
+              </div>
+            </div>
             <div class="flex space-x-2 sm:space-x-3">
               <input 
                 type="number" 
@@ -648,19 +663,29 @@ const { recipe } = Astro.props;
       updatedRecipe = window.ingredientLinker.getUpdatedRecipe() || updatedRecipe;
     }
     
+    // Get tags data if available
+    const tagsData = window.getRecipeTagsData ? window.getRecipeTagsData() : { category: updatedRecipe.category, tags: updatedRecipe.tags };
+    
     // Collect form data
     const formData = {
       ...updatedRecipe,
       title: document.getElementById('edit-title')?.value || updatedRecipe.title,
       subtitle: document.getElementById('edit-subtitle')?.value ?? updatedRecipe.subtitle,
       description: document.getElementById('edit-description')?.value ?? updatedRecipe.description,
-      metadata: {
-        ...updatedRecipe.metadata,
-        servings: parseInt(document.getElementById('edit-servings')?.value) || updatedRecipe.metadata.servings,
-        preparationTime: parseInt(document.getElementById('edit-prep-time')?.value) || updatedRecipe.metadata.preparationTime,
-        cookingTime: parseInt(document.getElementById('edit-cook-time')?.value) || updatedRecipe.metadata.cookingTime,
-        difficulty: document.getElementById('edit-difficulty')?.value || updatedRecipe.metadata.difficulty
-      },
+      category: tagsData.category,
+      tags: tagsData.tags,
+              metadata: {
+          ...updatedRecipe.metadata,
+                  servings: parseInt(document.getElementById('edit-servings')?.value) || updatedRecipe.metadata.servings,
+        timeEntries: window.getCurrentTimeEntries ? window.getCurrentTimeEntries() : (updatedRecipe.metadata.timeEntries || []),
+        difficulty: document.getElementById('edit-difficulty')?.value || updatedRecipe.metadata.difficulty,
+          nutrition: {
+            calories: parseFloat(document.getElementById('edit-calories')?.value) || undefined,
+            carbohydrates: parseFloat(document.getElementById('edit-carbohydrates')?.value) || undefined,
+            protein: parseFloat(document.getElementById('edit-protein')?.value) || undefined,
+            fat: parseFloat(document.getElementById('edit-fat')?.value) || undefined
+          }
+        },
       // Include ingredient groups and preparation groups with linked ingredients
       ingredientGroups: collectIngredientGroups(),
       preparationGroups: collectPreparationGroups()

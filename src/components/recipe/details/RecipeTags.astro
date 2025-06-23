@@ -1,0 +1,394 @@
+---
+import type { Recipe } from '../../../types/recipe';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+---
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 transition-colors duration-200">
+  <div id="tags-display" class="flex flex-wrap gap-2">
+    {/* Category Tag */}
+    {recipe.category && (
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-700">
+        {recipe.category}
+      </span>
+    )}
+    
+    {/* Regular Tags */}
+    {recipe.tags && recipe.tags.map(tag => (
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700">
+        {tag}
+      </span>
+    ))}
+    
+    {/* Add Tag Button */}
+    <button
+      type="button"
+      id="add-tag-btn-view"
+      class="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+      title="Tag hinzufügen"
+    >
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+      </svg>
+      <span>Tag hinzufügen</span>
+    </button>
+    
+    {/* Tag input (hidden by default) */}
+    <div id="tag-input-container-view" class="hidden relative">
+      <div class="flex items-center space-x-2">
+        <input
+          type="text"
+          id="tag-input-view"
+          placeholder="Tag eingeben..."
+          class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm min-w-[120px]"
+        />
+        <button
+          type="button"
+          id="confirm-tag-btn-view"
+          class="inline-flex items-center justify-center w-8 h-8 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled
+          title="Bestätigen"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="cancel-tag-btn-view"
+          class="inline-flex items-center justify-center w-8 h-8 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors duration-200"
+          title="Abbrechen"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      {/* Tag suggestions */}
+               <div id="tag-suggestions-view" class="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-20 max-h-32 overflow-y-auto">
+         </div>
+    </div>
+  </div>
+</div>
+
+<script define:vars={{ recipe }}>
+  document.addEventListener('DOMContentLoaded', () => {
+    initializeViewTags();
+  });
+
+  function initializeViewTags() {
+    const tagsDisplay = document.getElementById('tags-display');
+    const addTagBtn = document.getElementById('add-tag-btn-view');
+    const tagInputContainer = document.getElementById('tag-input-container-view');
+    const tagInput = document.getElementById('tag-input-view');
+    const confirmTagBtn = document.getElementById('confirm-tag-btn-view');
+    const cancelTagBtn = document.getElementById('cancel-tag-btn-view');
+    const tagSuggestions = document.getElementById('tag-suggestions-view');
+    
+    let currentTags = recipe.tags ? [...recipe.tags] : [];
+    let isAddingTag = false;
+    
+    // Event listeners
+    if (addTagBtn) {
+      addTagBtn.addEventListener('click', showTagInput);
+    }
+    
+    if (confirmTagBtn) {
+      confirmTagBtn.addEventListener('click', addTag);
+    }
+    
+    if (cancelTagBtn) {
+      cancelTagBtn.addEventListener('click', hideTagInput);
+    }
+    
+    if (tagInput) {
+      tagInput.addEventListener('input', handleTagInput);
+      tagInput.addEventListener('keydown', handleTagKeydown);
+      tagInput.addEventListener('blur', handleTagBlur);
+    }
+    
+    function showTagInput() {
+      if (isAddingTag) return;
+      
+      isAddingTag = true;
+      if (addTagBtn) addTagBtn.style.display = 'none';
+      if (tagInputContainer) tagInputContainer.classList.remove('hidden');
+      if (tagInput) {
+        tagInput.focus();
+        tagInput.value = '';
+      }
+      updateConfirmButton();
+    }
+    
+    function hideTagInput() {
+      isAddingTag = false;
+      if (addTagBtn) addTagBtn.style.display = 'inline-flex';
+      if (tagInputContainer) tagInputContainer.classList.add('hidden');
+      if (tagSuggestions) tagSuggestions.classList.add('hidden');
+      if (tagInput) tagInput.value = '';
+      updateConfirmButton();
+    }
+    
+    async function addTag() {
+      const tagText = tagInput?.value.trim();
+      if (!tagText || currentTags.includes(tagText)) return;
+      
+      try {
+        // Add tag to current list
+        currentTags.push(tagText);
+        
+        // Save to server
+        const recipeId = window.location.pathname.split('/').pop();
+        const response = await fetch(`/api/recipes?id=${recipeId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ...recipe,
+            tags: currentTags
+          })
+        });
+        
+        if (response.ok) {
+          const updatedRecipe = await response.json();
+          recipe.tags = updatedRecipe.tags;
+          
+          // Update display
+          renderTags();
+          hideTagInput();
+          
+          // Show success notification
+          showNotification('Tag erfolgreich hinzugefügt!', 'success');
+        } else {
+          throw new Error(`Server error: ${response.status}`);
+        }
+        
+      } catch (error) {
+        console.error('Error adding tag:', error);
+        
+        // Revert tag addition
+        currentTags = currentTags.filter(tag => tag !== tagText);
+        
+        showNotification('Fehler beim Hinzufügen des Tags. Bitte versuchen Sie es erneut.', 'error');
+        hideTagInput();
+      }
+    }
+    
+    function renderTags() {
+      if (!tagsDisplay) return;
+      
+      // Clear display
+      tagsDisplay.innerHTML = '';
+      
+      // Add category tag if exists
+      if (recipe.category) {
+        const categoryTag = createCategoryTag(recipe.category);
+        tagsDisplay.appendChild(categoryTag);
+      }
+      
+      // Add regular tags
+      currentTags.forEach(tag => {
+        const tagElement = createTagElement(tag);
+        tagsDisplay.appendChild(tagElement);
+      });
+      
+      // Re-add the add button
+      const newAddBtn = createAddButton();
+      tagsDisplay.appendChild(newAddBtn);
+      
+      // Re-add the input container
+      const newInputContainer = createInputContainer();
+      tagsDisplay.appendChild(newInputContainer);
+    }
+    
+    function createCategoryTag(category) {
+      const tag = document.createElement('span');
+      tag.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-700';
+      tag.textContent = category;
+      return tag;
+    }
+    
+    function createTagElement(tagText) {
+      const tag = document.createElement('span');
+      tag.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700';
+      tag.textContent = tagText;
+      return tag;
+    }
+    
+    function createAddButton() {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.id = 'add-tag-btn-view';
+      button.className = 'inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200';
+      button.title = 'Tag hinzufügen';
+      button.innerHTML = `
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+        </svg>
+        <span>Tag hinzufügen</span>
+      `;
+      button.addEventListener('click', showTagInput);
+      return button;
+    }
+    
+    function createInputContainer() {
+      const container = document.createElement('div');
+      container.id = 'tag-input-container-view';
+      container.className = 'hidden relative';
+      container.innerHTML = `
+        <div class="flex items-center space-x-2">
+          <input
+            type="text"
+            id="tag-input-view"
+            placeholder="Tag eingeben..."
+            class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm min-w-[120px]"
+          />
+          <button
+            type="button"
+            id="confirm-tag-btn-view"
+            class="inline-flex items-center justify-center w-8 h-8 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+            title="Bestätigen"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            id="cancel-tag-btn-view"
+            class="inline-flex items-center justify-center w-8 h-8 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors duration-200"
+            title="Abbrechen"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        
+        <div id="tag-suggestions-view" class="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-20 max-h-32 overflow-y-auto">
+        </div>
+      `;
+      
+      // Re-attach event listeners
+      const newTagInput = container.querySelector('#tag-input-view');
+      const newConfirmBtn = container.querySelector('#confirm-tag-btn-view');
+      const newCancelBtn = container.querySelector('#cancel-tag-btn-view');
+      
+      if (newTagInput) {
+        newTagInput.addEventListener('input', handleTagInput);
+        newTagInput.addEventListener('keydown', handleTagKeydown);
+        newTagInput.addEventListener('blur', handleTagBlur);
+      }
+      if (newConfirmBtn) newConfirmBtn.addEventListener('click', addTag);
+      if (newCancelBtn) newCancelBtn.addEventListener('click', hideTagInput);
+      
+      return container;
+    }
+    
+    function handleTagInput(e) {
+      const query = e.target.value.trim();
+      updateConfirmButton();
+      
+      if (query.length >= 1) {
+        searchTags(query);
+      } else {
+        const suggestions = document.getElementById('tag-suggestions-view');
+        if (suggestions) suggestions.classList.add('hidden');
+      }
+    }
+    
+    function handleTagKeydown(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const confirmBtn = document.getElementById('confirm-tag-btn-view');
+        if (confirmBtn && !confirmBtn.disabled) {
+          addTag();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        hideTagInput();
+      }
+    }
+    
+    function handleTagBlur(e) {
+      // Delay hiding to allow clicking on suggestions
+      setTimeout(() => {
+        const suggestions = document.getElementById('tag-suggestions-view');
+        if (!suggestions?.contains(document.activeElement)) {
+          if (suggestions) suggestions.classList.add('hidden');
+        }
+      }, 200);
+    }
+    
+    function updateConfirmButton() {
+      const confirmBtn = document.getElementById('confirm-tag-btn-view');
+      const input = document.getElementById('tag-input-view');
+      if (!confirmBtn || !input) return;
+      
+      const tagText = input.value.trim();
+      const isValid = tagText.length > 0 && !currentTags.includes(tagText);
+      confirmBtn.disabled = !isValid;
+    }
+    
+    async function searchTags(query) {
+      try {
+        const response = await fetch(`/api/tags?q=${encodeURIComponent(query)}`);
+        const tags = await response.json();
+        
+        // Filter out already used tags and limit to 3 suggestions
+        const availableTags = tags
+          .filter(tag => !currentTags.includes(tag))
+          .slice(0, 3);
+        
+        const suggestions = document.getElementById('tag-suggestions-view');
+        if (availableTags.length > 0 && suggestions) {
+          suggestions.innerHTML = '';
+          availableTags.forEach(tag => {
+            const suggestion = document.createElement('button');
+            suggestion.type = 'button';
+            suggestion.className = 'block w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-white transition-colors duration-150 border-b border-gray-200 dark:border-gray-600 last:border-b-0';
+            suggestion.textContent = tag;
+            suggestion.addEventListener('click', () => {
+              const input = document.getElementById('tag-input-view');
+              if (input) {
+                input.value = tag;
+                input.focus();
+              }
+              updateConfirmButton();
+              suggestions.classList.add('hidden');
+            });
+            suggestions.appendChild(suggestion);
+          });
+          suggestions.classList.remove('hidden');
+        } else if (suggestions) {
+          suggestions.classList.add('hidden');
+        }
+      } catch (error) {
+        console.error('Error searching tags:', error);
+        const suggestions = document.getElementById('tag-suggestions-view');
+        if (suggestions) suggestions.classList.add('hidden');
+      }
+    }
+    
+    function showNotification(message, type = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white ${
+        type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+      }`;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 3000);
+    }
+  }
+</script> 

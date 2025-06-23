@@ -60,6 +60,7 @@ declare global {
     IngredientLinker: typeof IngredientLinker;
     intermediateIngredientManager: IntermediateIngredientManager;
     IntermediateIngredientManager: typeof IntermediateIngredientManager;
+    attachIntermediateSuggestionHandlers?: (input: HTMLInputElement) => void;
   }
 }
 
@@ -156,12 +157,16 @@ class IntermediateIngredientManager {
     itemDiv.dataset.intermediateId = newId;
     
     itemDiv.innerHTML = `
-      <input 
-        type="text" 
-        value=""
-        placeholder="Name der Zwischenzutat"
-        class="intermediate-name-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-      />
+      <div class="flex-1 relative">
+        <input 
+          type="text" 
+          value=""
+          placeholder="Name der Zwischenzutat"
+          class="intermediate-name-input w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        />
+        <div class="intermediate-suggestions absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-20 max-h-32 overflow-y-auto">
+        </div>
+      </div>
       <input 
         type="text" 
         value=""
@@ -184,6 +189,11 @@ class IntermediateIngredientManager {
     const nameInput = itemDiv.querySelector('.intermediate-name-input') as HTMLInputElement;
     if (nameInput) {
       nameInput.focus();
+      
+      // Attach suggestion handlers to the new input
+      if (window.attachIntermediateSuggestionHandlers) {
+        window.attachIntermediateSuggestionHandlers(nameInput);
+      }
     }
 
     this.updateIntermediateIngredientData(stepElement);

@@ -20,12 +20,32 @@ class CookbookDatabase {
         subtitle TEXT,
         description TEXT,
         metadata TEXT,
+        category TEXT,
+        tags TEXT,
         ingredient_groups TEXT,
         preparation_groups TEXT,
         image_url TEXT,
         images TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Categories table for predefined categories
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id TEXT PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        usage_count INTEGER DEFAULT 0
+      )
+    `);
+
+    // Tags table for autocomplete and tracking
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS recipe_tags (
+        id TEXT PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        usage_count INTEGER DEFAULT 1
       )
     `);
 
@@ -74,8 +94,8 @@ class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO recipes (id, title, subtitle, description, metadata, ingredient_groups, preparation_groups, image_url, images, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -84,6 +104,8 @@ class CookbookDatabase {
       newRecipe.subtitle,
       newRecipe.description,
       JSON.stringify(newRecipe.metadata),
+      newRecipe.category,
+      JSON.stringify(newRecipe.tags || []),
       JSON.stringify(newRecipe.ingredientGroups),
       JSON.stringify(newRecipe.preparationGroups),
       newRecipe.imageUrl,
@@ -94,6 +116,14 @@ class CookbookDatabase {
 
     // Add ingredients to autocomplete
     this.addIngredientsToAutocomplete(newRecipe.ingredientGroups);
+
+    // Update category and tags usage count
+    if (newRecipe.category) {
+      this.updateCategoryUsage(newRecipe.category);
+    }
+    if (newRecipe.tags && newRecipe.tags.length > 0) {
+      this.updateTagsUsage(newRecipe.tags);
+    }
 
     return newRecipe;
   }
@@ -112,6 +142,8 @@ class CookbookDatabase {
       subtitle: row.subtitle,
       description: row.description,
       metadata: JSON.parse(row.metadata),
+      category: row.category,
+      tags: row.tags ? JSON.parse(row.tags) : [],
       ingredientGroups: JSON.parse(row.ingredient_groups),
       preparationGroups: JSON.parse(row.preparation_groups),
       imageUrl: row.image_url,
@@ -131,6 +163,8 @@ class CookbookDatabase {
       subtitle: row.subtitle,
       description: row.description,
       metadata: JSON.parse(row.metadata),
+      category: row.category,
+      tags: row.tags ? JSON.parse(row.tags) : [],
       ingredientGroups: JSON.parse(row.ingredient_groups),
       preparationGroups: JSON.parse(row.preparation_groups),
       imageUrl: row.image_url,
@@ -154,7 +188,7 @@ class CookbookDatabase {
 
     const stmt = this.db.prepare(`
       UPDATE recipes 
-      SET title = ?, subtitle = ?, description = ?, metadata = ?, 
+      SET title = ?, subtitle = ?, description = ?, metadata = ?, category = ?, tags = ?,
           ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, updated_at = ?
       WHERE id = ?
     `);
@@ -164,6 +198,8 @@ class CookbookDatabase {
       updatedRecipe.subtitle,
       updatedRecipe.description,
       JSON.stringify(updatedRecipe.metadata),
+      updatedRecipe.category,
+      JSON.stringify(updatedRecipe.tags || []),
       JSON.stringify(updatedRecipe.ingredientGroups),
       JSON.stringify(updatedRecipe.preparationGroups),
       updatedRecipe.imageUrl,
@@ -181,6 +217,14 @@ class CookbookDatabase {
     // Update ingredients autocomplete
     if (updates.ingredientGroups) {
       this.addIngredientsToAutocomplete(updates.ingredientGroups);
+    }
+
+    // Update category and tags usage count
+    if (updates.category) {
+      this.updateCategoryUsage(updates.category);
+    }
+    if (updates.tags) {
+      this.updateTagsUsage(updates.tags);
     }
 
     return updatedRecipe;
@@ -317,6 +361,56 @@ class CookbookDatabase {
           stmt.run(uuidv4(), ingredient.name, ingredient.description, ingredient.name);
         }
       });
+    });
+  }
+
+  // Category methods
+  getAllCategories(): string[] {
+    const stmt = this.db.prepare(`
+      SELECT name FROM categories 
+      ORDER BY usage_count DESC, name ASC
+    `);
+    const rows = stmt.all() as any[];
+    return rows.map(row => row.name);
+  }
+
+  private updateCategoryUsage(category: string): void {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO categories (id, name, usage_count) 
+      VALUES (?, ?, COALESCE((SELECT usage_count FROM categories WHERE name = ?) + 1, 1))
+    `);
+    stmt.run(uuidv4(), category, category);
+  }
+
+  // Tag methods
+  searchTags(query: string): string[] {
+    const stmt = this.db.prepare(`
+      SELECT name FROM recipe_tags 
+      WHERE name LIKE ? 
+      ORDER BY usage_count DESC 
+      LIMIT 10
+    `);
+    const rows = stmt.all(`%${query}%`) as any[];
+    return rows.map(row => row.name);
+  }
+
+  getAllTags(): string[] {
+    const stmt = this.db.prepare(`
+      SELECT name FROM recipe_tags 
+      ORDER BY usage_count DESC, name ASC
+    `);
+    const rows = stmt.all() as any[];
+    return rows.map(row => row.name);
+  }
+
+  private updateTagsUsage(tags: string[]): void {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO recipe_tags (id, name, usage_count) 
+      VALUES (?, ?, COALESCE((SELECT usage_count FROM recipe_tags WHERE name = ?) + 1, 1))
+    `);
+    
+    tags.forEach(tag => {
+      stmt.run(uuidv4(), tag, tag);
     });
   }
 

@@ -1,4 +1,4 @@
-import type { Recipe } from '../../types/recipe';
+import type { Recipe, NutritionData } from '../../types/recipe';
 
 export interface ExtractedRecipeData {
   title: string;
@@ -11,7 +11,23 @@ export interface ExtractedRecipeData {
   ingredients: string[];
   instructions: string[];
   imageUrl?: string;
+  nutrition?: NutritionData; // New: optional nutrition data
+  keywords?: string[]; // Tags/keywords extracted from the recipe
+  category?: string; // Recipe category (e.g., "Hauptgericht", "Dessert")
   sourceUrl: string;
+}
+
+export interface ExtractorCapabilities {
+  supportsIngredientGroups: boolean;
+  supportsPreparationGroups: boolean;
+  supportsImages: boolean;
+  supportsNutrition: boolean | 'experimental';
+  supportsMetadata: boolean;
+  supportsTimeExtraction?: boolean | 'experimental';
+  supportsDifficultyExtraction?: boolean | 'experimental';
+  supportsKeywordExtraction?: boolean | 'experimental';
+  supportsCategoryExtraction?: boolean | 'experimental';
+  description: string;
 }
 
 export abstract class BaseRecipeExtractor {
@@ -42,18 +58,53 @@ export abstract class BaseRecipeExtractor {
   abstract extractRecipe(url: string): Promise<ExtractedRecipeData>;
   
   /**
+   * Get the capabilities of this extractor
+   */
+  getCapabilities(): ExtractorCapabilities {
+    return {
+      supportsIngredientGroups: false,
+      supportsPreparationGroups: false,
+      supportsImages: true,
+      supportsNutrition: false,
+      supportsMetadata: true,
+      supportsTimeExtraction: false,
+      description: 'Basis-Extraktor für allgemeine Websites'
+    };
+  }
+  
+  /**
    * Convert extracted data to our Recipe format
    */
   convertToRecipeFormat(data: ExtractedRecipeData): Partial<Recipe> {
+    const timeEntries = [];
+    
+    if (data.preparationTime && data.preparationTime > 0) {
+      timeEntries.push({
+        id: this.generateId(),
+        label: 'Vorbereitung',
+        minutes: data.preparationTime
+      });
+    }
+    
+    if (data.cookingTime && data.cookingTime > 0) {
+      timeEntries.push({
+        id: this.generateId(),
+        label: 'Kochzeit',
+        minutes: data.cookingTime
+      });
+    }
+    
     return {
       title: data.title,
       subtitle: data.subtitle,
       description: data.description,
+      category: data.category,
+      tags: data.keywords,
       metadata: {
         servings: data.servings || 4,
-        preparationTime: data.preparationTime || 30,
-        cookingTime: data.cookingTime || 30,
-        difficulty: data.difficulty || 'mittel'
+        timeEntries: timeEntries,
+        difficulty: data.difficulty || 'mittel',
+        nutrition: data.nutrition
       },
       ingredientGroups: [{
         id: this.generateId(),
@@ -445,10 +496,19 @@ export abstract class BaseRecipeExtractor {
           extractedUnit = match[2];
           name = match[3] || '';
         } else {
-          // Standard pattern with known unit
+          // Standard pattern with known unit or fallback pattern
           amount = parseFloat(match[1].replace(',', '.'));
-          extractedUnit = unit || match[2] || 'Stück';
-          name = match[3] || '';
+          
+          // Check if this is the fallback pattern (only 2 groups: amount and name)
+          if (match.length === 3 && unit) {
+            // Fallback pattern: "1 kleine rote Zwiebel" -> amount=1, name="kleine rote Zwiebel"
+            extractedUnit = unit;
+            name = match[2] || '';
+          } else {
+            // Standard pattern with explicit unit
+            extractedUnit = unit || match[2] || 'Stück';
+            name = match[3] || '';
+          }
         }
 
         // Ensure name is not empty
@@ -480,5 +540,164 @@ export abstract class BaseRecipeExtractor {
         unit: 'Stück'
       }]
     };
+  }
+
+  /**
+   * Extract keywords/tags from HTML content and recipe data
+   */
+  protected extractKeywords(html: string, title: string, description?: string): string[] {
+    console.log('🏷️ Extracting keywords from recipe content...');
+    
+    const keywords: Set<string> = new Set();
+    
+    // Extract from meta keywords if available
+    const metaKeywords = html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i);
+    if (metaKeywords) {
+      metaKeywords[1].split(',').forEach(keyword => {
+        const cleaned = keyword.trim();
+        if (cleaned.length > 2) keywords.add(cleaned);
+      });
+    }
+    
+    // Extract from meta tags
+    const metaTags = html.match(/<meta[^>]*property=["']article:tag["'][^>]*content=["']([^"']+)["']/gi);
+    if (metaTags) {
+      metaTags.forEach(tag => {
+        const match = tag.match(/content=["']([^"']+)["']/i);
+        if (match) {
+          const cleaned = match[1].trim();
+          if (cleaned.length > 2) keywords.add(cleaned);
+        }
+      });
+    }
+
+    // Extract recipe-specific German terms from title and description
+    const textToAnalyze = `${title} ${description || ''}`.toLowerCase();
+    
+    // Common German cooking terms and categories
+    const cookingTerms = [
+      // Cooking methods
+      'gebacken', 'gebraten', 'gekocht', 'gedünstet', 'gegrillt', 'geschmort', 
+      'frittiert', 'überbacken', 'paniert', 'mariniert', 'gefüllt', 'glasiert',
+      
+      // Dietary types
+      'vegetarisch', 'vegan', 'glutenfrei', 'laktosefrei', 'low carb', 'kalorienarm',
+      
+      // Occasions
+      'weihnachten', 'ostern', 'geburtstag', 'party', 'festlich', 'thanksgiving',
+      
+      // Textures/characteristics
+      'knusprig', 'cremig', 'saftig', 'würzig', 'süß', 'herzhaft', 'scharf', 
+      'mild', 'pikant', 'zart', 'deftig', 'leicht', 'frisch',
+      
+      // Origins
+      'italienisch', 'französisch', 'deutsch', 'amerikanisch', 'asiatisch', 
+      'mediterran', 'türkisch', 'griechisch', 'spanisch', 'mexikanisch',
+      
+      // Food categories
+      'fleisch', 'fisch', 'gemüse', 'pasta', 'reis', 'kartoffel', 'suppe', 
+      'salat', 'brot', 'kuchen', 'torte', 'kekse'
+    ];
+    
+    cookingTerms.forEach(term => {
+      if (textToAnalyze.includes(term)) {
+        keywords.add(term);
+      }
+    });
+    
+    // Extract ingredient-based keywords
+    const ingredientKeywords = [
+      'schokolade', 'vanille', 'zimt', 'ingwer', 'knoblauch', 'zwiebel',
+      'tomate', 'käse', 'sahne', 'butter', 'ei', 'mehl', 'zucker',
+      'hähnchen', 'schwein', 'rind', 'lachs', 'garnelen', 'pilze'
+    ];
+    
+    ingredientKeywords.forEach(ingredient => {
+      if (textToAnalyze.includes(ingredient)) {
+        keywords.add(ingredient);
+      }
+    });
+    
+    const result = Array.from(keywords).slice(0, 10); // Limit to 10 keywords
+    console.log(`✅ Extracted ${result.length} keywords: ${result.join(', ')}`);
+    return result;
+  }
+
+  /**
+   * Extract recipe category from HTML content and recipe data
+   */
+  protected extractCategory(html: string, title: string, description?: string): string | undefined {
+    console.log('📂 Extracting recipe category from content...');
+    
+    // Try JSON-LD structured data first
+    const jsonLdMatch = html.match(/"recipeCategory":\s*"([^"]+)"/i);
+    if (jsonLdMatch) {
+      const category = this.normalizeCategory(jsonLdMatch[1]);
+      console.log(`✅ Found category in JSON-LD: ${category}`);
+      return category;
+    }
+    
+    // Check meta properties
+    const metaCategory = html.match(/<meta[^>]*property=["']article:section["'][^>]*content=["']([^"']+)["']/i);
+    if (metaCategory) {
+      const category = this.normalizeCategory(metaCategory[1]);
+      console.log(`✅ Found category in meta: ${category}`);
+      return category;
+    }
+    
+    // Analyze title and description for category hints
+    const textToAnalyze = `${title} ${description || ''}`.toLowerCase();
+    
+    // Category mapping for German cooking sites
+    const categoryMappings = [
+      { category: 'Vorspeise', keywords: ['vorspeise', 'appetizer', 'starter', 'antipasti', 'häppchen'] },
+      { category: 'Hauptgericht', keywords: ['hauptgericht', 'hauptspeise', 'dinner', 'mittagessen'] },
+      { category: 'Dessert', keywords: ['dessert', 'nachspeise', 'süßspeise', 'kuchen', 'torte', 'eis', 'pudding'] },
+      { category: 'Suppe', keywords: ['suppe', 'eintopf', 'soup', 'brühe', 'consommé'] },
+      { category: 'Salat', keywords: ['salat', 'salad', 'rohkost'] },
+      { category: 'Beilage', keywords: ['beilage', 'side dish', 'gemüse', 'kartoffel', 'reis', 'nudeln'] },
+      { category: 'Getränk', keywords: ['getränk', 'drink', 'smoothie', 'cocktail', 'saft', 'tee', 'kaffee'] },
+      { category: 'Frühstück', keywords: ['frühstück', 'breakfast', 'müsli', 'pancake', 'french toast'] },
+      { category: 'Snack', keywords: ['snack', 'häppchen', 'fingerfood', 'tapas', 'chips'] },
+      { category: 'Brot & Gebäck', keywords: ['brot', 'brötchen', 'gebäck', 'bread', 'backen'] }
+    ];
+    
+    for (const mapping of categoryMappings) {
+      if (mapping.keywords.some(keyword => textToAnalyze.includes(keyword))) {
+        console.log(`✅ Detected category from content: ${mapping.category}`);
+        return mapping.category;
+      }
+    }
+    
+    console.log('🔄 No category detected, returning undefined');
+    return undefined;
+  }
+
+  /**
+   * Normalize category names to standardized German categories
+   */
+  protected normalizeCategory(category: string): string {
+    const normalized = category.toLowerCase().trim();
+    
+    const categoryMap: { [key: string]: string } = {
+      'appetizer': 'Vorspeise',
+      'starter': 'Vorspeise',
+      'main course': 'Hauptgericht',
+      'main dish': 'Hauptgericht',
+      'entree': 'Hauptgericht',
+      'dessert': 'Dessert',
+      'sweet': 'Dessert',
+      'soup': 'Suppe',
+      'salad': 'Salat',
+      'side dish': 'Beilage',
+      'drink': 'Getränk',
+      'beverage': 'Getränk',
+      'breakfast': 'Frühstück',
+      'snack': 'Snack',
+      'bread': 'Brot & Gebäck',
+      'pastry': 'Brot & Gebäck'
+    };
+    
+    return categoryMap[normalized] || category;
   }
 } 

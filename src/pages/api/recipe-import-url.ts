@@ -73,7 +73,9 @@ export const POST: APIRoute = async ({ request }) => {
       success: true, 
       recipe: createdRecipe,
       extractorUsed: extractor.name,
-      sourceUrl: url
+      sourceUrl: url,
+      imported: 1,
+      recipeId: createdRecipe.id
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

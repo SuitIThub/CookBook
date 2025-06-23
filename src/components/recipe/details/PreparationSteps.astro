@@ -118,13 +118,21 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                             if (!ingredient || !('name' in ingredient)) return null;
                             const quantity = ingredient.quantities[link.selectedQuantityIndex];
                             const wasUsedBefore = usedIngredients.has(link.ingredientId);
-                            let quantityText = '';
+                            let quantityElement = null;
                             if (quantity.amount > 1 && quantity.unit !== '') {
-                              quantityText = ` (${quantity.amount} ${quantity.unit})`;
+                              quantityElement = (
+                                <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
+                                  (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
+                                </span>
+                              );
                             } else if (quantity.amount === 0 && quantity.unit !== '') {
-                              quantityText = ` (${quantity.unit})`;
+                              quantityElement = <span> ({quantity.unit})</span>;
                             } else if (quantity.amount > 1 && quantity.unit === '') {
-                              quantityText = ` (${quantity.amount})`;
+                              quantityElement = (
+                                <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
+                                  (<span class="amount-value">{quantity.amount}</span>)
+                                </span>
+                              );
                             }
                             
                             return (
@@ -133,7 +141,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                                   ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
                                   : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                               }`}>
-                                {ingredient.name}{quantityText}
+                                {ingredient.name}{quantityElement}
                               </span>
                             );
                           }
@@ -204,13 +212,21 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                               if (!ingredient || !('name' in ingredient)) return null;
                               const quantity = ingredient.quantities[link.selectedQuantityIndex];
                               const wasUsedBefore = usedIngredients.has(link.ingredientId);
-                              let quantityText = '';
+                              let quantityElement = null;
                               if (quantity.amount > 1 && quantity.unit !== '') {
-                                quantityText = ` (${quantity.amount} ${quantity.unit})`;
+                                quantityElement = (
+                                  <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
+                                    (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
+                                  </span>
+                                );
                               } else if (quantity.amount === 0 && quantity.unit !== '') {
-                                quantityText = ` (${quantity.unit})`;
+                                quantityElement = <span> ({quantity.unit})</span>;
                               } else if (quantity.amount > 1 && quantity.unit === '') {
-                                quantityText = ` (${quantity.amount})`;
+                                quantityElement = (
+                                  <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
+                                    (<span class="amount-value">{quantity.amount}</span>)
+                                  </span>
+                                );
                               }
                               
                               return (
@@ -219,7 +235,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
                                     : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                                 }`}>
-                                  {ingredient.name}{quantityText}
+                                  {ingredient.name}{quantityElement}
                                 </span>
                               );
                             }

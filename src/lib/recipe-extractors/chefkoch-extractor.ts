@@ -49,6 +49,7 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
       
       if (typeof value === 'string') {
         if (value.startsWith('PT')) {
+          // ISO 8601 duration format (e.g., PT30M, PT1H30M)
           const match = value.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
           if (match) {
             const hours = parseInt(match[1] || '0');
@@ -56,7 +57,12 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
             return hours * 60 + minutes;
           }
         }
+        // Parse other time formats
         return this.parseTimeToMinutes(value);
+      }
+      
+      if (typeof value === 'number') {
+        return value;
       }
       
       return 0;
@@ -149,13 +155,57 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
       }
     }
 
+    // Extract time information with better fallbacks
+    console.log('🕐 Extracting time information from Chefkoch JSON-LD...');
+    let prepTime = getTimeValue(data.prepTime);
+    let cookTime = getTimeValue(data.cookTime);
+    const totalTime = getTimeValue(data.totalTime);
+    
+    if (prepTime > 0) console.log(`✅ Found preparation time in JSON-LD: ${prepTime} minutes`);
+    if (cookTime > 0) console.log(`✅ Found cooking time in JSON-LD: ${cookTime} minutes`);
+    if (totalTime > 0) console.log(`📊 Found total time in JSON-LD: ${totalTime} minutes`);
+    
+    // If no specific prep/cook times, try to extract from total time
+    if (!prepTime && !cookTime && totalTime > 0) {
+      console.log(`⚡ Using total time (${totalTime} min) to estimate prep/cook times`);
+      if (totalTime <= 30) {
+        prepTime = totalTime;
+        console.log(`📝 Short recipe: all ${totalTime} minutes assigned to prep time`);
+      } else {
+        prepTime = Math.floor(totalTime * 0.3); // 30% for prep
+        cookTime = Math.floor(totalTime * 0.7); // 70% for cooking
+        console.log(`📝 Split total time: ${prepTime} min prep + ${cookTime} min cook`);
+      }
+    } else if (prepTime > 0 && !cookTime && totalTime > prepTime) {
+      // Calculate cook time from total - prep
+      cookTime = totalTime - prepTime;
+      console.log(`🧮 Calculated cooking time: ${totalTime} - ${prepTime} = ${cookTime} minutes`);
+    }
+    
+    // Additional time sources to check
+    if (!prepTime && !cookTime) {
+      // Check for performTime (some sites use this)
+      prepTime = getTimeValue(data.performTime);
+      
+      // Check for duration
+      if (!prepTime) {
+        prepTime = getTimeValue(data.duration);
+      }
+    }
+
+    // Extract keywords and category from JSON-LD and HTML
+    const keywords = this.extractKeywordsFromJsonLd(data, html, data.name || 'Chefkoch Recipe', data.description);
+    const category = this.extractCategoryFromJsonLd(data, html, data.name || 'Chefkoch Recipe', data.description);
+
     return {
       title: data.name || 'Chefkoch Recipe',
       description: data.description || `Importiert von: ${url}`,
       servings,
-      preparationTime: getTimeValue(data.prepTime),
-      cookingTime: getTimeValue(data.cookTime),
+      preparationTime: prepTime,
+      cookingTime: cookTime,
       difficulty: this.mapChefkochDifficulty(data.difficulty),
+      keywords,
+      category,
       ingredients: ingredients.filter(Boolean),
       instructions: instructions.filter(Boolean),
       imageUrl,
@@ -300,38 +350,287 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
       servings = parseInt(servingMatch[1]);
     }
     
-    // Extract times
+    // Extract difficulty from HTML
+    const difficulty = this.extractDifficultyFromHtml(html);
+    
+    // Extract times with improved patterns
+    console.log('🕐 Extracting time information from Chefkoch HTML...');
     let prepTime = 0;
     let cookTime = 0;
     
-    const timeRegex = /(\d+)\s*(?:Min|Minute)/gi;
-    const timeMatches = html.match(timeRegex);
-    if (timeMatches) {
-      prepTime = this.parseTimeToMinutes(timeMatches[0]);
-      if (timeMatches.length > 1) {
-        cookTime = this.parseTimeToMinutes(timeMatches[1]);
+    // Pattern 1: Specific time labels
+    const prepTimePatterns = [
+      /(?:Zubereitungszeit|Vorbereitung|Arbeitszeit):\s*\*?\*?(\d+)\s*(?:Min|Minuten)/i,
+      /Arbeitszeit\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
+      /Prep\s*time\s*:\s*(\d+)\s*(?:Min|minutes)/i
+    ];
+    
+    const cookTimePatterns = [
+      /(?:Kochzeit|Backzeit|Garzeit|Bratzeit):\s*\*?\*?(\d+)\s*(?:Min|Minuten)/i,
+      /(?:Koch-\/Backzeit|Ruhezeit):\s*(\d+)\s*(?:Min|Minuten)/i,
+      /(?:Cook|Bake|Roast)\s*time\s*:\s*(\d+)\s*(?:Min|minutes)/i
+    ];
+    
+    // Try to find prep time
+    for (const pattern of prepTimePatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        prepTime = parseInt(match[1]);
+        console.log(`✅ Found preparation time: ${prepTime} minutes`);
+        break;
       }
     }
     
+    // Try to find cook time
+    for (const pattern of cookTimePatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        cookTime = parseInt(match[1]);
+        console.log(`✅ Found cooking time: ${cookTime} minutes`);
+        break;
+      }
+    }
+    
+    // Pattern 2: Look for Chefkoch recipe card time data
+    if (!prepTime && !cookTime) {
+      // Look for time in recipe metadata sections
+      const metaTimePatterns = [
+        /<div[^>]*class[^>]*time[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i,
+        /<span[^>]*class[^>]*time[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i,
+        /<td[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)[\s\S]*?<\/td>/i
+      ];
+      
+      for (const pattern of metaTimePatterns) {
+        const match = html.match(pattern);
+        if (match) {
+          console.log(`Found metadata time: ${match[0]}`);
+          const time = parseInt(match[1]);
+          if (!prepTime) {
+            prepTime = time <= 30 ? time : Math.floor(time * 0.3);
+          } else if (!cookTime) {
+            cookTime = time > 30 ? Math.floor(time * 0.7) : 0;
+          }
+          break;
+        }
+      }
+    }
+    
+    // Pattern 3: General time patterns as fallback
+    if (!prepTime && !cookTime) {
+      const generalTimeRegex = /(\d+)\s*(?:Min|Minute)/gi;
+      const timeMatches = html.match(generalTimeRegex);
+      if (timeMatches && timeMatches.length > 0) {
+        console.log(`Found general time patterns: ${timeMatches.slice(0, 3).join(', ')}`);
+        
+        // Try to assign times intelligently
+        const times = timeMatches.map(match => {
+          const timeMatch = match.match(/(\d+)/);
+          return timeMatch ? parseInt(timeMatch[1]) : 0;
+        }).filter(t => t > 0 && t <= 480); // Filter reasonable cooking times (0-8 hours)
+        
+        if (times.length > 0) {
+          if (times.length === 1) {
+            const totalTime = times[0];
+            if (totalTime <= 30) {
+              prepTime = totalTime;
+              console.log(`📝 Single time found: ${totalTime} minutes assigned to prep`);
+            } else {
+              prepTime = Math.floor(totalTime * 0.3);
+              cookTime = Math.floor(totalTime * 0.7);
+              console.log(`📝 Single time split: ${prepTime} min prep + ${cookTime} min cook`);
+            }
+          } else {
+            // Multiple times found - assign first as prep, second as cook
+            prepTime = times[0];
+            cookTime = times[1];
+            console.log(`📝 Multiple times found: ${prepTime} min prep, ${cookTime} min cook`);
+          }
+        }
+      }
+    }
+    
+    // Pattern 4: Look in meta description
+    if (!prepTime && !cookTime) {
+      const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)/i);
+      if (metaDescMatch) {
+        const metaTimeMatch = metaDescMatch[1].match(/(\d+)\s*(?:Min|Minuten)/i);
+        if (metaTimeMatch) {
+          console.log(`Found time in meta description: ${metaTimeMatch[0]}`);
+          const time = parseInt(metaTimeMatch[1]);
+          prepTime = time <= 30 ? time : Math.floor(time * 0.3);
+          if (time > 30) {
+            cookTime = Math.floor(time * 0.7);
+          }
+        }
+      }
+    }
+    
+    // Extract keywords and category
+    const keywords = this.extractKeywords(html, title, `Recipe imported from Chefkoch: ${url}`);
+    const category = this.extractCategory(html, title, `Recipe imported from Chefkoch: ${url}`);
+
     return {
       title,
       description: `Recipe imported from Chefkoch: ${url}`,
       servings,
       preparationTime: prepTime,
       cookingTime: cookTime,
-      difficulty: 'mittel',
+      difficulty,
+      keywords,
+      category,
       ingredients: ingredients.length > 0 ? ingredients : ['Bitte Zutaten manuell hinzufügen'],
       instructions: instructions.length > 0 ? instructions : ['Bitte Zubereitungsschritte manuell hinzufügen'],
       sourceUrl: url
     };
   }
   
+  private extractDifficultyFromHtml(html: string): 'leicht' | 'mittel' | 'schwer' {
+    console.log('🎯 Extracting difficulty from Chefkoch HTML...');
+    
+    // Pattern 1: Look for specific difficulty indicators in recipe metadata
+    const difficultyPatterns = [
+      /(?:Schwierigkeitsgrad|Difficulty|Schwierigkeit):\s*([^<\n]+)/i,
+      /<span[^>]*class[^>]*difficulty[^>]*>([^<]+)<\/span>/i,
+      /<div[^>]*class[^>]*difficulty[^>]*>([^<]+)<\/div>/i,
+      /(?:simpel|einfach|leicht|mittel|schwer|schwierig)/gi
+    ];
+    
+    for (const pattern of difficultyPatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        console.log(`Found difficulty text: "${match[0]}"`);
+        const difficultyText = match[1] || match[0];
+        const mappedDifficulty = this.mapChefkochDifficulty(difficultyText);
+        console.log(`✅ Mapped difficulty: ${mappedDifficulty}`);
+        return mappedDifficulty;
+      }
+    }
+    
+    // Pattern 2: Look for star ratings or visual difficulty indicators
+    const starPatterns = [
+      /<i[^>]*class[^>]*star[^>]*>/gi,
+      /★+/g,
+      /⭐+/g
+    ];
+    
+    for (const pattern of starPatterns) {
+      const matches = html.match(pattern);
+      if (matches) {
+        const starCount = matches.length;
+        console.log(`Found ${starCount} star indicators`);
+        if (starCount <= 2) return 'leicht';
+        if (starCount >= 4) return 'schwer';
+        return 'mittel';
+      }
+    }
+    
+    // Pattern 3: Check for common German difficulty terms in meta description or content
+    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)/i);
+    if (metaDescMatch) {
+      const metaContent = metaDescMatch[1].toLowerCase();
+      if (metaContent.includes('einfach') || metaContent.includes('simpel') || metaContent.includes('leicht')) {
+        console.log('✅ Found "leicht" in meta description');
+        return 'leicht';
+      }
+      if (metaContent.includes('schwer') || metaContent.includes('schwierig') || metaContent.includes('komplex')) {
+        console.log('✅ Found "schwer" in meta description');
+        return 'schwer';
+      }
+    }
+    
+    console.log('🔄 No difficulty found, defaulting to "mittel"');
+    return 'mittel';
+  }
+
+  private extractKeywordsFromJsonLd(data: any, html: string, title: string, description?: string): string[] {
+    console.log('🏷️ Extracting keywords from Chefkoch JSON-LD...');
+    
+    const keywords: Set<string> = new Set();
+    
+    // Extract from JSON-LD keywords if available
+    if (data.keywords) {
+      if (Array.isArray(data.keywords)) {
+        data.keywords.forEach((keyword: string) => {
+          if (keyword && keyword.trim().length > 2) {
+            keywords.add(keyword.trim());
+          }
+        });
+      } else if (typeof data.keywords === 'string') {
+        data.keywords.split(',').forEach((keyword: string) => {
+          const cleaned = keyword.trim();
+          if (cleaned.length > 2) keywords.add(cleaned);
+        });
+      }
+    }
+    
+    // Extract from recipeCategory in JSON-LD
+    if (data.recipeCategory) {
+      if (Array.isArray(data.recipeCategory)) {
+        data.recipeCategory.forEach((cat: string) => keywords.add(cat.trim()));
+      } else if (typeof data.recipeCategory === 'string') {
+        keywords.add(data.recipeCategory.trim());
+      }
+    }
+    
+    // Extract from recipeCuisine in JSON-LD
+    if (data.recipeCuisine) {
+      if (Array.isArray(data.recipeCuisine)) {
+        data.recipeCuisine.forEach((cuisine: string) => keywords.add(cuisine.trim()));
+      } else if (typeof data.recipeCuisine === 'string') {
+        keywords.add(data.recipeCuisine.trim());
+      }
+    }
+    
+    // Fallback to base extraction method
+    const baseKeywords = this.extractKeywords(html, title, description);
+    baseKeywords.forEach(keyword => keywords.add(keyword));
+    
+    const result = Array.from(keywords).slice(0, 10);
+    console.log(`✅ Extracted ${result.length} keywords from Chefkoch: ${result.join(', ')}`);
+    return result;
+  }
+
+  private extractCategoryFromJsonLd(data: any, html: string, title: string, description?: string): string | undefined {
+    console.log('📂 Extracting category from Chefkoch JSON-LD...');
+    
+    // Try JSON-LD recipeCategory first
+    if (data.recipeCategory) {
+      const category = Array.isArray(data.recipeCategory) 
+        ? data.recipeCategory[0] 
+        : data.recipeCategory;
+      
+      if (category && typeof category === 'string') {
+        const normalized = this.normalizeCategory(category);
+        console.log(`✅ Found category in JSON-LD: ${normalized}`);
+        return normalized;
+      }
+    }
+    
+    // Fallback to base extraction method
+    return this.extractCategory(html, title, description);
+  }
+
   private mapChefkochDifficulty(difficulty: any): 'leicht' | 'mittel' | 'schwer' {
     if (typeof difficulty === 'string') {
       const d = difficulty.toLowerCase();
-      if (d.includes('einfach') || d.includes('leicht')) return 'leicht';
-      if (d.includes('schwer') || d.includes('schwierig')) return 'schwer';
+      if (d.includes('einfach') || d.includes('leicht') || d.includes('simpel')) return 'leicht';
+      if (d.includes('schwer') || d.includes('schwierig') || d.includes('komplex')) return 'schwer';
     }
     return 'mittel';
+  }
+  
+  getCapabilities() {
+    return {
+      supportsIngredientGroups: false,
+      supportsPreparationGroups: false,
+      supportsImages: true,
+      supportsNutrition: false,
+      supportsMetadata: true,
+      supportsTimeExtraction: true,
+      supportsDifficultyExtraction: true,
+      supportsKeywordExtraction: true,
+      supportsCategoryExtraction: true,
+      description: 'Spezialisiert auf Chefkoch.de - Unterstützt strukturierte Rezeptdaten mit JSON-LD und HTML-Fallback, inklusive Zeit-, Schwierigkeits-, Keyword- und Kategorieextraktion'
+    };
   }
 } 

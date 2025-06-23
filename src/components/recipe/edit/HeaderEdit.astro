@@ -42,7 +42,8 @@ const { recipe } = Astro.props;
     </div>
     
     <!-- Metadata -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="space-y-4">
+      <!-- Servings -->
       <div>
         <label for="edit-servings" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Portionen</label>
         <input 
@@ -53,24 +54,21 @@ const { recipe } = Astro.props;
         />
       </div>
       
+      <!-- Time Entries -->
       <div>
-        <label for="edit-prep-time" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Vorbereitung (Min)</label>
-        <input 
-          type="number" 
-          id="edit-prep-time" 
-          value={recipe.metadata.preparationTime || ''}
-          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-        />
-      </div>
-      
-      <div>
-        <label for="edit-cook-time" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Kochzeit (Min)</label>
-        <input 
-          type="number" 
-          id="edit-cook-time" 
-          value={recipe.metadata.cookingTime || ''}
-          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-        />
+        <div class="flex justify-between items-center mb-3">
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Zeitangaben</label>
+          <button 
+            type="button" 
+            id="add-time-entry"
+            class="px-3 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+          >
+            + Zeit hinzufügen
+          </button>
+        </div>
+        <div id="time-entries-container" class="space-y-3">
+          <!-- Time entries will be populated by JavaScript -->
+        </div>
       </div>
       
       <div>
@@ -86,5 +84,168 @@ const { recipe } = Astro.props;
         </select>
       </div>
     </div>
+
+    <!-- Nutrition Data -->
+    <div class="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4">
+      <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Nährwerte pro Portion (optional)</h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label for="edit-calories" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Kalorien (kcal)</label>
+          <input 
+            type="number" 
+            id="edit-calories" 
+            value={recipe.metadata.nutrition?.calories || ''}
+            placeholder="z.B. 350"
+            step="1"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+        </div>
+        
+        <div>
+          <label for="edit-carbohydrates" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Kohlenhydrate (g)</label>
+          <input 
+            type="number" 
+            id="edit-carbohydrates" 
+            value={recipe.metadata.nutrition?.carbohydrates || ''}
+            placeholder="z.B. 45"
+            step="0.1"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+        </div>
+        
+        <div>
+          <label for="edit-protein" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Eiweiß (g)</label>
+          <input 
+            type="number" 
+            id="edit-protein" 
+            value={recipe.metadata.nutrition?.protein || ''}
+            placeholder="z.B. 25"
+            step="0.1"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+        </div>
+        
+        <div>
+          <label for="edit-fat" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fett (g)</label>
+          <input 
+            type="number" 
+            id="edit-fat" 
+            value={recipe.metadata.nutrition?.fat || ''}
+            placeholder="z.B. 12"
+            step="0.1"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+        </div>
+      </div>
+    </div>
   </div>
-</div> 
+</div>
+
+<script define:vars={{ recipe }}>
+  // Time entry management
+  let timeEntryCounter = 0;
+  
+  function createTimeEntry(id = null, label = '', minutes = 30) {
+    const entryId = id || `time-entry-${timeEntryCounter++}`;
+    const container = document.createElement('div');
+    container.className = 'flex gap-3 items-end';
+    container.dataset.timeEntryId = entryId;
+    
+    container.innerHTML = `
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bezeichnung</label>
+        <input 
+          type="text" 
+          class="time-entry-label w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          placeholder="z.B. Kochzeit, Backzeit, Ruhezeit"
+          value="${label}"
+        />
+      </div>
+      <div class="w-24">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Minuten</label>
+        <input 
+          type="number" 
+          class="time-entry-minutes w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          min="1"
+          value="${minutes}"
+        />
+      </div>
+      <button 
+        type="button" 
+        class="remove-time-entry px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+        title="Entfernen"
+      >
+        ×
+      </button>
+    `;
+    
+    // Add remove functionality
+    container.querySelector('.remove-time-entry').addEventListener('click', () => {
+      container.remove();
+    });
+    
+    return container;
+  }
+  
+  // Initialize time entries from existing recipe data
+  function initializeTimeEntries() {
+    const container = document.getElementById('time-entries-container');
+    
+    // Check if recipe has timeEntries (new format)
+    if (recipe.metadata.timeEntries && recipe.metadata.timeEntries.length > 0) {
+      recipe.metadata.timeEntries.forEach(entry => {
+        const timeEntry = createTimeEntry(entry.id, entry.label, entry.minutes);
+        container.appendChild(timeEntry);
+      });
+    } else {
+      // Migration: Convert old format to new format
+      const oldEntries = [];
+      
+      if (recipe.metadata.preparationTime) {
+        oldEntries.push({ label: 'Vorbereitung', minutes: recipe.metadata.preparationTime });
+      }
+      
+      if (recipe.metadata.cookingTime) {
+        oldEntries.push({ label: 'Kochzeit', minutes: recipe.metadata.cookingTime });
+      }
+      
+      // If no old entries, add default ones
+      if (oldEntries.length === 0) {
+        oldEntries.push({ label: 'Vorbereitung', minutes: 15 });
+        oldEntries.push({ label: 'Kochzeit', minutes: 30 });
+      }
+      
+      oldEntries.forEach(entry => {
+        const timeEntry = createTimeEntry(null, entry.label, entry.minutes);
+        container.appendChild(timeEntry);
+      });
+    }
+  }
+  
+  // Add time entry button
+  document.getElementById('add-time-entry').addEventListener('click', () => {
+    const container = document.getElementById('time-entries-container');
+    const timeEntry = createTimeEntry();
+    container.appendChild(timeEntry);
+  });
+  
+  // Get current time entries for saving
+  window.getCurrentTimeEntries = function() {
+    const container = document.getElementById('time-entries-container');
+    const entries = Array.from(container.children).map(entry => {
+      const label = entry.querySelector('.time-entry-label').value.trim();
+      const minutes = parseInt(entry.querySelector('.time-entry-minutes').value) || 0;
+      
+      return {
+        id: entry.dataset.timeEntryId,
+        label: label || 'Unbenannt',
+        minutes: minutes
+      };
+    }).filter(entry => entry.minutes > 0);
+    
+    return entries;
+  };
+  
+  // Initialize on page load
+  document.addEventListener('DOMContentLoaded', initializeTimeEntries);
+</script> 

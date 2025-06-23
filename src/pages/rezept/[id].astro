@@ -5,6 +5,7 @@ import type { Recipe } from '../../types/recipe';
 
 // Import the new components
 import RecipeHeader from '../../components/recipe/details/RecipeHeader.astro';
+import RecipeTags from '../../components/recipe/details/RecipeTags.astro';
 import IngredientsList from '../../components/recipe/details/IngredientsList.astro';
 import PreparationSteps from '../../components/recipe/details/PreparationSteps.astro';
 import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
@@ -32,6 +33,9 @@ try {
 
     <!-- View Mode Content -->
     <div id="view-content" class="space-y-6">
+      <!-- Tags Section -->
+      <RecipeTags recipe={recipe} />
+      
       <!-- Image Gallery -->
       <RecipeImageGallery recipe={recipe} mode="view" />
       

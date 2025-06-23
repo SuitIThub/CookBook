@@ -1,8 +1,21 @@
+export interface TimeEntry {
+  id: string;
+  label: string; // e.g., "Kochzeit", "Backzeit", "Ruhezeit", "Vorbereitungszeit"
+  minutes: number;
+}
+
 export interface RecipeMetadata {
   servings: number;
-  preparationTime: number; // in minutes
-  cookingTime: number; // in minutes
+  timeEntries: TimeEntry[]; // New: flexible time entries
   difficulty: 'leicht' | 'mittel' | 'schwer';
+  nutrition?: NutritionData; // New: optional nutrition data
+}
+
+export interface NutritionData {
+  calories?: number; // kcal per serving
+  carbohydrates?: number; // grams per serving
+  protein?: number; // grams per serving
+  fat?: number; // grams per serving
 }
 
 export interface Quantity {
@@ -62,6 +75,8 @@ export interface Recipe {
   subtitle?: string;
   description?: string;
   metadata: RecipeMetadata;
+  category?: string; // New: recipe category
+  tags?: string[]; // New: recipe tags
   ingredientGroups: IngredientGroup[];
   preparationGroups: PreparationGroup[];
   imageUrl?: string; // Keep for backward compatibility
@@ -92,4 +107,24 @@ export interface Timer {
   remaining: number; // in seconds
   isRunning: boolean;
   isCompleted: boolean;
+}
+
+// Utility functions for time handling
+export function formatTime(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes} Min`;
+  }
+  
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  
+  if (remainingMinutes === 0) {
+    return `${hours} Std`;
+  }
+  
+  return `${hours} Std ${remainingMinutes} Min`;
+}
+
+export function getTotalTime(timeEntries: TimeEntry[]): number {
+  return timeEntries.reduce((total, entry) => total + entry.minutes, 0);
 } 

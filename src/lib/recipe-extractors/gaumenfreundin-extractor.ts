@@ -1,4 +1,5 @@
 import { BaseRecipeExtractor, type ExtractedRecipeData } from './base-extractor';
+import type { NutritionData } from '../../types/recipe';
 
 export class GaumenfreundinExtractor extends BaseRecipeExtractor {
   readonly name = 'Gaumenfreundin';
@@ -70,26 +71,71 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
             const imageUrl = this.extractImageFromJsonLd(recipe);
             console.log('JSON-LD result imageUrl:', imageUrl);
 
-            // Extract nutrition/metadata
-            const totalTime = this.parseTimeToMinutes(recipe.totalTime || recipe.cookTime || '');
-            const prepTime = this.parseTimeToMinutes(recipe.prepTime || '');
+            // Extract nutrition information
+            const nutrition = this.extractNutritionFromJsonLd(recipe);
+            console.log('Extracted nutrition:', nutrition);
+
+            // Extract time information with better fallbacks
+            console.log('🕐 Extracting time information from Gaumenfreundin JSON-LD...');
+            let prepTime = this.parseTimeToMinutes(recipe.prepTime || '');
+            let cookTime = this.parseTimeToMinutes(recipe.cookTime || '');
+            const totalTime = this.parseTimeToMinutes(recipe.totalTime || '');
+            
+            if (prepTime > 0) console.log(`✅ Found preparation time in JSON-LD: ${prepTime} minutes`);
+            if (cookTime > 0) console.log(`✅ Found cooking time in JSON-LD: ${cookTime} minutes`);
+            if (totalTime > 0) console.log(`📊 Found total time in JSON-LD: ${totalTime} minutes`);
+            
+            // If no specific prep/cook times, try to extract from total time
+            if (!prepTime && !cookTime && totalTime > 0) {
+              console.log(`⚡ Using total time (${totalTime} min) to estimate prep/cook times`);
+              if (totalTime <= 30) {
+                prepTime = totalTime;
+                console.log(`📝 Short recipe: all ${totalTime} minutes assigned to prep time`);
+              } else {
+                prepTime = Math.floor(totalTime * 0.3); // 30% for prep
+                cookTime = Math.floor(totalTime * 0.7); // 70% for cooking
+                console.log(`📝 Split total time: ${prepTime} min prep + ${cookTime} min cook`);
+              }
+            } else if (prepTime > 0 && !cookTime && totalTime > prepTime) {
+              // Calculate cook time from total - prep
+              cookTime = totalTime - prepTime;
+              console.log(`🧮 Calculated cooking time: ${totalTime} - ${prepTime} = ${cookTime} minutes`);
+            }
+            
+            // Additional time sources to check
+            if (!prepTime && !cookTime) {
+              // Check for performTime (some sites use this)
+              prepTime = this.parseTimeToMinutes(recipe.performTime || '');
+              
+              // Check for duration
+              if (!prepTime) {
+                prepTime = this.parseTimeToMinutes(recipe.duration || '');
+              }
+            }
 
             // Only return if we actually got ingredients and instructions
             if (ingredients.length > 0 && instructions.length > 0) {
               // Extract title and subtitle from recipe name and description
               const { title, subtitle } = this.extractTitleAndSubtitle(recipe.name, recipe.description);
               
+              // Extract keywords and category from JSON-LD
+              const keywords = this.extractKeywordsFromJsonLd(recipe, title, recipe.description);
+              const category = this.extractCategoryFromJsonLd(recipe, title, recipe.description);
+
               return {
                 title,
                 subtitle,
                 description: this.cleanText(recipe.description || ''),
                 servings: this.extractServings(recipe.recipeYield),
                 preparationTime: prepTime || 15,
-                cookingTime: Math.max(0, totalTime - prepTime),
+                cookingTime: cookTime,
                 difficulty: this.mapDifficulty(recipe.difficulty || ''),
+                keywords,
+                category,
                 ingredients,
                 instructions,
                 imageUrl,
+                nutrition,
                 sourceUrl: ''
               };
             } else {
@@ -139,20 +185,35 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     console.log('HTML result imageUrl:', imageUrl);
 
     // Extract time information
-    const prepTime = this.extractTimeFromHtml(html, 'prep') || 15;
-    const cookTime = this.extractTimeFromHtml(html, 'cook') || 0;
+    console.log('🕐 Extracting time information from Gaumenfreundin HTML...');
+    const prepTime = this.extractTimeFromHtml(html, 'prep');
+    const cookTime = this.extractTimeFromHtml(html, 'cook');
+    
+    if (prepTime > 0) console.log(`✅ Found preparation time in HTML: ${prepTime} minutes`);
+    if (cookTime > 0) console.log(`✅ Found cooking time in HTML: ${cookTime} minutes`);
+
+    // Extract nutrition information
+    const nutrition = this.extractNutritionFromHtml(html);
+    console.log('HTML extracted nutrition:', nutrition);
+
+    // Extract keywords and category from HTML
+    const keywords = this.extractKeywords(html, title, description);
+    const category = this.extractCategory(html, title, description);
 
     return {
       title,
       subtitle,
       description,
       servings: 4, // Default for Gaumenfreundin
-      preparationTime: prepTime,
-      cookingTime: cookTime,
+      preparationTime: prepTime || 15,
+      cookingTime: cookTime || 0,
       difficulty: 'mittel',
+      keywords,
+      category,
       ingredients,
       instructions,
       imageUrl,
+      nutrition,
       sourceUrl: url
     };
   }
@@ -178,27 +239,32 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     const ingredients: string[] = [];
     
     // Look for the Gaumenfreundin recipe card ingredients section
-    // They use specific patterns like "1 kleine rote Zwiebel", "200 g Kochschinken"
+    // They use specific patterns like "1 kleine Rote Zwiebel", "200 g Kochschinken"
     const patterns = [
-      // Look for ingredients in the structured recipe format
-      /(\d+(?:[,\.]\d+)?\s*(?:kleine|große|mittel(?:e|n)?|gehackte|geriebene|geriebener)?\s*(?:rote|weiße|grüne)?\s*[A-Za-zäöüÄÖÜß\s]+)/g,
-      // Look for specific Gaumenfreundin ingredient patterns
-      /(?:&#x25a2;|□)\s*(\d+(?:[,\.]\d+)?\s*(?:g|kg|ml|l|EL|TL|Pck\.?|Dose|Stück|kleine|große|mittel)\s+[^&#<\n]+)/gi,
-      // Alternative pattern for ingredients
-      /(\d+\s*(?:g|kg|ml|l|EL|TL|Pck\.?|Dose|Stück|kleine|große|mittel)\s+[A-Za-zäöüÄÖÜß\s\-–()]+)(?=\s|$|&#)/gi
+      // General ingredient pattern - improved to handle case-insensitive adjectives and colors
+      /(\d+(?:[,\.]\d+)?\s*(?:kleine?|große?|mittel(?:e|n)?|gehackte?|geriebene?[rn]?|frische?[rn]?)\s*(?:rote?[rn]?|weiße?[rn]?|grüne?[rn]?|gelbe?[rn]?|braune?[rn]?|schwarze?[rn]?)?\s*[A-Za-zäöüÄÖÜß\s\-–()]+)/gi,
+      // Pattern for ingredients with units (g, ml, etc.)
+      /(\d+(?:[,\.]\d+)?\s*(?:g|kg|ml|l|EL|TL|Pck\.?|Dose|Stück|Liter|Gramm|Kilogramm|Esslöffel|Teelöffel|Packung|Becher|Tasse)\s+[A-Za-zäöüÄÖÜß\s\-–()]+)/gi,
+      // Pattern for ingredients with size descriptors (kleine, große, etc.)
+      /(\d+\s*(?:kleine?|große?|mittel(?:e|n)?)\s+[A-Za-zäöüÄÖÜß\s\-–()]+)/gi,
+      // Look for specific Gaumenfreundin ingredient patterns with checkboxes
+      /(?:&#x25a2;|□)\s*(\d+(?:[,\.]\d+)?\s*(?:g|kg|ml|l|EL|TL|Pck\.?|Dose|Stück|kleine?|große?|mittel(?:e|n)?)\s+[^&#<\n]+)/gi,
+      // General number + ingredient pattern (catch-all)
+      /(\d+\s+[A-Za-zäöüÄÖÜß\s\-–()]{3,})/gi
     ];
 
     // Try each pattern
     for (const pattern of patterns) {
       const matches = html.match(pattern);
       if (matches) {
+        console.log(`Pattern matches found: ${matches.length}`, matches.slice(0, 5)); // Log first 5 matches
         matches.forEach(match => {
           let cleaned = this.cleanText(match.replace(/&#x25a2;|□/g, '').replace(/<[^>]*>/g, ''));
           
-          // Skip if it's navigation text or too short
-          if (cleaned.length < 5 || 
-              /^(Rezepte|Merkliste|Kochen|Wochenplan|Übersicht|Themen|Kontakt)/i.test(cleaned) ||
-              /^(Super|Perfekt|Herzhaft|Einfache|Blitzschnell)/i.test(cleaned)) {
+          // Skip if it's navigation text, too short, or unwanted content
+          if (cleaned.length < 3 || 
+              /^(Rezepte|Merkliste|Kochen|Wochenplan|Übersicht|Themen|Kontakt|Super|Perfekt|Herzhaft|Einfache|Blitzschnell|Zubereitung|Schwierigkeit|Min|Minuten|Std|Stunden)/i.test(cleaned) ||
+              /^(auf die|in die|für die|mit dem|zum|zur|des|der|das|die|den|dem|ein|eine|eines)/i.test(cleaned)) {
             return;
           }
           
@@ -206,18 +272,26 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
           cleaned = cleaned.replace(/&amp;/g, '&')
                           .replace(/&#32;/g, ' ')
                           .replace(/\s+/g, ' ')
+                          .replace(/^\d+\s*$/, '') // Remove standalone numbers
                           .trim();
           
-          // Only add if it looks like an actual ingredient
-          if (cleaned && /\d/.test(cleaned) && ingredients.indexOf(cleaned) === -1) {
+          // Only add if it looks like an actual ingredient (has number and text, not too long)
+          if (cleaned && 
+              /\d/.test(cleaned) && 
+              cleaned.length >= 3 && 
+              cleaned.length <= 100 &&
+              !ingredients.some(existing => existing.toLowerCase() === cleaned.toLowerCase())) {
+            console.log(`Adding ingredient: "${cleaned}"`);
             ingredients.push(cleaned);
           }
         });
       }
     }
 
-    // If we still don't have ingredients, look for the specific Gaumenfreundin format
-    if (ingredients.length === 0) {
+    // If we still don't have enough ingredients, look for the specific Gaumenfreundin format
+    if (ingredients.length < 3) {
+      console.log('Trying fallback ingredient extraction methods...');
+      
       // Look for the recipe card structure
       const recipeCardMatch = html.match(/<div[^>]*class[^>]*wprm-recipe[^>]*>[\s\S]*?<\/div>/gi);
       if (recipeCardMatch) {
@@ -230,12 +304,42 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
                 listItems.forEach(item => {
                   const text = this.cleanText(item.replace(/<[^>]*>/g, ''));
                   if (text && text.length > 3 && /\d/.test(text)) {
+                    console.log(`Adding fallback ingredient: "${text}"`);
                     ingredients.push(text);
                   }
                 });
               }
             }
           }
+        }
+      }
+
+      // Additional fallback: Look for typical German ingredient patterns anywhere in the text
+      const germanIngredientPatterns = [
+        // Pattern for "1 kleine Rote Zwiebel" type ingredients
+        /(\d+(?:[,\.]\d+)?\s+(?:kleine?[rns]?|große?[rns]?|mittel(?:e|n|s)?|frische?[rns]?|getrocknete?[rns]?)\s+(?:rote?[rns]?|weiße?[rns]?|grüne?[rns]?|gelbe?[rns]?)?\s*(?:Zwiebel[ns]?|Knoblauchzehe[ns]?|Paprika[s]?|Tomate[ns]?|Karotte[ns]?|Möhre[ns]?|Sellerie|Petersilie|Basilikum|Thymian|Rosmarin|Oregano|Dill|Schnittlauch))/gi,
+        // Pattern for measurements + ingredients
+        /(\d+(?:[,\.]\d+)?\s*(?:g|kg|ml|l|EL|TL|Liter|Gramm)\s+[A-Za-zäöüÄÖÜß\s\-–]{3,15}(?:\s|$))/gi,
+        // Pattern for counts + ingredients  
+        /(\d+\s+(?:Stück|Scheibe[ns]?|Blatt|Blätter|Bund|Dose[ns]?|Glas|Packung|Becher)\s+[A-Za-zäöüÄÖÜß\s\-–]{3,15})/gi
+      ];
+
+      for (const pattern of germanIngredientPatterns) {
+        const matches = html.match(pattern);
+        if (matches) {
+          console.log(`German pattern matches found: ${matches.length}`);
+          matches.forEach(match => {
+            const cleaned = this.cleanText(match).trim();
+            if (cleaned && 
+                cleaned.length >= 5 && 
+                cleaned.length <= 80 &&
+                /\d/.test(cleaned) &&
+                !ingredients.some(existing => existing.toLowerCase() === cleaned.toLowerCase()) &&
+                !/^(Rezepte|Merkliste|Kochen|Wochenplan|Übersicht|Themen|Kontakt|Super|Perfekt|Herzhaft|Einfache|Blitzschnell|Zubereitung|Schwierigkeit|Min|Minuten|Std|Stunden)/i.test(cleaned)) {
+              console.log(`Adding German pattern ingredient: "${cleaned}"`);
+              ingredients.push(cleaned);
+            }
+          });
         }
       }
     }
@@ -405,16 +509,95 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
   }
 
   private extractTimeFromHtml(html: string, type: 'prep' | 'cook'): number {
-    const patterns = [
-      /Zubereitung\s+(\d+)\s*Min/i,
-      /Gesamtzeit\s+(\d+)\s*Min/i,
-      /(\d+)\s*Minuten/i
+    // Pattern 1: Specific time labels based on type
+    if (type === 'prep') {
+      const prepPatterns = [
+        /(?:Zubereitungszeit|Vorbereitung|Arbeitszeit):\s*\*?\*?(\d+)\s*(?:Min|Minuten)/i,
+        /Zubereitung\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
+        /Prep\s*time\s*:\s*(\d+)\s*(?:Min|minutes)/i
+      ];
+      
+      for (const pattern of prepPatterns) {
+        const match = html.match(pattern);
+        if (match) {
+          console.log(`Found prep time pattern: ${match[0]}`);
+          return parseInt(match[1]);
+        }
+      }
+    } else if (type === 'cook') {
+      const cookPatterns = [
+        /(?:Kochzeit|Backzeit|Garzeit|Bratzeit):\s*\*?\*?(\d+)\s*(?:Min|Minuten)/i,
+        /(?:Cook|Bake|Roast)\s*time\s*:\s*(\d+)\s*(?:Min|minutes)/i,
+        /Im\s*Ofen\s*(\d+)\s*(?:Min|Minuten)/i
+      ];
+      
+      for (const pattern of cookPatterns) {
+        const match = html.match(pattern);
+        if (match) {
+          console.log(`Found cook time pattern: ${match[0]}`);
+          return parseInt(match[1]);
+        }
+      }
+    }
+    
+    // Pattern 2: Look for Gaumenfreundin specific recipe card time data
+    const recipeCardMatch = html.match(/<div[^>]*class[^>]*wprm-recipe[^>]*>[\s\S]*?<\/div>/gi);
+    if (recipeCardMatch) {
+      for (const card of recipeCardMatch) {
+        // Look for time values in recipe cards
+        const timePatterns = [
+          /<span[^>]*class[^>]*prep[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i,
+          /<span[^>]*class[^>]*cook[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i,
+          /<div[^>]*class[^>]*time[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i
+        ];
+        
+        for (const pattern of timePatterns) {
+          const match = card.match(pattern);
+          if (match) {
+            console.log(`Found recipe card time: ${match[0]}`);
+            return parseInt(match[1]);
+          }
+        }
+      }
+    }
+    
+    // Pattern 3: General time patterns as fallback
+    const generalPatterns = [
+      /Gesamtzeit\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
+      /Zeit\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
+      /Dauer\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
+      /(\d+)\s*(?:Min|Minuten)(?:\s*(?:Zubereitung|Kochen|Backen))?/i
     ];
 
-    for (const pattern of patterns) {
+    for (const pattern of generalPatterns) {
       const match = html.match(pattern);
       if (match) {
-        return parseInt(match[1]);
+        console.log(`Found general time pattern: ${match[0]}`);
+        const time = parseInt(match[1]);
+        
+        // If we found a general time, try to be intelligent about assignment
+        if (type === 'prep' && time <= 30) {
+          return time;
+        } else if (type === 'cook' && time > 30) {
+          return Math.floor(time * 0.7); // 70% for cooking
+        } else if (type === 'prep' && time > 30) {
+          return Math.floor(time * 0.3); // 30% for prep
+        }
+      }
+    }
+    
+    // Pattern 4: Look in meta description
+    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)/i);
+    if (metaDescMatch) {
+      const metaTimeMatch = metaDescMatch[1].match(/(\d+)\s*(?:Min|Minuten)/i);
+      if (metaTimeMatch) {
+        console.log(`Found time in meta description: ${metaTimeMatch[0]}`);
+        const time = parseInt(metaTimeMatch[1]);
+        if (type === 'prep') {
+          return time <= 30 ? time : Math.floor(time * 0.3);
+        } else {
+          return time > 30 ? Math.floor(time * 0.7) : 0;
+        }
       }
     }
 
@@ -457,6 +640,140 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     return 'mittel';
   }
 
+  private extractNutritionFromJsonLd(recipe: any): NutritionData | undefined {
+    if (!recipe.nutrition) return undefined;
+    
+    const nutrition = recipe.nutrition;
+    console.log('JSON-LD nutrition data:', JSON.stringify(nutrition, null, 2));
+    
+    const result: NutritionData = {};
+    
+    // Extract calories
+    if (nutrition.calories || nutrition.energyContent) {
+      const caloriesStr = nutrition.calories || nutrition.energyContent;
+      if (typeof caloriesStr === 'string') {
+        const match = caloriesStr.match(/(\d+(?:[,\.]\d+)?)/);
+        if (match) {
+          result.calories = parseFloat(match[1].replace(',', '.'));
+        }
+      } else if (typeof caloriesStr === 'number') {
+        result.calories = caloriesStr;
+      }
+    }
+    
+    // Extract macronutrients
+    if (nutrition.carbohydrateContent) {
+      const carbStr = nutrition.carbohydrateContent;
+      if (typeof carbStr === 'string') {
+        const match = carbStr.match(/(\d+(?:[,\.]\d+)?)/);
+        if (match) {
+          result.carbohydrates = parseFloat(match[1].replace(',', '.'));
+        }
+      } else if (typeof carbStr === 'number') {
+        result.carbohydrates = carbStr;
+      }
+    }
+    
+    if (nutrition.proteinContent) {
+      const proteinStr = nutrition.proteinContent;
+      if (typeof proteinStr === 'string') {
+        const match = proteinStr.match(/(\d+(?:[,\.]\d+)?)/);
+        if (match) {
+          result.protein = parseFloat(match[1].replace(',', '.'));
+        }
+      } else if (typeof proteinStr === 'number') {
+        result.protein = proteinStr;
+      }
+    }
+    
+    if (nutrition.fatContent) {
+      const fatStr = nutrition.fatContent;
+      if (typeof fatStr === 'string') {
+        const match = fatStr.match(/(\d+(?:[,\.]\d+)?)/);
+        if (match) {
+          result.fat = parseFloat(match[1].replace(',', '.'));
+        }
+      } else if (typeof fatStr === 'number') {
+        result.fat = fatStr;
+      }
+    }
+    
+    // Only return if we found at least some nutrition data
+    if (Object.keys(result).length > 0) {
+      return result;
+    }
+    
+    return undefined;
+  }
+
+  private extractNutritionFromHtml(html: string): NutritionData | undefined {
+    const result: NutritionData = {};
+    
+    // Look for Gaumenfreundin nutrition patterns
+    // They sometimes have nutrition info in specific formats
+    const nutritionPatterns = [
+      // "Kalorien: 450 kcal"
+      /(?:Kalorien|Energie):\s*(\d+(?:[,\.]\d+)?)\s*(?:kcal|cal)/i,
+      // "450 kcal"
+      /(\d+(?:[,\.]\d+)?)\s*kcal/i,
+      // "Kohlenhydrate: 45g"
+      /Kohlenhydrate:\s*(\d+(?:[,\.]\d+)?)\s*g/i,
+      // "Eiweiß: 25g" or "Protein: 25g"
+      /(?:Eiweiß|Protein):\s*(\d+(?:[,\.]\d+)?)\s*g/i,
+      // "Fett: 15g"
+      /Fett:\s*(\d+(?:[,\.]\d+)?)\s*g/i
+    ];
+    
+    // Extract calories
+    const calorieMatch = html.match(nutritionPatterns[0]) || html.match(nutritionPatterns[1]);
+    if (calorieMatch) {
+      result.calories = parseFloat(calorieMatch[1].replace(',', '.'));
+    }
+    
+    // Extract carbohydrates
+    const carbMatch = html.match(nutritionPatterns[2]);
+    if (carbMatch) {
+      result.carbohydrates = parseFloat(carbMatch[1].replace(',', '.'));
+    }
+    
+    // Extract protein
+    const proteinMatch = html.match(nutritionPatterns[3]);
+    if (proteinMatch) {
+      result.protein = parseFloat(proteinMatch[1].replace(',', '.'));
+    }
+    
+    // Extract fat
+    const fatMatch = html.match(nutritionPatterns[4]);
+    if (fatMatch) {
+      result.fat = parseFloat(fatMatch[1].replace(',', '.'));
+    }
+    
+    // Look for nutrition information in recipe cards or structured data
+    const nutritionCardMatch = html.match(/<div[^>]*class[^>]*nutrition[^>]*>[\s\S]*?<\/div>/gi);
+    if (nutritionCardMatch && Object.keys(result).length === 0) {
+      for (const card of nutritionCardMatch) {
+        // Try to extract from structured nutrition cards
+        const valueMatches = card.match(/(\d+(?:[,\.]\d+)?)\s*(?:kcal|g)/gi);
+        if (valueMatches && valueMatches.length >= 4) {
+          // Assume order: calories, carbs, protein, fat (common in German nutrition labels)
+          const values = valueMatches.map(v => parseFloat(v.replace(/[^\d,.]/g, '').replace(',', '.')));
+          if (values[0] && values[0] > 10) result.calories = values[0]; // Calories are usually > 10
+          if (values[1] && values[1] < values[0]) result.carbohydrates = values[1];
+          if (values[2] && values[2] < values[0]) result.protein = values[2];
+          if (values[3] && values[3] < values[0]) result.fat = values[3];
+        }
+      }
+    }
+    
+    // Only return if we found at least some nutrition data
+    if (Object.keys(result).length > 0) {
+      console.log('Found nutrition data:', result);
+      return result;
+    }
+    
+    return undefined;
+  }
+
   /**
    * Extract title and subtitle from recipe name and description
    * Gaumenfreundin often has titles like "Spätzlepfanne – in 15 Minuten fertig!"
@@ -485,5 +802,87 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
 
     // Just return the title without using description as subtitle
     return { title: cleanedName };
+  }
+  
+  private extractKeywordsFromJsonLd(data: any, title: string, description?: string): string[] {
+    console.log('🏷️ Extracting keywords from Gaumenfreundin JSON-LD...');
+    
+    const keywords: Set<string> = new Set();
+    
+    // Extract from JSON-LD keywords if available
+    if (data.keywords) {
+      if (Array.isArray(data.keywords)) {
+        data.keywords.forEach((keyword: string) => {
+          if (keyword && keyword.trim().length > 2) {
+            keywords.add(keyword.trim());
+          }
+        });
+      } else if (typeof data.keywords === 'string') {
+        data.keywords.split(',').forEach((keyword: string) => {
+          const cleaned = keyword.trim();
+          if (cleaned.length > 2) keywords.add(cleaned);
+        });
+      }
+    }
+    
+    // Extract from recipeCategory in JSON-LD
+    if (data.recipeCategory) {
+      if (Array.isArray(data.recipeCategory)) {
+        data.recipeCategory.forEach((cat: string) => keywords.add(cat.trim()));
+      } else if (typeof data.recipeCategory === 'string') {
+        keywords.add(data.recipeCategory.trim());
+      }
+    }
+    
+    // Extract from recipeCuisine in JSON-LD
+    if (data.recipeCuisine) {
+      if (Array.isArray(data.recipeCuisine)) {
+        data.recipeCuisine.forEach((cuisine: string) => keywords.add(cuisine.trim()));
+      } else if (typeof data.recipeCuisine === 'string') {
+        keywords.add(data.recipeCuisine.trim());
+      }
+    }
+    
+    // Fallback to base extraction method
+    const baseKeywords = this.extractKeywords('', title, description);
+    baseKeywords.forEach(keyword => keywords.add(keyword));
+    
+    const result = Array.from(keywords).slice(0, 10);
+    console.log(`✅ Extracted ${result.length} keywords from Gaumenfreundin: ${result.join(', ')}`);
+    return result;
+  }
+
+  private extractCategoryFromJsonLd(data: any, title: string, description?: string): string | undefined {
+    console.log('📂 Extracting category from Gaumenfreundin JSON-LD...');
+    
+    // Try JSON-LD recipeCategory first
+    if (data.recipeCategory) {
+      const category = Array.isArray(data.recipeCategory) 
+        ? data.recipeCategory[0] 
+        : data.recipeCategory;
+      
+      if (category && typeof category === 'string') {
+        const normalized = this.normalizeCategory(category);
+        console.log(`✅ Found category in JSON-LD: ${normalized}`);
+        return normalized;
+      }
+    }
+    
+    // Fallback to base extraction method
+    return this.extractCategory('', title, description);
+  }
+
+  getCapabilities() {
+    return {
+      supportsIngredientGroups: false,
+      supportsPreparationGroups: false,
+      supportsImages: true,
+      supportsNutrition: true,
+      supportsMetadata: true,
+      supportsTimeExtraction: true,
+      supportsKeywordExtraction: true,
+      supportsCategoryExtraction: true,
+      description: 'Spezialisiert auf Gaumenfreundin.de - Unterstützt strukturierte Rezeptdaten, detaillierte Zubereitungsschritte, Nährwerte, Keyword- und Kategorieextraktion'
+    };
   }
 } 

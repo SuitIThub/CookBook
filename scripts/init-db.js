@@ -47,8 +47,10 @@ const sampleRecipes = [
     description: 'Ein cremiges Nudelgericht mit Speck und Ei, ganz ohne Sahne. Dieses traditionelle römische Gericht ist ein wahrer Klassiker der italienischen Küche.',
     metadata: {
       servings: 4,
-      preparationTime: 20,
-      cookingTime: 15,
+      timeEntries: [
+        { id: uuidv4(), label: 'Vorbereitung', minutes: 20 },
+        { id: uuidv4(), label: 'Kochzeit', minutes: 15 }
+      ],
       difficulty: 'mittel'
     },
     ingredientGroups: [

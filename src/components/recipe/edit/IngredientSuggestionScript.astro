@@ -1,0 +1,230 @@
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  initializeIngredientSuggestions();
+});
+
+function initializeIngredientSuggestions() {
+  // Setup for all existing ingredient name inputs
+  setupIngredientSuggestions();
+  
+  // Setup for dynamically added ingredient inputs
+  setupDynamicIngredientSuggestions();
+  
+  // Setup for intermediate ingredient inputs
+  setupIntermediateIngredientSuggestions();
+}
+
+function setupIngredientSuggestions() {
+  // Find all existing ingredient name inputs
+  const inputs = document.querySelectorAll('.ingredient-name-input');
+  inputs.forEach(input => {
+    attachIngredientSuggestionHandlers(input);
+  });
+}
+
+function setupDynamicIngredientSuggestions() {
+  // Watch for dynamically added ingredient inputs
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const inputs = node.querySelectorAll ? node.querySelectorAll('.ingredient-name-input') : [];
+          inputs.forEach(input => {
+            if (!input.hasAttribute('data-suggestion-enabled')) {
+              attachIngredientSuggestionHandlers(input);
+            }
+          });
+        }
+      });
+    });
+  });
+  
+  const container = document.getElementById('ingredients-edit-container');
+  if (container) {
+    observer.observe(container, { childList: true, subtree: true });
+  }
+}
+
+function setupIntermediateIngredientSuggestions() {
+  // Watch for dynamically added intermediate ingredient inputs
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const inputs = node.querySelectorAll ? node.querySelectorAll('.intermediate-name-input') : [];
+          inputs.forEach(input => {
+            if (!input.hasAttribute('data-suggestion-enabled')) {
+              attachIntermediateSuggestionHandlers(input);
+            }
+          });
+        }
+      });
+    });
+  });
+  
+  const preparationContainer = document.getElementById('preparation-edit-container');
+  if (preparationContainer) {
+    observer.observe(preparationContainer, { childList: true, subtree: true });
+  }
+}
+
+function attachIngredientSuggestionHandlers(input) {
+  if (!input || input.hasAttribute('data-suggestion-enabled')) return;
+  
+  input.setAttribute('data-suggestion-enabled', 'true');
+  
+  input.addEventListener('input', (e) => handleIngredientInput(e, 'ingredient'));
+  input.addEventListener('keydown', handleSuggestionKeydown);
+  input.addEventListener('blur', handleSuggestionBlur);
+}
+
+function attachIntermediateSuggestionHandlers(input) {
+  if (!input || input.hasAttribute('data-suggestion-enabled')) return;
+  
+  input.setAttribute('data-suggestion-enabled', 'true');
+  
+  input.addEventListener('input', (e) => handleIngredientInput(e, 'intermediate'));
+  input.addEventListener('keydown', handleSuggestionKeydown);
+  input.addEventListener('blur', handleSuggestionBlur);
+}
+
+async function handleIngredientInput(e, type) {
+  const query = e.target.value.trim();
+  const suggestionContainer = getSuggestionContainer(e.target, type);
+  
+  if (query.length >= 2) {
+    await searchIngredients(query, suggestionContainer, e.target);
+  } else {
+    if (suggestionContainer) suggestionContainer.classList.add('hidden');
+  }
+}
+
+function getSuggestionContainer(input, type) {
+  const parent = input.closest('.relative');
+  if (!parent) return null;
+  
+  const className = type === 'intermediate' ? '.intermediate-suggestions' : '.ingredient-suggestions';
+  return parent.querySelector(className);
+}
+
+function handleSuggestionKeydown(e) {
+  const suggestionContainer = getSuggestionContainer(e.target, getInputType(e.target));
+  if (!suggestionContainer || suggestionContainer.classList.contains('hidden')) return;
+  
+  const suggestions = suggestionContainer.querySelectorAll('button');
+  const currentActive = suggestionContainer.querySelector('.bg-orange-100');
+  
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (currentActive) {
+      const next = currentActive.nextElementSibling;
+      currentActive.classList.remove('bg-orange-100', 'dark:bg-orange-900');
+      if (next) {
+        next.classList.add('bg-orange-100', 'dark:bg-orange-900');
+      } else {
+        suggestions[0]?.classList.add('bg-orange-100', 'dark:bg-orange-900');
+      }
+    } else {
+      suggestions[0]?.classList.add('bg-orange-100', 'dark:bg-orange-900');
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (currentActive) {
+      const prev = currentActive.previousElementSibling;
+      currentActive.classList.remove('bg-orange-100', 'dark:bg-orange-900');
+      if (prev) {
+        prev.classList.add('bg-orange-100', 'dark:bg-orange-900');
+      } else {
+        suggestions[suggestions.length - 1]?.classList.add('bg-orange-100', 'dark:bg-orange-900');
+      }
+    } else {
+      suggestions[suggestions.length - 1]?.classList.add('bg-orange-100', 'dark:bg-orange-900');
+    }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (currentActive) {
+      currentActive.click();
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    suggestionContainer.classList.add('hidden');
+  }
+}
+
+function handleSuggestionBlur(e) {
+  const suggestionContainer = getSuggestionContainer(e.target, getInputType(e.target));
+  
+  // Delay hiding to allow clicking on suggestions
+  setTimeout(() => {
+    if (!suggestionContainer?.contains(document.activeElement)) {
+      if (suggestionContainer) suggestionContainer.classList.add('hidden');
+    }
+  }, 200);
+}
+
+function getInputType(input) {
+  return input.classList.contains('intermediate-name-input') ? 'intermediate' : 'ingredient';
+}
+
+async function searchIngredients(query, suggestionContainer, input) {
+  if (!suggestionContainer) return;
+  
+  try {
+    const response = await fetch(`/api/ingredients?q=${encodeURIComponent(query)}`);
+    const ingredients = await response.json();
+    
+    // Limit to 3 suggestions
+    const limitedIngredients = ingredients.slice(0, 3);
+    
+    if (limitedIngredients.length > 0) {
+      suggestionContainer.innerHTML = '';
+      limitedIngredients.forEach((ingredient, index) => {
+        const suggestion = document.createElement('button');
+        suggestion.type = 'button';
+        suggestion.className = 'block w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-white transition-colors duration-150 border-b border-gray-200 dark:border-gray-600 last:border-b-0';
+        suggestion.textContent = ingredient;
+        
+        // Highlight matching text
+        const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+        const highlightedText = ingredient.replace(regex, '<strong class="text-orange-600 dark:text-orange-400">$1</strong>');
+        suggestion.innerHTML = highlightedText;
+        
+        suggestion.addEventListener('click', () => {
+          input.value = ingredient;
+          input.focus();
+          suggestionContainer.classList.add('hidden');
+          
+          // Trigger change event for ingredient linking update
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        
+        suggestion.addEventListener('mouseenter', () => {
+          // Remove active state from other suggestions
+          suggestionContainer.querySelectorAll('button').forEach(btn => {
+            btn.classList.remove('bg-orange-100', 'dark:bg-orange-900');
+          });
+          // Add active state to current suggestion
+          suggestion.classList.add('bg-orange-100', 'dark:bg-orange-900');
+        });
+        
+        suggestionContainer.appendChild(suggestion);
+      });
+      suggestionContainer.classList.remove('hidden');
+    } else {
+      suggestionContainer.classList.add('hidden');
+    }
+  } catch (error) {
+    console.error('Error searching ingredients:', error);
+    suggestionContainer.classList.add('hidden');
+  }
+}
+
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Make the function available globally for other scripts
+window.initializeIngredientSuggestions = initializeIngredientSuggestions;
+window.attachIngredientSuggestionHandlers = attachIngredientSuggestionHandlers;
+window.attachIntermediateSuggestionHandlers = attachIntermediateSuggestionHandlers;
+</script> 

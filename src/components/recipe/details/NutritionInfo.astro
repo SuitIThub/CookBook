@@ -1,0 +1,128 @@
+---
+import type { NutritionData } from '../../../types/recipe';
+
+interface Props {
+  nutrition: NutritionData;
+}
+
+const { nutrition } = Astro.props;
+
+// Check if we have any nutrition data to display
+const hasNutritionData = nutrition.calories || nutrition.carbohydrates || nutrition.protein || nutrition.fat;
+
+// Nutrition assessment functions
+function assessCalories(calories: number): { symbol: string; color: string; title: string } {
+  if (calories < 200) return { symbol: '⬇️', color: 'text-blue-500', title: 'Niedrig' };
+  if (calories <= 500) return { symbol: '✅', color: 'text-green-500', title: 'Optimal' };
+  if (calories <= 700) return { symbol: '⚠️', color: 'text-yellow-500', title: 'Hoch' };
+  return { symbol: '⬆️', color: 'text-red-500', title: 'Sehr hoch' };
+}
+
+function assessCarbohydrates(carbs: number): { symbol: string; color: string; title: string } {
+  if (carbs < 20) return { symbol: '⬇️', color: 'text-blue-500', title: 'Niedrig' };
+  if (carbs <= 60) return { symbol: '✅', color: 'text-green-500', title: 'Optimal' };
+  if (carbs <= 80) return { symbol: '⚠️', color: 'text-yellow-500', title: 'Hoch' };
+  return { symbol: '⬆️', color: 'text-red-500', title: 'Sehr hoch' };
+}
+
+function assessProtein(protein: number): { symbol: string; color: string; title: string } {
+  if (protein < 10) return { symbol: '⬇️', color: 'text-blue-500', title: 'Niedrig' };
+  if (protein <= 35) return { symbol: '✅', color: 'text-green-500', title: 'Optimal' };
+  if (protein <= 50) return { symbol: '⚠️', color: 'text-yellow-500', title: 'Hoch' };
+  return { symbol: '⬆️', color: 'text-red-500', title: 'Sehr hoch' };
+}
+
+function assessFat(fat: number): { symbol: string; color: string; title: string } {
+  if (fat < 5) return { symbol: '⬇️', color: 'text-blue-500', title: 'Niedrig' };
+  if (fat <= 25) return { symbol: '✅', color: 'text-green-500', title: 'Optimal' };
+  if (fat <= 35) return { symbol: '⚠️', color: 'text-yellow-500', title: 'Hoch' };
+  return { symbol: '⬆️', color: 'text-red-500', title: 'Sehr hoch' };
+}
+---
+
+{hasNutritionData && (
+  <div class="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg border border-green-200 dark:border-green-700 p-4 mb-4">
+    <h3 class="text-lg font-semibold text-green-800 dark:text-green-200 mb-3 flex items-center">
+      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+      </svg>
+      Nährwerte pro Portion
+    </h3>
+    
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {nutrition.calories && (
+        <div class="text-center">
+          <div class="flex items-center justify-center mb-1">
+            <div class="text-2xl font-bold text-orange-600 dark:text-orange-400 mr-2">
+              {nutrition.calories}
+            </div>
+            <span class={`text-lg ${assessCalories(nutrition.calories).color}`} title={assessCalories(nutrition.calories).title}>
+              {assessCalories(nutrition.calories).symbol}
+            </span>
+          </div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">kcal</div>
+        </div>
+      )}
+      
+      {nutrition.carbohydrates && (
+        <div class="text-center">
+          <div class="flex items-center justify-center mb-1">
+            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400 mr-2">
+              {nutrition.carbohydrates}g
+            </div>
+            <span class={`text-lg ${assessCarbohydrates(nutrition.carbohydrates).color}`} title={assessCarbohydrates(nutrition.carbohydrates).title}>
+              {assessCarbohydrates(nutrition.carbohydrates).symbol}
+            </span>
+          </div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Kohlenhydrate</div>
+        </div>
+      )}
+      
+      {nutrition.protein && (
+        <div class="text-center">
+          <div class="flex items-center justify-center mb-1">
+            <div class="text-2xl font-bold text-purple-600 dark:text-purple-400 mr-2">
+              {nutrition.protein}g
+            </div>
+            <span class={`text-lg ${assessProtein(nutrition.protein).color}`} title={assessProtein(nutrition.protein).title}>
+              {assessProtein(nutrition.protein).symbol}
+            </span>
+          </div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Eiweiß</div>
+        </div>
+      )}
+      
+      {nutrition.fat && (
+        <div class="text-center">
+          <div class="flex items-center justify-center mb-1">
+            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mr-2">
+              {nutrition.fat}g
+            </div>
+            <span class={`text-lg ${assessFat(nutrition.fat).color}`} title={assessFat(nutrition.fat).title}>
+              {assessFat(nutrition.fat).symbol}
+            </span>
+          </div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Fett</div>
+        </div>
+      )}
+    </div>
+
+    <!-- Legende -->
+    <div class="mt-4 pt-3 border-t border-green-200 dark:border-green-700">
+      <div class="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap justify-center gap-4">
+        <span class="flex items-center">
+          <span class="text-blue-500 mr-1">⬇️</span> Niedrig
+        </span>
+        <span class="flex items-center">
+          <span class="text-green-500 mr-1">✅</span> Optimal
+        </span>
+        <span class="flex items-center">
+          <span class="text-yellow-500 mr-1">⚠️</span> Hoch
+        </span>
+        <span class="flex items-center">
+          <span class="text-red-500 mr-1">⬆️</span> Sehr hoch
+        </span>
+      </div>
+    </div>
+  </div>
+)} 

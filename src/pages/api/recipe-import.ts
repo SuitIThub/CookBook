@@ -132,7 +132,8 @@ export const POST: APIRoute = async ({ request }) => {
       success: true, 
       imported: createdRecipes.length,
       totalImages: totalImages,
-      recipes: createdRecipes 
+      recipes: createdRecipes,
+      recipeId: createdRecipes.length === 1 ? createdRecipes[0].id : null
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

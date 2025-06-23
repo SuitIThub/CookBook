@@ -1,0 +1,357 @@
+---
+import type { Recipe } from '../../../types/recipe';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+---
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 transition-colors duration-200">
+  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+    Kategorie & Tags
+  </h3>
+  
+  <div class="space-y-4">
+    <!-- Category Selection -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        Kategorie
+      </label>
+      <select 
+        id="recipe-category"
+        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+      >
+        <option value="">Kategorie wählen...</option>
+      </select>
+    </div>
+    
+    <!-- Tags Section -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        Tags
+      </label>
+      <div id="tags-container" class="flex flex-wrap gap-2 min-h-[2.5rem] p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700">
+        <!-- Category will be displayed here -->
+        <!-- Existing tags will be displayed here -->
+        <!-- Add tag placeholder will be here -->
+        <button
+          type="button"
+          id="add-tag-btn"
+          class="inline-flex items-center justify-center w-8 h-8 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors duration-200"
+          title="Tag hinzufügen"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Tag input (hidden by default) -->
+      <div id="tag-input-container" class="hidden mt-2">
+        <div class="relative">
+          <input
+            type="text"
+            id="tag-input"
+            placeholder="Tag eingeben..."
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+          <div class="flex space-x-2 mt-2">
+            <button
+              type="button"
+              id="confirm-tag-btn"
+              class="px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              id="cancel-tag-btn"
+              class="px-3 py-1 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors duration-200"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          
+          <!-- Tag suggestions -->
+          <div id="tag-suggestions" class="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-10 max-h-40 overflow-y-auto">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script define:vars={{ recipe }}>
+  document.addEventListener('DOMContentLoaded', () => {
+    initializeTagsEdit();
+  });
+
+  function initializeTagsEdit() {
+    const categorySelect = document.getElementById('recipe-category');
+    const tagsContainer = document.getElementById('tags-container');
+    const addTagBtn = document.getElementById('add-tag-btn');
+    const tagInputContainer = document.getElementById('tag-input-container');
+    const tagInput = document.getElementById('tag-input');
+    const confirmTagBtn = document.getElementById('confirm-tag-btn');
+    const cancelTagBtn = document.getElementById('cancel-tag-btn');
+    const tagSuggestions = document.getElementById('tag-suggestions');
+    
+    let currentTags = recipe.tags ? [...recipe.tags] : [];
+    let isAddingTag = false;
+    
+    // Load categories
+    loadCategories();
+    
+    // Set initial category
+    if (recipe.category && categorySelect) {
+      categorySelect.value = recipe.category;
+    }
+    
+    // Initial render
+    renderTags();
+    
+    // Event listeners
+    if (categorySelect) {
+      categorySelect.addEventListener('change', handleCategoryChange);
+    }
+    
+    if (addTagBtn) {
+      addTagBtn.addEventListener('click', showTagInput);
+    }
+    
+    if (confirmTagBtn) {
+      confirmTagBtn.addEventListener('click', addTag);
+    }
+    
+    if (cancelTagBtn) {
+      cancelTagBtn.addEventListener('click', hideTagInput);
+    }
+    
+    if (tagInput) {
+      tagInput.addEventListener('input', handleTagInput);
+      tagInput.addEventListener('keydown', handleTagKeydown);
+      tagInput.addEventListener('blur', handleTagBlur);
+    }
+    
+    async function loadCategories() {
+      try {
+        const response = await fetch('/api/categories');
+        const categories = await response.json();
+        
+        if (categorySelect) {
+          // Clear existing options except the first one
+          while (categorySelect.children.length > 1) {
+            categorySelect.removeChild(categorySelect.lastChild);
+          }
+          
+          categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            if (category === recipe.category) {
+              option.selected = true;
+            }
+            categorySelect.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
+    }
+    
+    function handleCategoryChange(e) {
+      const selectedCategory = e.target.value;
+      renderTags();
+      
+      // Update the global recipe data
+      if (window.currentRecipe) {
+        window.currentRecipe.category = selectedCategory;
+      }
+    }
+    
+    function renderTags() {
+      if (!tagsContainer) return;
+      
+      // Clear container except the add button
+      const addButton = tagsContainer.querySelector('#add-tag-btn');
+      tagsContainer.innerHTML = '';
+      
+      // Add category tag if selected
+      const selectedCategory = categorySelect?.value;
+      if (selectedCategory) {
+        const categoryTag = createCategoryTag(selectedCategory);
+        tagsContainer.appendChild(categoryTag);
+      }
+      
+      // Add regular tags
+      currentTags.forEach(tag => {
+        const tagElement = createTagElement(tag, true);
+        tagsContainer.appendChild(tagElement);
+      });
+      
+      // Re-add the add button
+      if (addButton) {
+        tagsContainer.appendChild(addButton);
+      }
+    }
+    
+    function createCategoryTag(category) {
+      const tag = document.createElement('span');
+      tag.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border border-orange-200 dark:border-orange-700';
+      tag.textContent = category;
+      return tag;
+    }
+    
+    function createTagElement(tagText, removable = false) {
+      const tag = document.createElement('span');
+      tag.className = 'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700';
+      
+      const text = document.createElement('span');
+      text.textContent = tagText;
+      tag.appendChild(text);
+      
+      if (removable) {
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'ml-1 text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-100';
+        removeBtn.innerHTML = '×';
+        removeBtn.addEventListener('click', () => removeTag(tagText));
+        tag.appendChild(removeBtn);
+      }
+      
+      return tag;
+    }
+    
+    function removeTag(tagText) {
+      currentTags = currentTags.filter(tag => tag !== tagText);
+      renderTags();
+      
+      // Update the global recipe data
+      if (window.currentRecipe) {
+        window.currentRecipe.tags = currentTags;
+      }
+    }
+    
+    function showTagInput() {
+      if (isAddingTag) return;
+      
+      isAddingTag = true;
+      if (addTagBtn) addTagBtn.style.display = 'none';
+      if (tagInputContainer) tagInputContainer.classList.remove('hidden');
+      if (tagInput) {
+        tagInput.focus();
+        tagInput.value = '';
+      }
+      updateConfirmButton();
+    }
+    
+    function hideTagInput() {
+      isAddingTag = false;
+      if (addTagBtn) addTagBtn.style.display = 'inline-flex';
+      if (tagInputContainer) tagInputContainer.classList.add('hidden');
+      if (tagSuggestions) tagSuggestions.classList.add('hidden');
+      if (tagInput) tagInput.value = '';
+      updateConfirmButton();
+    }
+    
+    function addTag() {
+      const tagText = tagInput?.value.trim();
+      if (!tagText || currentTags.includes(tagText)) return;
+      
+      currentTags.push(tagText);
+      renderTags();
+      hideTagInput();
+      
+      // Update the global recipe data
+      if (window.currentRecipe) {
+        window.currentRecipe.tags = currentTags;
+      }
+    }
+    
+    function handleTagInput(e) {
+      const query = e.target.value.trim();
+      updateConfirmButton();
+      
+      if (query.length > 0) {
+        searchTags(query);
+      } else {
+        if (tagSuggestions) tagSuggestions.classList.add('hidden');
+      }
+    }
+    
+    function handleTagKeydown(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (confirmTagBtn && !confirmTagBtn.disabled) {
+          addTag();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        hideTagInput();
+      }
+    }
+    
+    function handleTagBlur(e) {
+      // Delay hiding to allow clicking on suggestions
+      setTimeout(() => {
+        if (!tagSuggestions?.contains(document.activeElement)) {
+          if (tagSuggestions) tagSuggestions.classList.add('hidden');
+        }
+      }, 200);
+    }
+    
+    function updateConfirmButton() {
+      if (!confirmTagBtn || !tagInput) return;
+      
+      const tagText = tagInput.value.trim();
+      const isValid = tagText.length > 0 && !currentTags.includes(tagText);
+      confirmTagBtn.disabled = !isValid;
+    }
+    
+    async function searchTags(query) {
+      try {
+        const response = await fetch(`/api/tags?q=${encodeURIComponent(query)}`);
+        const tags = await response.json();
+        
+        // Filter out already used tags
+        const availableTags = tags.filter(tag => !currentTags.includes(tag));
+        
+        if (availableTags.length > 0 && tagSuggestions) {
+          tagSuggestions.innerHTML = '';
+          availableTags.forEach(tag => {
+            const suggestion = document.createElement('button');
+            suggestion.type = 'button';
+            suggestion.className = 'block w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-white';
+            suggestion.textContent = tag;
+            suggestion.addEventListener('click', () => {
+              if (tagInput) tagInput.value = tag;
+              updateConfirmButton();
+              tagSuggestions.classList.add('hidden');
+            });
+            tagSuggestions.appendChild(suggestion);
+          });
+          tagSuggestions.classList.remove('hidden');
+        } else {
+          tagSuggestions.classList.add('hidden');
+        }
+      } catch (error) {
+        console.error('Error searching tags:', error);
+      }
+    }
+    
+    // Make functions available globally for the edit form
+    window.getRecipeTagsData = function() {
+      return {
+        category: categorySelect?.value || null,
+        tags: currentTags
+      };
+    };
+  }
+</script> 

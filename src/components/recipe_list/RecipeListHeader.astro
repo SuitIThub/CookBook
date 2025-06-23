@@ -121,9 +121,50 @@ const { recipeCount } = Astro.props;
             Unterstützt: Chefkoch.de, Lecker.de und viele andere Websites mit Rezept-Daten
           </p>
         </div>
-        <div id="url-preview" class="hidden p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-          <div class="text-sm text-gray-600 dark:text-gray-300">
-            <strong>Erkannte Website:</strong> <span id="detected-site" class="text-orange-600 dark:text-orange-400"></span>
+        <div id="url-preview" class="hidden p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div class="space-y-3">
+            <div class="text-sm text-gray-600 dark:text-gray-300">
+              <strong>Erkannte Website:</strong> <span id="detected-site" class="text-orange-600 dark:text-orange-400"></span>
+            </div>
+            
+            <div id="extractor-details" class="text-sm text-gray-600 dark:text-gray-300">
+              <div class="font-medium mb-2">Extraktor-Funktionen:</div>
+              <div class="grid grid-cols-3 gap-2 text-xs">
+                <div class="flex items-center space-x-2">
+                  <span id="ingredient-groups-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Zutatengruppen</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="preparation-groups-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Zubereitungsgruppen</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="images-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Bilder</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="nutrition-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Nährwerte</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="metadata-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Metadaten</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="keywords-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Keywords</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="category-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Kategorie</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="difficulty-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Schwierigkeit</span>
+                </div>
+              </div>
+              <div id="extractor-description" class="mt-2 text-xs text-gray-500 dark:text-gray-400 italic"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -216,12 +257,12 @@ const { recipeCount } = Astro.props;
   });
 
   // URL input
-  recipeUrl?.addEventListener('input', (e) => {
+  recipeUrl?.addEventListener('input', async (e) => {
     const target = e.target as HTMLInputElement;
     const url = target.value.trim();
     
     if (url) {
-      updateUrlPreview(url);
+      await updateUrlPreview(url);
       updateImportButton();
     } else {
       hideUrlPreview();
@@ -279,27 +320,89 @@ const { recipeCount } = Astro.props;
     }
   }
 
-  function updateUrlPreview(url: string) {
+  async function updateUrlPreview(url: string) {
     try {
-      const urlObj = new URL(url);
-      const domain = urlObj.hostname.toLowerCase();
+      new URL(url); // Validate URL format first
       
-      // Find matching extractor
-      const matchingSite = supportedSites.find(site => 
-        site.domains.some((d: string) => 
-          domain === d || domain.endsWith(`.${d}`) || domain.includes(d)
-        )
-      );
+      // Get extractor preview information
+      const response = await fetch('/api/recipe-import-preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ url })
+      });
       
-      if (matchingSite) {
-        if (detectedSite) detectedSite.textContent = matchingSite.name;
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Update extractor name
+        if (detectedSite) {
+          detectedSite.textContent = data.extractorName;
+        }
+        
+        // Update capabilities
+        updateCapabilityIndicator('ingredient-groups-support', data.capabilities.supportsIngredientGroups);
+        updateCapabilityIndicator('preparation-groups-support', data.capabilities.supportsPreparationGroups);
+        updateCapabilityIndicator('images-support', data.capabilities.supportsImages);
+        updateCapabilityIndicator('nutrition-support', data.capabilities.supportsNutrition);
+        updateCapabilityIndicator('metadata-support', data.capabilities.supportsMetadata);
+        updateCapabilityIndicator('keywords-support', data.capabilities.supportsKeywordExtraction);
+        updateCapabilityIndicator('category-support', data.capabilities.supportsCategoryExtraction);
+        updateCapabilityIndicator('difficulty-support', data.capabilities.supportsDifficultyExtraction);
+        
+        // Update description
+        const descriptionElement = document.getElementById('extractor-description');
+        if (descriptionElement) {
+          descriptionElement.textContent = data.capabilities.description;
+        }
+        
         urlPreview?.classList.remove('hidden');
       } else {
-        if (detectedSite) detectedSite.textContent = 'Allgemeine Website (JSON-LD Fallback)';
+        // Fallback to simple domain detection
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname.toLowerCase();
+        
+        const matchingSite = supportedSites.find(site => 
+          site.domains.some((d: string) => 
+            domain === d || domain.endsWith(`.${d}`) || domain.includes(d)
+          )
+        );
+        
+        if (detectedSite) {
+          detectedSite.textContent = matchingSite ? matchingSite.name : 'Allgemeine Website (JSON-LD Fallback)';
+        }
+        
+        // Set default capabilities for fallback
+        updateCapabilityIndicator('ingredient-groups-support', false);
+        updateCapabilityIndicator('preparation-groups-support', false);
+        updateCapabilityIndicator('images-support', true);
+        updateCapabilityIndicator('nutrition-support', false);
+        updateCapabilityIndicator('metadata-support', true);
+        updateCapabilityIndicator('keywords-support', true);
+        updateCapabilityIndicator('category-support', true);
+        updateCapabilityIndicator('difficulty-support', false);
+        
+        const descriptionElement = document.getElementById('extractor-description');
+        if (descriptionElement) {
+          descriptionElement.textContent = 'Basis-Funktionalität verfügbar';
+        }
+        
         urlPreview?.classList.remove('hidden');
       }
     } catch {
       hideUrlPreview();
+    }
+  }
+  
+  function updateCapabilityIndicator(elementId: string, isSupported: boolean) {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.className = `w-3 h-3 rounded-full ${
+        isSupported 
+          ? 'bg-green-500' 
+          : 'bg-gray-400'
+      }`;
     }
   }
 
@@ -323,8 +426,16 @@ const { recipeCount } = Astro.props;
 
       if (response.ok) {
         const imageInfo = result.totalImages ? ` (mit ${result.totalImages} Bild(ern))` : '';
-        alert(`Erfolgreich ${result.imported} Rezept(e) importiert${imageInfo}!`);
-        window.location.reload();
+        
+        if (result.imported === 1 && result.recipeId) {
+          // Single recipe imported - redirect to recipe page
+          alert(`Erfolgreich Rezept importiert${imageInfo}!`);
+          window.location.href = `/rezept/${result.recipeId}`;
+        } else {
+          // Multiple recipes imported - stay on recipe list
+          alert(`Erfolgreich ${result.imported} Rezept(e) importiert${imageInfo}!`);
+          window.location.reload();
+        }
       } else {
         alert(`Import fehlgeschlagen: ${result.error}`);
       }
@@ -358,8 +469,9 @@ const { recipeCount } = Astro.props;
       const result = await response.json();
 
       if (response.ok) {
+        // URL import always imports a single recipe - redirect to recipe page
         alert(`Erfolgreich Rezept "${result.recipe.title}" importiert mit ${result.extractorUsed}!`);
-        window.location.reload();
+        window.location.href = `/rezept/${result.recipeId}`;
       } else {
         alert(`Import fehlgeschlagen: ${result.error}`);
       }

@@ -1,11 +1,33 @@
 ---
 import type { Recipe } from '../../../types/recipe';
+import NutritionInfo from './NutritionInfo.astro';
 
 interface Props {
   recipe: Recipe;
 }
 
 const { recipe } = Astro.props;
+
+// Helper function to format time
+function formatTime(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes} Min`;
+  }
+  
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  
+  if (remainingMinutes === 0) {
+    return `${hours} Std`;
+  }
+  
+  return `${hours} Std ${remainingMinutes} Min`;
+}
+
+// Helper function to calculate total time
+function getTotalTime(timeEntries: any[]): number {
+  return timeEntries.reduce((total, entry) => total + entry.minutes, 0);
+}
 ---
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 overflow-hidden transition-colors duration-200">
@@ -123,6 +145,11 @@ const { recipe } = Astro.props;
       </div>
     </div>
 
+    <!-- Nutrition Information -->
+    {recipe.metadata.nutrition && (
+      <NutritionInfo nutrition={recipe.metadata.nutrition} />
+    )}
+
     <!-- Metadata -->
     <div class="grid grid-cols-1 portrait:grid-cols-2 landscape:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-600">
       {recipe.metadata.servings && (
@@ -144,18 +171,29 @@ const { recipe } = Astro.props;
           <div class="text-sm text-gray-600 dark:text-gray-400">Portionen</div>
         </div>
       )}
-      {recipe.metadata.preparationTime && (
+      
+      <!-- Individual Time Entries -->
+      {recipe.metadata.timeEntries && recipe.metadata.timeEntries.length > 0 && (
+        recipe.metadata.timeEntries.map((timeEntry) => (
+          <div class="text-center">
+            <div class="text-2xl font-bold text-blue-500">
+              {formatTime(timeEntry.minutes)}
+            </div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">{timeEntry.label}</div>
+          </div>
+        ))
+      )}
+      
+      <!-- Total Time (only show if there are multiple time entries) -->
+      {recipe.metadata.timeEntries && recipe.metadata.timeEntries.length > 1 && (
         <div class="text-center">
-          <div class="text-2xl font-bold text-blue-500">{recipe.metadata.preparationTime}</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">Min Vorbereitung</div>
+          <div class="text-2xl font-bold text-purple-500">
+            {formatTime(getTotalTime(recipe.metadata.timeEntries))}
+          </div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Gesamtzeit</div>
         </div>
       )}
-      {recipe.metadata.cookingTime && (
-        <div class="text-center">
-          <div class="text-2xl font-bold text-red-500">{recipe.metadata.cookingTime}</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">Min Kochen</div>
-        </div>
-      )}
+      
       {recipe.metadata.difficulty && (
         <div class="text-center">
           <div class={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
