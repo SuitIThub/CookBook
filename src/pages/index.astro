@@ -33,4 +33,51 @@ try {
       <EmptyState />
     )}
   </div>
+  
+  <script>
+    // Handle individual recipe export buttons
+    document.addEventListener('DOMContentLoaded', () => {
+      // Export dropdown functionality for individual recipes
+      const exportBtns = document.querySelectorAll('.export-recipe-btn');
+      
+      exportBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const menu = btn.parentElement?.querySelector('.export-menu');
+          
+          // Close all other menus
+          document.querySelectorAll('.export-menu').forEach(m => {
+            if (m !== menu) m.classList.add('hidden');
+          });
+          
+          // Toggle current menu
+          menu?.classList.toggle('hidden');
+        });
+      });
+      
+      // Close dropdowns when clicking outside
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.export-menu').forEach(menu => {
+          menu.classList.add('hidden');
+        });
+      });
+      
+      // Handle export clicks
+      document.querySelectorAll('.export-json').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const recipeId = btn.getAttribute('data-recipe-id');
+          window.location.href = `/api/recipe-export?id=${recipeId}&format=json`;
+          btn.closest('.export-menu')?.classList.add('hidden');
+        });
+      });
+      
+      document.querySelectorAll('.export-rcb').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const recipeId = btn.getAttribute('data-recipe-id');
+          window.location.href = `/api/recipe-export?id=${recipeId}&format=rcb`;
+          btn.closest('.export-menu')?.classList.add('hidden');
+        });
+      });
+    });
+  </script>
 </Layout>

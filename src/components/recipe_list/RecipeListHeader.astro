@@ -12,6 +12,43 @@ const { recipeCount } = Astro.props;
     <p class="text-muted mt-1">{recipeCount} Rezepte gefunden</p>
   </div>
   <div class="flex space-x-3">
+    <!-- Import Button -->
+    <button id="import-btn" class="btn btn-secondary flex items-center space-x-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+      </svg>
+      <span>Importieren</span>
+    </button>
+    
+    <!-- Export Dropdown -->
+    <div class="relative export-dropdown">
+      <button id="export-btn" class="btn btn-secondary flex items-center space-x-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <span>Exportieren</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="export-menu" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 hidden z-10">
+        <div class="py-1">
+          <button id="export-json" class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            JSON (ohne Bilder)
+          </button>
+          <button id="export-rcb" class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+            </svg>
+            Vollständig (mit Bildern)
+          </button>
+        </div>
+      </div>
+    </div>
+    
     <button class="btn btn-secondary flex items-center space-x-2">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -25,4 +62,142 @@ const { recipeCount } = Astro.props;
       <span>Filter</span>
     </button>
   </div>
-</div> 
+</div>
+
+<!-- Hidden file input for import -->
+<input type="file" id="import-file" accept=".json,.rcb" style="display: none;">
+
+<!-- Import/Export Modal -->
+<div id="import-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+  <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+    <h3 class="text-lg font-medium mb-4">Rezepte importieren</h3>
+    <div id="import-content">
+      <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3-3m-3 3l3 3m-3-3H21" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="mt-4">
+          <label for="file-upload" class="cursor-pointer">
+            <span class="mt-2 block text-sm font-medium text-gray-900">
+              Datei auswählen oder hier ablegen
+            </span>
+            <span class="mt-1 block text-xs text-gray-500">
+              JSON oder RCB Dateien (.json, .rcb)
+            </span>
+          </label>
+          <input id="file-upload" name="file-upload" type="file" accept=".json,.rcb" class="sr-only">
+        </div>
+      </div>
+    </div>
+    <div class="mt-6 flex justify-end space-x-3">
+      <button id="cancel-import" class="btn btn-secondary">Abbrechen</button>
+      <button id="confirm-import" class="btn btn-primary" disabled>Importieren</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Export functionality
+  const exportBtn = document.getElementById('export-btn');
+  const exportMenu = document.getElementById('export-menu');
+  const exportJsonBtn = document.getElementById('export-json');
+  const exportRcbBtn = document.getElementById('export-rcb');
+
+  // Toggle export dropdown
+  exportBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exportMenu?.classList.toggle('hidden');
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', () => {
+    exportMenu?.classList.add('hidden');
+  });
+
+  // Export handlers
+  exportJsonBtn?.addEventListener('click', () => {
+    window.location.href = '/api/recipe-export?format=json';
+    exportMenu?.classList.add('hidden');
+  });
+
+  exportRcbBtn?.addEventListener('click', () => {
+    window.location.href = '/api/recipe-export?format=rcb';
+    exportMenu?.classList.add('hidden');
+  });
+
+  // Import functionality
+  const importBtn = document.getElementById('import-btn');
+  const importModal = document.getElementById('import-modal');
+  const importFile = document.getElementById('import-file');
+  const fileUpload = document.getElementById('file-upload');
+  const cancelImport = document.getElementById('cancel-import');
+  const confirmImport = document.getElementById('confirm-import');
+  let selectedFile: File | null = null;
+
+  importBtn?.addEventListener('click', () => {
+    importModal?.classList.remove('hidden');
+  });
+
+  cancelImport?.addEventListener('click', () => {
+    importModal?.classList.add('hidden');
+    selectedFile = null;
+    updateImportButton();
+  });
+
+  fileUpload?.addEventListener('change', (e) => {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files[0]) {
+      selectedFile = target.files[0];
+      updateImportButton();
+      updateFileDisplay();
+    }
+  });
+
+  confirmImport?.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      const response = await fetch('/api/recipe-import', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        const imageInfo = result.totalImages ? ` (mit ${result.totalImages} Bild(ern))` : '';
+        alert(`Erfolgreich ${result.imported} Rezept(e) importiert${imageInfo}!`);
+        window.location.reload();
+      } else {
+        alert(`Import fehlgeschlagen: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`Import fehlgeschlagen: ${error}`);
+    }
+
+    importModal?.classList.add('hidden');
+    selectedFile = null;
+    updateImportButton();
+  });
+
+  function updateImportButton() {
+    if (confirmImport) {
+      (confirmImport as HTMLButtonElement).disabled = !selectedFile;
+    }
+  }
+
+  function updateFileDisplay() {
+    const content = document.getElementById('import-content');
+    if (content && selectedFile) {
+      content.innerHTML = `
+        <div class="text-center">
+          <div class="text-sm font-medium text-gray-900">${selectedFile.name}</div>
+          <div class="text-xs text-gray-500">${(selectedFile.size / 1024).toFixed(1)} KB</div>
+        </div>
+      `;
+    }
+  }
+</script> 
