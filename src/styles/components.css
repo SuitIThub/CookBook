@@ -169,6 +169,16 @@
   #mobile-menu.hidden {
     display: none !important;
   }
+  
+  /* Add bottom padding to main content when timer footer is visible */
+  body:has(#timer-footer:not(.hidden)) main {
+    padding-bottom: 80px; /* Space for collapsed timer footer */
+  }
+  
+  /* Add more bottom padding when timer footer is expanded */
+  body:has(#timer-footer:not(.hidden) #timer-footer-expanded:not(.hidden)) main {
+    padding-bottom: calc(100vh - 300px); /* Dynamic space for expanded footer */
+  }
 }
 
 /* Recipe header mobile responsive styles */
@@ -327,6 +337,17 @@
 @media (orientation: landscape) {
   .timer-sidebar-active main {
     padding-right: 20rem; /* w-80 equivalent */
+  }
+}
+
+/* Fallback for timer footer padding in portrait mode */
+@media (orientation: portrait) {
+  .timer-footer-active main {
+    padding-bottom: 80px; /* Space for collapsed timer footer */
+  }
+  
+  .timer-footer-expanded-active main {
+    padding-bottom: 40vh; /* Reasonable fallback for expanded footer */
   }
 }
 

@@ -3,9 +3,11 @@
 ---
 
 <!-- Ingredient Linking Modal -->
-<div id="ingredient-link-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-    <div class="p-6">
+<div id="ingredient-link-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden">
+</div>
+
+<div id="ingredient-link-modal-content" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90vw] sm:w-[85vw] md:w-[75vw] lg:w-[65vw] xl:w-[55vw] max-w-2xl max-h-[85vh] overflow-y-auto hidden">
+          <div class="p-4 sm:p-6">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
           Zutaten manuell verlinken
@@ -23,17 +25,17 @@
         </p>
         
         <!-- Regular Ingredients Section -->
-        <div class="mb-6">
+        <div class="mb-4">
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Normale Zutaten</h4>
-          <div id="regular-ingredient-list" class="space-y-2 max-h-80 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded p-2">
+          <div id="regular-ingredient-list" class="space-y-2 max-h-48 sm:max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded p-2">
             <!-- Regular ingredients will be populated dynamically -->
           </div>
         </div>
         
         <!-- Intermediate Ingredients Section -->
-        <div>
+        <div class="mb-4">
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Zwischenzutaten (aus vorherigen Schritten)</h4>
-          <div id="intermediate-ingredient-list" class="space-y-2 max-h-80 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded p-2">
+          <div id="intermediate-ingredient-list" class="space-y-2 max-h-48 sm:max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded p-2">
             <!-- Intermediate ingredients will be populated dynamically -->
           </div>
         </div>
@@ -47,8 +49,6 @@
           Verknüpfungen speichern
         </button>
       </div>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -530,12 +530,13 @@ class IngredientLinker {
     this.currentStepId = stepElement.dataset.stepId || null;
     
     const modal = document.getElementById('ingredient-link-modal');
+    const modalContent = document.getElementById('ingredient-link-modal-content');
     const regularIngredientList = document.getElementById('regular-ingredient-list');
     const intermediateIngredientList = document.getElementById('intermediate-ingredient-list');
     
-    console.log('Modal elements found:', { modal: !!modal, regularList: !!regularIngredientList, intermediateList: !!intermediateIngredientList });
+    console.log('Modal elements found:', { modal: !!modal, modalContent: !!modalContent, regularList: !!regularIngredientList, intermediateList: !!intermediateIngredientList });
     
-    if (!modal || !regularIngredientList || !intermediateIngredientList || !this.currentStepId) return;
+    if (!modal || !modalContent || !regularIngredientList || !intermediateIngredientList || !this.currentStepId) return;
 
     // Get current linked ingredients for this step
     const currentLinks = this.linkedIngredients.get(this.currentStepId) || [];
@@ -680,12 +681,17 @@ class IngredientLinker {
 
     // Show modal
     modal.classList.remove('hidden');
+    modalContent.classList.remove('hidden');
   }
 
   closeModal(): void {
     const modal = document.getElementById('ingredient-link-modal');
+    const modalContent = document.getElementById('ingredient-link-modal-content');
     if (modal) {
       modal.classList.add('hidden');
+    }
+    if (modalContent) {
+      modalContent.classList.add('hidden');
     }
     this.currentStepElement = null;
     this.currentStepId = null;

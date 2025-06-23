@@ -196,12 +196,17 @@
       if (isLandscape) {
         sidebar?.classList.remove('hidden');
         footer?.classList.add('hidden');
+        // Remove footer fallback classes when in landscape
+        document.body.classList.remove('timer-footer-active');
+        document.body.classList.remove('timer-footer-expanded-active');
         // Start collapsed by default in landscape mode
         this.collapseSidebar();
       } else {
         sidebar?.classList.add('hidden');
         footer?.classList.remove('hidden');
         document.body.classList.remove('timer-sidebar-active');
+        // Add fallback class for timer footer being active in portrait
+        document.body.classList.add('timer-footer-active');
         // Keep footer collapsed by default in portrait mode
         this.isExpanded = false;
         const expanded = document.getElementById('timer-footer-expanded');
@@ -209,6 +214,8 @@
         if (expanded && chevron) {
           expanded.classList.add('hidden');
           chevron.style.transform = 'rotate(0deg)';
+          // Remove expanded class if we're collapsing
+          document.body.classList.remove('timer-footer-expanded-active');
         }
       }
     }
@@ -663,9 +670,13 @@
         if (this.isExpanded) {
           expanded.classList.remove('hidden');
           chevron.style.transform = 'rotate(180deg)';
+          // Add fallback class for expanded footer
+          document.body.classList.add('timer-footer-expanded-active');
         } else {
           expanded.classList.add('hidden');
           chevron.style.transform = 'rotate(0deg)';
+          // Remove fallback class for expanded footer
+          document.body.classList.remove('timer-footer-expanded-active');
         }
       }
     }
@@ -745,6 +756,8 @@
         if (expanded && chevron) {
           expanded.classList.remove('hidden');
           chevron.style.transform = 'rotate(180deg)';
+          // Add fallback class for expanded footer
+          document.body.classList.add('timer-footer-expanded-active');
         }
       }
     }
@@ -774,7 +787,7 @@
       document.body.appendChild(overlay);
       
       const modal = document.createElement('div');
-      modal.className = 'add-timer-modal fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4';
+      modal.className = 'add-timer-modal fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-2xl p-4 sm:p-6 w-[95vw] max-w-xs sm:max-w-sm md:max-w-md max-h-[90vh] overflow-y-auto';
       
       modal.innerHTML = `
         <div class="mb-4">
@@ -817,29 +830,29 @@
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Schnellauswahl
             </label>
-            <div class="grid grid-cols-4 gap-2">
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="1">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="1">
                 1 Min
               </button>
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="2">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="2">
                 2 Min
               </button>
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="5">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="5">
                 5 Min
               </button>
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="10">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="10">
                 10 Min
               </button>
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="20">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="20">
                 20 Min
               </button>
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="25">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="25">
                 25 Min
               </button>
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="30">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="30">
                 30 Min
               </button>
-              <button class="time-preset-btn px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-sm font-medium transition-colors" data-minutes="60">
+              <button class="time-preset-btn px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-orange-100 dark:hover:bg-orange-900 text-gray-700 dark:text-gray-300 hover:text-orange-700 dark:hover:text-orange-300 rounded text-xs sm:text-sm font-medium transition-colors" data-minutes="60">
                 1 Std
               </button>
             </div>
@@ -946,7 +959,7 @@
       document.body.appendChild(overlay);
       
       const notification = document.createElement('div');
-      notification.className = 'expired-timer-notification fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border-2 border-red-500 rounded-lg shadow-2xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto';
+      notification.className = 'expired-timer-notification fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border-2 border-red-500 rounded-lg shadow-2xl p-4 sm:p-6 w-[95vw] max-w-xs sm:max-w-sm md:max-w-lg max-h-[90vh] overflow-y-auto';
       
       // Build context information with full step description
       let contextInfo = '';
@@ -981,23 +994,23 @@
         ${contextInfo}
         
         <div class="space-y-3">
-          <div class="grid grid-cols-3 gap-2">
-            <button class="extend-expired-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="1">
+          <div class="grid grid-cols-3 gap-1 sm:gap-2">
+            <button class="extend-expired-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="1">
               +1 Min
             </button>
-            <button class="extend-expired-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="5">
+            <button class="extend-expired-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="5">
               +5 Min
             </button>
-            <button class="extend-expired-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="10">
+            <button class="extend-expired-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="10">
               +10 Min
             </button>
           </div>
           
           <div class="grid grid-cols-2 gap-2">
-            <button class="restart-expired-timer-btn px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+            <button class="restart-expired-timer-btn px-3 sm:px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}">
               Neu starten
             </button>
-            <button class="close-expired-timer-btn px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+            <button class="close-expired-timer-btn px-3 sm:px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}">
               Schließen
             </button>
           </div>
@@ -1165,7 +1178,7 @@
       document.body.appendChild(overlay);
       
       const notification = document.createElement('div');
-      notification.className = 'timer-complete-notification fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border-2 border-orange-500 rounded-lg shadow-2xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto';
+      notification.className = 'timer-complete-notification fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border-2 border-orange-500 rounded-lg shadow-2xl p-4 sm:p-6 w-[95vw] max-w-xs sm:max-w-sm md:max-w-lg max-h-[90vh] overflow-y-auto';
       
       // Build context information with full step description
       let contextInfo = '';
@@ -1199,23 +1212,23 @@
         ${contextInfo}
         
         <div class="space-y-3">
-          <div class="grid grid-cols-3 gap-2">
-            <button class="extend-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="1">
+          <div class="grid grid-cols-3 gap-1 sm:gap-2">
+            <button class="extend-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="1">
               +1 Min
             </button>
-            <button class="extend-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="5">
+            <button class="extend-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="5">
               +5 Min
             </button>
-            <button class="extend-timer-btn px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="10">
+            <button class="extend-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="10">
               +10 Min
             </button>
           </div>
           
           <div class="grid grid-cols-2 gap-2">
-            <button class="restart-timer-btn px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+            <button class="restart-timer-btn px-3 sm:px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}">
               Neu starten
             </button>
-            <button class="close-timer-btn px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded font-medium transition-colors" data-timer-id="${timer.id}">
+            <button class="close-timer-btn px-3 sm:px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}">
               Schließen
             </button>
           </div>

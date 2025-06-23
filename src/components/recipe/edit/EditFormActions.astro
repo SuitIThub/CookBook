@@ -1,26 +1,26 @@
 <!-- Save/Cancel/Delete Buttons -->
-<div class="flex justify-between items-center">
+<div class="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
   <button 
     type="button" 
     id="delete-recipe-btn"
-    class="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors flex items-center space-x-2"
+    class="order-3 sm:order-1 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors flex items-center justify-center space-x-2 w-full sm:w-auto"
   >
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
     </svg>
     <span>Rezept löschen</span>
   </button>
-  <div class="flex space-x-3">
+  <div class="order-1 sm:order-2 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
     <button 
       type="button" 
       id="cancel-edit-btn"
-      class="px-6 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+      class="px-6 py-3 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors w-full sm:w-auto"
     >
       Abbrechen
     </button>
     <button 
       type="submit"
-      class="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors"
+      class="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors w-full sm:w-auto"
     >
       Änderungen speichern
     </button>
