@@ -641,8 +641,7 @@ const images = recipe.images || [];
     }
 
     async function uploadFromUrl(url: string, recipeId: string) {
-      // For URL uploads, we'll need to create a new API endpoint or modify the existing one
-      // For now, let's use a simple approach of creating a RecipeImage object directly
+      // Create a RecipeImage object for the URL
       const imageId = `url-${Date.now()}`;
       const newImage = {
         id: imageId,
@@ -659,14 +658,13 @@ const images = recipe.images || [];
         const recipe = await response.json();
         const updatedImages = [...(recipe.images || []), newImage];
         
-        // Update recipe with new image
-        const updateResponse = await fetch('/api/recipes', {
+        // Update recipe with new image using correct query parameter syntax
+        const updateResponse = await fetch(`/api/recipes?id=${recipeId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            id: recipeId,
             images: updatedImages
           })
         });
@@ -678,10 +676,12 @@ const images = recipe.images || [];
             window.location.reload();
           }, 1000);
         } else {
-          throw new Error('Failed to update recipe');
+          const errorData = await updateResponse.json();
+          throw new Error(errorData.error || 'Failed to update recipe');
         }
       } catch (error) {
-        showNotification('Fehler beim Hinzufügen des Bildes', 'error');
+        console.error('Error uploading from URL:', error);
+        showNotification('Fehler beim Hinzufügen des Bildes: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
         throw error;
       }
     }
