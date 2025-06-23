@@ -60,8 +60,36 @@ try {
         const recipeName = target.dataset.recipeName || recipe.title;
         const stepDescription = target.dataset.stepDescription || '';
         const stepId = target.dataset.stepId || '';
-        const minutes = parseInt(timeText.match(/\d+/)?.[0] || '0');
-        const seconds = minutes * 60;
+        
+        // Parse time string correctly to handle hours and minutes
+        function parseTimeToSeconds(timeStr) {
+          const str = timeStr.toLowerCase();
+          let totalMinutes = 0;
+          
+          // Match hours (Stunden, Std.)
+          const hourMatch = str.match(/(\d+)\s*(?:stunden?|std\.?)/i);
+          if (hourMatch) {
+            totalMinutes += parseInt(hourMatch[1]) * 60;
+          }
+          
+          // Match minutes (Minuten, Min.)
+          const minuteMatch = str.match(/(\d+)\s*(?:minuten?|min\.?)/i);
+          if (minuteMatch) {
+            totalMinutes += parseInt(minuteMatch[1]);
+          }
+          
+          // If no specific unit found, assume minutes
+          if (totalMinutes === 0) {
+            const numberMatch = str.match(/(\d+)/);
+            if (numberMatch) {
+              totalMinutes = parseInt(numberMatch[1]);
+            }
+          }
+          
+          return totalMinutes * 60; // Convert to seconds
+        }
+        
+        const seconds = parseTimeToSeconds(timeText);
         
         // Call timer with recipe context and navigation info
         window.startTimer(timeText, seconds, recipeName, stepDescription, true, recipe.id, stepId);
