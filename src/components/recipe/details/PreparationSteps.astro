@@ -95,20 +95,48 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                     {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
                       <div class="flex flex-wrap gap-2 mt-2">
                         {preparationStep.linkedIngredients.map((link) => {
-                          const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
-                          if (!ingredient || !('name' in ingredient)) return null;
-                          const quantity = ingredient.quantities[link.selectedQuantityIndex];
-                          const wasUsedBefore = usedIngredients.has(link.ingredientId);
-                          
-                          return (
-                            <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              wasUsedBefore 
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
-                                : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                            }`}>
-                              {ingredient.name} ({quantity.amount} {quantity.unit})
-                            </span>
-                          );
+                          if (link.isIntermediate) {
+                            // Find intermediate ingredient from previous steps
+                            const allSteps = recipe.preparationGroups.flatMap(g => g.steps.filter(s => 'text' in s));
+                            let intermediateIngredient = null;
+                            for (const s of allSteps) {
+                              if (s.intermediateIngredients) {
+                                intermediateIngredient = s.intermediateIngredients.find(int => int.id === link.ingredientId);
+                                if (intermediateIngredient) break;
+                              }
+                            }
+                            if (!intermediateIngredient) return null;
+                            
+                            return (
+                              <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                {intermediateIngredient.name}
+                              </span>
+                            );
+                          } else {
+                            // Regular ingredient
+                            const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
+                            if (!ingredient || !('name' in ingredient)) return null;
+                            const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                            const wasUsedBefore = usedIngredients.has(link.ingredientId);
+                            let quantityText = '';
+                            if (quantity.amount > 1 && quantity.unit !== '') {
+                              quantityText = ` (${quantity.amount} ${quantity.unit})`;
+                            } else if (quantity.amount === 0 && quantity.unit !== '') {
+                              quantityText = ` (${quantity.unit})`;
+                            } else if (quantity.amount > 1 && quantity.unit === '') {
+                              quantityText = ` (${quantity.amount})`;
+                            }
+                            
+                            return (
+                              <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                wasUsedBefore 
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
+                                  : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              }`}>
+                                {ingredient.name}{quantityText}
+                              </span>
+                            );
+                          }
                         })}
                       </div>
                     )}
@@ -153,20 +181,48 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                       {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
                         <div class="flex flex-wrap gap-2 mt-2">
                           {preparationStep.linkedIngredients.map((link) => {
-                            const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
-                            if (!ingredient || !('name' in ingredient)) return null;
-                            const quantity = ingredient.quantities[link.selectedQuantityIndex];
-                            const wasUsedBefore = usedIngredients.has(link.ingredientId);
-                            
-                            return (
-                              <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                wasUsedBefore 
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
-                                  : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                              }`}>
-                                {ingredient.name} ({quantity.amount} {quantity.unit})
-                              </span>
-                            );
+                            if (link.isIntermediate) {
+                              // Find intermediate ingredient from previous steps
+                              const allSteps = recipe.preparationGroups.flatMap(g => g.steps.filter(s => 'text' in s));
+                              let intermediateIngredient = null;
+                              for (const s of allSteps) {
+                                if (s.intermediateIngredients) {
+                                  intermediateIngredient = s.intermediateIngredients.find(int => int.id === link.ingredientId);
+                                  if (intermediateIngredient) break;
+                                }
+                              }
+                              if (!intermediateIngredient) return null;
+                              
+                              return (
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                  {intermediateIngredient.name}
+                                </span>
+                              );
+                            } else {
+                              // Regular ingredient
+                              const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
+                              if (!ingredient || !('name' in ingredient)) return null;
+                              const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                              const wasUsedBefore = usedIngredients.has(link.ingredientId);
+                              let quantityText = '';
+                              if (quantity.amount > 1 && quantity.unit !== '') {
+                                quantityText = ` (${quantity.amount} ${quantity.unit})`;
+                              } else if (quantity.amount === 0 && quantity.unit !== '') {
+                                quantityText = ` (${quantity.unit})`;
+                              } else if (quantity.amount > 1 && quantity.unit === '') {
+                                quantityText = ` (${quantity.amount})`;
+                              }
+                              
+                              return (
+                                <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  wasUsedBefore 
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
+                                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                }`}>
+                                  {ingredient.name}{quantityText}
+                                </span>
+                              );
+                            }
                           })}
                         </div>
                       )}

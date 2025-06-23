@@ -23,10 +23,23 @@ export interface IngredientGroup {
   ingredients: (Ingredient | IngredientGroup)[];
 }
 
+export interface IntermediateIngredient {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface LinkedIngredient {
+  ingredientId: string;
+  selectedQuantityIndex: number;
+  isIntermediate?: boolean; // Flag to identify intermediate ingredients
+}
+
 export interface PreparationStep {
   id: string;
   text: string;
-  linkedIngredients: { ingredientId: string; selectedQuantityIndex: number }[];
+  linkedIngredients: LinkedIngredient[];
+  intermediateIngredients: IntermediateIngredient[]; // New: intermediate ingredients for this step
   timeInSeconds?: number;
 }
 

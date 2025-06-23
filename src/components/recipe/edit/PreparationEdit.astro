@@ -61,11 +61,69 @@ const { recipe } = Astro.props;
                       class="step-text-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                     >{(step as PreparationStep).text}</textarea>
                     
+                    <!-- Intermediate Ingredients Section -->
+                    <div class="intermediate-ingredients-section border-t border-gray-200 dark:border-gray-600 pt-3">
+                      <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Zwischenzutaten</h4>
+                        <button 
+                          type="button" 
+                          class="add-intermediate-ingredient-btn px-2 py-1 text-xs bg-teal-500 hover:bg-teal-600 text-white rounded transition-colors"
+                          title="Zwischenzutat hinzufügen"
+                        >
+                          + Zwischenzutat
+                        </button>
+                      </div>
+                      <div class="intermediate-ingredients-list space-y-2">
+                        {(step as PreparationStep).intermediateIngredients?.map((intermediate) => (
+                          <div class="intermediate-ingredient-item flex items-center space-x-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded border" data-intermediate-id={intermediate.id}>
+                            <input 
+                              type="text" 
+                              value={intermediate.name}
+                              placeholder="Name der Zwischenzutat"
+                              class="intermediate-name-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            />
+                            <input 
+                              type="text" 
+                              value={intermediate.description || ''}
+                              placeholder="Beschreibung (optional)"
+                              class="intermediate-description-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            />
+                            <button 
+                              type="button" 
+                              class="remove-intermediate-btn text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
+                            >
+                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
                     <!-- Linked Ingredients Display -->
                     <div class="linked-ingredients-display">
                       {(step as PreparationStep).linkedIngredients?.length > 0 && (
                         <div class="flex flex-wrap gap-2 mb-2">
-                                                      {(step as PreparationStep).linkedIngredients.map((link) => {
+                          {(step as PreparationStep).linkedIngredients.map((link) => {
+                            if (link.isIntermediate) {
+                              // Find intermediate ingredient from previous steps
+                              const allSteps = recipe.preparationGroups.flatMap(g => g.steps.filter(s => 'text' in s));
+                              let intermediateIngredient = null;
+                              for (const s of allSteps) {
+                                if (s.intermediateIngredients) {
+                                  intermediateIngredient = s.intermediateIngredients.find(int => int.id === link.ingredientId);
+                                  if (intermediateIngredient) break;
+                                }
+                              }
+                              if (!intermediateIngredient) return null;
+                              return (
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                  {intermediateIngredient.name} (Zwischenzutat)
+                                </span>
+                              );
+                            } else {
+                              // Regular ingredient
                               const allIngredients = recipe.ingredientGroups.flatMap(group => 
                                 group.ingredients.filter(item => 'id' in item && 'name' in item)
                               );
@@ -77,7 +135,8 @@ const { recipe } = Astro.props;
                                   {ingredient.name} ({quantity.amount} {quantity.unit})
                                 </span>
                               );
-                            })}
+                            }
+                          })}
                         </div>
                       )}
                     </div>
@@ -174,11 +233,69 @@ const { recipe } = Astro.props;
                         class="step-text-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                       >{(step as PreparationStep).text}</textarea>
                       
+                      <!-- Intermediate Ingredients Section -->
+                      <div class="intermediate-ingredients-section border-t border-gray-200 dark:border-gray-600 pt-3">
+                        <div class="flex justify-between items-center mb-2">
+                          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Zwischenzutaten</h4>
+                          <button 
+                            type="button" 
+                            class="add-intermediate-ingredient-btn px-2 py-1 text-xs bg-teal-500 hover:bg-teal-600 text-white rounded transition-colors"
+                            title="Zwischenzutat hinzufügen"
+                          >
+                            + Zwischenzutat
+                          </button>
+                        </div>
+                        <div class="intermediate-ingredients-list space-y-2">
+                          {(step as PreparationStep).intermediateIngredients?.map((intermediate) => (
+                            <div class="intermediate-ingredient-item flex items-center space-x-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded border" data-intermediate-id={intermediate.id}>
+                              <input 
+                                type="text" 
+                                value={intermediate.name}
+                                placeholder="Name der Zwischenzutat"
+                                class="intermediate-name-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                              />
+                              <input 
+                                type="text" 
+                                value={intermediate.description || ''}
+                                placeholder="Beschreibung (optional)"
+                                class="intermediate-description-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                              />
+                              <button 
+                                type="button" 
+                                class="remove-intermediate-btn text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
+                              >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      
                       <!-- Linked Ingredients Display -->
                       <div class="linked-ingredients-display">
                         {(step as PreparationStep).linkedIngredients?.length > 0 && (
                           <div class="flex flex-wrap gap-2 mb-2">
-                                                                                      {(step as PreparationStep).linkedIngredients.map((link) => {
+                            {(step as PreparationStep).linkedIngredients.map((link) => {
+                              if (link.isIntermediate) {
+                                // Find intermediate ingredient from previous steps
+                                const allSteps = recipe.preparationGroups.flatMap(g => g.steps.filter(s => 'text' in s));
+                                let intermediateIngredient = null;
+                                for (const s of allSteps) {
+                                  if (s.intermediateIngredients) {
+                                    intermediateIngredient = s.intermediateIngredients.find(int => int.id === link.ingredientId);
+                                    if (intermediateIngredient) break;
+                                  }
+                                }
+                                if (!intermediateIngredient) return null;
+                                return (
+                                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                    {intermediateIngredient.name} (Zwischenzutat)
+                                  </span>
+                                );
+                              } else {
+                                // Regular ingredient
                                 const allIngredients = recipe.ingredientGroups.flatMap(group => 
                                   group.ingredients.filter(item => 'id' in item && 'name' in item)
                                 );
@@ -190,7 +307,8 @@ const { recipe } = Astro.props;
                                     {ingredient.name} ({quantity.amount} {quantity.unit})
                                   </span>
                                 );
-                              })}
+                              }
+                            })}
                           </div>
                         )}
                       </div>
@@ -247,32 +365,4 @@ const { recipe } = Astro.props;
   </div>
 </div>
 
-<!-- Modal for Manual Ingredient Linking -->
-<div id="ingredient-link-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
-  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden">
-    <div class="p-4 border-b border-gray-200 dark:border-gray-600">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Zutaten verlinken</h3>
-    </div>
-    <div class="p-4 max-h-96 overflow-y-auto">
-      <div id="ingredient-list" class="space-y-2">
-        <!-- Dynamically populated with ingredients -->
-      </div>
-    </div>
-    <div class="p-4 border-t border-gray-200 dark:border-gray-600 flex justify-end space-x-2">
-      <button 
-        type="button" 
-        id="cancel-link-modal" 
-        class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-      >
-        Abbrechen
-      </button>
-      <button 
-        type="button" 
-        id="save-link-modal" 
-        class="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
-      >
-        Speichern
-      </button>
-    </div>
-  </div>
-</div> 
+ 

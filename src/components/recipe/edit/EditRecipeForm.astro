@@ -340,6 +340,23 @@ const { recipe } = Astro.props;
               class="step-text-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
             >${text}</textarea>
             
+            <!-- Intermediate Ingredients Section -->
+            <div class="intermediate-ingredients-section border-t border-gray-200 dark:border-gray-600 pt-3">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Zwischenzutaten</h4>
+                <button 
+                  type="button" 
+                  class="add-intermediate-ingredient-btn px-2 py-1 text-xs bg-teal-500 hover:bg-teal-600 text-white rounded transition-colors"
+                  title="Zwischenzutat hinzufügen"
+                >
+                  + Zwischenzutat
+                </button>
+              </div>
+              <div class="intermediate-ingredients-list space-y-2">
+                <!-- Intermediate ingredients will be populated dynamically -->
+              </div>
+            </div>
+            
             <!-- Linked Ingredients Display -->
             <div class="linked-ingredients-display">
             </div>
@@ -519,10 +536,31 @@ const { recipe } = Astro.props;
             linkedIngredients = window.ingredientLinker.linkedIngredients.get(stepId) || [];
           }
           
+          // Collect intermediate ingredients from this step
+          let intermediateIngredients = [];
+          if (window.intermediateIngredientManager && stepId) {
+            const intermediateItems = stepElement.querySelectorAll('.intermediate-ingredient-item');
+            intermediateItems.forEach((item) => {
+              const nameInput = item.querySelector('.intermediate-name-input');
+              const descriptionInput = item.querySelector('.intermediate-description-input');
+              const intermediateId = item.dataset.intermediateId;
+
+              const name = nameInput?.value.trim();
+              if (name && intermediateId) {
+                intermediateIngredients.push({
+                  id: intermediateId,
+                  name: name,
+                  description: descriptionInput?.value.trim() || undefined
+                });
+              }
+            });
+          }
+          
           steps.push({
             id: stepId || generateId(),
             text: stepText || '',
-            linkedIngredients: linkedIngredients
+            linkedIngredients: linkedIngredients,
+            intermediateIngredients: intermediateIngredients
           });
         }
       });

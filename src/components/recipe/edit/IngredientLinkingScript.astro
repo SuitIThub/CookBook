@@ -1,5 +1,5 @@
 ---
-// Component for handling ingredient linking functionality
+// Component for handling ingredient linking functionality with intermediate ingredients support
 ---
 
 <!-- Ingredient Linking Modal -->
@@ -19,15 +19,28 @@
       
       <div class="mb-4">
         <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-          Wählen Sie die Zutaten aus, die in diesem Zubereitungsschritt verwendet werden:
+          Wählen Sie die Zutaten und Zwischenzutaten aus, die in diesem Zubereitungsschritt verwendet werden:
         </p>
-        <div id="ingredient-list" class="space-y-2 max-h-60 overflow-y-auto">
-          <!-- Ingredients will be populated dynamically -->
+        
+        <!-- Regular Ingredients Section -->
+        <div class="mb-6">
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Normale Zutaten</h4>
+          <div id="regular-ingredient-list" class="space-y-2 max-h-80 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded p-2">
+            <!-- Regular ingredients will be populated dynamically -->
+          </div>
+        </div>
+        
+        <!-- Intermediate Ingredients Section -->
+        <div>
+          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Zwischenzutaten (aus vorherigen Schritten)</h4>
+          <div id="intermediate-ingredient-list" class="space-y-2 max-h-80 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded p-2">
+            <!-- Intermediate ingredients will be populated dynamically -->
+          </div>
         </div>
       </div>
       
       <div class="flex justify-end space-x-3">
-        <button type="button" id="cancel-link-modal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 rounded-md transition-colors">
+        <button type="button" id="cancel-link-modal-2" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 rounded-md transition-colors">
           Abbrechen
         </button>
         <button type="button" id="save-link-modal" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors">
@@ -45,12 +58,21 @@ declare global {
     currentRecipe: any;
     ingredientLinker: IngredientLinker;
     IngredientLinker: typeof IngredientLinker;
+    intermediateIngredientManager: IntermediateIngredientManager;
+    IntermediateIngredientManager: typeof IntermediateIngredientManager;
   }
 }
 
 interface LinkedIngredient {
   ingredientId: string;
   selectedQuantityIndex: number;
+  isIntermediate?: boolean;
+}
+
+interface IntermediateIngredient {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 interface Recipe {
@@ -59,6 +81,7 @@ interface Recipe {
       id: string;
       text: string;
       linkedIngredients?: LinkedIngredient[];
+      intermediateIngredients?: IntermediateIngredient[];
     }>;
   }>;
   ingredientGroups: Array<{
@@ -71,6 +94,161 @@ interface Recipe {
       }>;
     }>;
   }>;
+}
+
+class IntermediateIngredientManager {
+  private recipe: Recipe | null = null;
+  
+  constructor() {
+    this.init();
+  }
+
+  init(): void {
+    if (window.currentRecipe) {
+      this.recipe = window.currentRecipe;
+    }
+    
+    this.bindEvents();
+  }
+
+  bindEvents(): void {
+    // Add intermediate ingredient button click events
+    document.addEventListener('click', (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target?.closest('.add-intermediate-ingredient-btn')) {
+        e.preventDefault();
+        const stepElement = target.closest('.step-edit-item') as HTMLElement;
+        this.addIntermediateIngredient(stepElement);
+      }
+    });
+
+    // Remove intermediate ingredient button click events
+    document.addEventListener('click', (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target?.closest('.remove-intermediate-btn')) {
+        e.preventDefault();
+        const intermediateItem = target.closest('.intermediate-ingredient-item') as HTMLElement;
+        const stepElement = target.closest('.step-edit-item') as HTMLElement;
+        this.removeIntermediateIngredient(intermediateItem, stepElement);
+      }
+    });
+
+    // Update intermediate ingredient data on input
+    document.addEventListener('input', (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      if (target?.classList.contains('intermediate-name-input') || target?.classList.contains('intermediate-description-input')) {
+        const stepElement = target.closest('.step-edit-item') as HTMLElement;
+        this.updateIntermediateIngredientData(stepElement);
+      }
+    });
+  }
+
+  addIntermediateIngredient(stepElement: HTMLElement): void {
+    if (!stepElement) return;
+
+    const list = stepElement.querySelector('.intermediate-ingredients-list');
+    if (!list) return;
+
+    const newId = 'intermediate-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'intermediate-ingredient-item flex items-center space-x-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded border';
+    itemDiv.dataset.intermediateId = newId;
+    
+    itemDiv.innerHTML = `
+      <input 
+        type="text" 
+        value=""
+        placeholder="Name der Zwischenzutat"
+        class="intermediate-name-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+      />
+      <input 
+        type="text" 
+        value=""
+        placeholder="Beschreibung (optional)"
+        class="intermediate-description-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+      />
+      <button 
+        type="button" 
+        class="remove-intermediate-btn text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </button>
+    `;
+
+    list.appendChild(itemDiv);
+    
+    // Focus on the name input
+    const nameInput = itemDiv.querySelector('.intermediate-name-input') as HTMLInputElement;
+    if (nameInput) {
+      nameInput.focus();
+    }
+
+    this.updateIntermediateIngredientData(stepElement);
+  }
+
+  removeIntermediateIngredient(intermediateItem: HTMLElement, stepElement: HTMLElement): void {
+    if (!intermediateItem || !stepElement) return;
+
+    intermediateItem.remove();
+    this.updateIntermediateIngredientData(stepElement);
+  }
+
+  updateIntermediateIngredientData(stepElement: HTMLElement): void {
+    if (!stepElement || !this.recipe) return;
+
+    const stepId = stepElement.dataset.stepId;
+    if (!stepId) return;
+
+    const intermediateItems = stepElement.querySelectorAll('.intermediate-ingredient-item');
+    const intermediateIngredients: IntermediateIngredient[] = [];
+
+    intermediateItems.forEach((item: Element) => {
+      const nameInput = item.querySelector('.intermediate-name-input') as HTMLInputElement;
+      const descriptionInput = item.querySelector('.intermediate-description-input') as HTMLInputElement;
+      const intermediateId = (item as HTMLElement).dataset.intermediateId;
+
+      const name = nameInput?.value.trim();
+      if (name && intermediateId) {
+        intermediateIngredients.push({
+          id: intermediateId,
+          name: name,
+          description: descriptionInput?.value.trim() || undefined
+        });
+      }
+    });
+
+    // Update recipe data
+    this.recipe.preparationGroups.forEach((group: any) => {
+      group.steps.forEach((step: any) => {
+        if (step.id === stepId) {
+          step.intermediateIngredients = intermediateIngredients;
+        }
+      });
+    });
+
+    // Update global recipe object
+    window.currentRecipe = this.recipe;
+  }
+
+  getAllIntermediateIngredientsForStep(currentStepId: string): IntermediateIngredient[] {
+    if (!this.recipe) return [];
+
+    const allIntermediates: IntermediateIngredient[] = [];
+    
+    // Collect all intermediate ingredients from all steps (except current step)
+    for (const group of this.recipe.preparationGroups) {
+      for (const step of group.steps) {
+        if (step.id && step.id !== currentStepId && step.intermediateIngredients) {
+          allIntermediates.push(...step.intermediateIngredients);
+        }
+      }
+    }
+
+    return allIntermediates;
+  }
 }
 
 class IngredientLinker {
@@ -173,10 +351,15 @@ class IngredientLinker {
     // Modal event handlers
     const modal = document.getElementById('ingredient-link-modal');
     const cancelBtn = document.getElementById('cancel-link-modal');
+    const cancelBtn2 = document.getElementById('cancel-link-modal-2');
     const saveBtn = document.getElementById('save-link-modal');
 
     if (cancelBtn) {
       cancelBtn.addEventListener('click', () => this.closeModal());
+    }
+
+    if (cancelBtn2) {
+      cancelBtn2.addEventListener('click', () => this.closeModal());
     }
 
     if (saveBtn) {
@@ -193,50 +376,9 @@ class IngredientLinker {
     }
   }
 
-  getAllIngredients(): Array<{id: string, name: string, description?: string, quantities: Array<{amount: number, unit: string}>}> {
-    // Read current ingredients from DOM instead of cached recipe data
-    const ingredients: Array<{id: string, name: string, description?: string, quantities: Array<{amount: number, unit: string}>}> = [];
-    
-    // Get all ingredient elements from the DOM
-    const ingredientElements = document.querySelectorAll('.ingredient-edit-item');
-    
-    ingredientElements.forEach((ingredientElement: Element) => {
-      const nameInput = ingredientElement.querySelector('input[type="text"]') as HTMLInputElement;
-      const descriptionInput = ingredientElement.querySelector('.ingredient-description-input') as HTMLInputElement;
-      const amountInput = ingredientElement.querySelector('input[type="number"]') as HTMLInputElement;
-      const unitSelect = ingredientElement.querySelector('select') as HTMLSelectElement;
-      const ingredientId = (ingredientElement as HTMLElement).dataset.ingredientId;
-      
-      const name = nameInput?.value.trim();
-      const description = descriptionInput?.value.trim();
-      const amount = parseFloat(amountInput?.value) || 0;
-      const unit = unitSelect?.value || '';
-      
-      // Only include ingredients with a name and id
-      if (name && ingredientId) {
-        ingredients.push({
-          id: ingredientId,
-          name: name,
-          description: description || undefined,
-          quantities: [{
-            amount: amount,
-            unit: unit
-          }]
-        });
-      }
-    });
-    
-    // If no ingredients found in DOM, fallback to recipe data
-    if (ingredients.length === 0 && this.recipe) {
-      return this.recipe.ingredientGroups.flatMap((group: any) => 
-        group.ingredients.filter((item: any) => item.id && item.name)
-      );
-    }
-    
-    return ingredients;
-  }
 
-  // Improved text analysis for automatic ingredient linking
+
+  // Enhanced autoLinkIngredients to include intermediate ingredients
   autoLinkIngredients(stepElement: HTMLElement): void {
     if (!this.recipe || !stepElement) return;
 
@@ -245,36 +387,30 @@ class IngredientLinker {
     if (!textArea || !stepId) return;
 
     const stepText = textArea.value.toLowerCase();
-    const allIngredients = this.getAllIngredients();
+    const ingredientGroups = this.getAllIngredientGroups();
+    const allIngredients = ingredientGroups.flatMap(group => group.ingredients);
+    const allIntermediates = window.intermediateIngredientManager?.getAllIntermediateIngredientsForStep(stepId) || [];
     const linkedIngredients: LinkedIngredient[] = [];
 
-    // Enhanced text matching algorithm
+    // Link regular ingredients
     allIngredients.forEach((ingredient: any) => {
-      const ingredientName = ingredient.name.toLowerCase();
-      
-      // Skip very short ingredient names (less than 3 characters) for partial matching
-      if (ingredientName.length < 3) return;
-      
-      // Multiple matching strategies with improved logic
-      const isDirectMatch = this.findDirectMatch(stepText, ingredientName);
-      const isPartialMatch = this.findPartialMatch(stepText, ingredientName);
-      const isPluralized = this.findPluralized(stepText, ingredientName);
-      const isStemMatch = this.findStemMatch(stepText, ingredientName);
-      const isMultiWordMatch = this.findMultiWordMatch(stepText, ingredientName);
-      const isGermanCaseMatch = this.findGermanCaseMatch(stepText, ingredientName);
-      
-      if (isDirectMatch || isPartialMatch || isPluralized || isStemMatch || isMultiWordMatch || isGermanCaseMatch) {
-        // Check if already linked to avoid duplicates
-        const alreadyLinked = linkedIngredients.some((link: LinkedIngredient) => 
-          link.ingredientId === ingredient.id
-        );
-        
-        if (!alreadyLinked) {
-          linkedIngredients.push({
-            ingredientId: ingredient.id,
-            selectedQuantityIndex: 0 // Default to first quantity
-          });
-        }
+      if (this.shouldLinkIngredient(stepText, ingredient.name)) {
+        linkedIngredients.push({
+          ingredientId: ingredient.id,
+          selectedQuantityIndex: 0,
+          isIntermediate: false
+        });
+      }
+    });
+
+    // Link intermediate ingredients
+    allIntermediates.forEach((intermediate: IntermediateIngredient) => {
+      if (this.shouldLinkIngredient(stepText, intermediate.name)) {
+        linkedIngredients.push({
+          ingredientId: intermediate.id,
+          selectedQuantityIndex: 0,
+          isIntermediate: true
+        });
       }
     });
 
@@ -284,213 +420,25 @@ class IngredientLinker {
     this.updateRecipeData();
     
     // Show success message
-    this.showNotification(`${linkedIngredients.length} Zutaten automatisch verlinkt!`, 'success');
+    this.showNotification(`${linkedIngredients.length} Zutaten/Zwischenzutaten automatisch verlinkt!`, 'success');
   }
 
-  // Helper methods for improved text matching
-  findDirectMatch(text: string, ingredient: string): boolean {
-    // Direct substring match with word boundaries
-    const regex = new RegExp(`\\b${this.escapeRegex(ingredient)}\\b`, 'i');
-    return regex.test(text);
+  private shouldLinkIngredient(stepText: string, ingredientName: string): boolean {
+    const lowerIngredientName = ingredientName.toLowerCase();
+    
+    // Simple but effective matching
+    return stepText.includes(lowerIngredientName) ||
+           this.findPartialMatch(stepText, lowerIngredientName);
   }
 
   findPartialMatch(text: string, ingredient: string): boolean {
-    // More intelligent partial matching
+    // Simple partial matching for now
     const words = text.split(/\s+/);
-    const minLength = Math.max(3, Math.floor(ingredient.length * 0.6)); // At least 60% of ingredient name or 3 chars
-    
-    return words.some((word: string) => {
-      // Clean word (remove punctuation)
+    return words.some(word => {
       const cleanWord = word.replace(/[.,!?;:()]/g, '');
-      
-      // Only match if the word is long enough and has significant overlap
-      if (cleanWord.length < 3 || ingredient.length < 3) return false;
-      
-      // Check if word starts with ingredient (e.g., "Tomaten" starts with "Tomate")
-      if (cleanWord.startsWith(ingredient) && cleanWord.length >= minLength) return true;
-      
-      // Check if ingredient starts with word (e.g., "Tomat" matches "Tomate")
-      if (ingredient.startsWith(cleanWord) && cleanWord.length >= minLength) return true;
-      
-      // Check for strong similarity (Levenshtein-like)
-      return this.isSimilar(cleanWord, ingredient);
+      return cleanWord.length >= 3 && ingredient.length >= 3 && 
+             (cleanWord.includes(ingredient) || ingredient.includes(cleanWord));
     });
-  }
-
-  findPluralized(text: string, ingredient: string): boolean {
-    // German pluralization patterns with word boundaries
-    const pluralForms = [
-      ingredient + 'n',    // Tomate -> Tomaten
-      ingredient + 'en',   // Zwiebel -> Zwiebeln  
-      ingredient + 's',    // Paprika -> Paprikas
-      ingredient.slice(0, -1) + 'en', // Replace last char + en
-      ingredient.slice(0, -2) + 'er'  // Ei -> Eier
-    ];
-    
-    return pluralForms.some((plural: string) => {
-      const regex = new RegExp(`\\b${this.escapeRegex(plural)}\\b`, 'i');
-      return regex.test(text);
-    });
-  }
-
-  findStemMatch(text: string, ingredient: string): boolean {
-    // Match common German word stems
-    if (ingredient.length < 4) return false;
-    
-    const stem = ingredient.slice(0, -2); // Remove last 2 characters for stem
-    if (stem.length < 3) return false;
-    
-    const regex = new RegExp(`\\b${this.escapeRegex(stem)}\\w{0,3}\\b`, 'i');
-    return regex.test(text);
-  }
-
-  isSimilar(word1: string, word2: string): boolean {
-    // Improved similarity check to avoid false positives
-    if (word1.length < 4 || word2.length < 4) return false;
-    
-    const longer = word1.length > word2.length ? word1 : word2;
-    const shorter = word1.length <= word2.length ? word1 : word2;
-    
-    // Don't match if length difference is too big (> 50%)
-    if (Math.abs(word1.length - word2.length) / longer.length > 0.5) return false;
-    
-    // Calculate Levenshtein-like distance with position awareness
-    let matches = 0;
-    let sequentialMatches = 0;
-    
-    for (let i = 0; i < shorter.length; i++) {
-      const char = shorter[i];
-      const index = longer.indexOf(char, i > 0 ? i - 1 : 0);
-      
-      if (index !== -1 && Math.abs(index - i) <= 2) {
-        matches++;
-        if (index === i) sequentialMatches++;
-      }
-    }
-    
-    const similarity = matches / longer.length;
-    const sequentialBonus = sequentialMatches / shorter.length;
-    
-    // Require higher similarity + some sequential matches to avoid false positives
-    return similarity >= 0.75 && sequentialBonus >= 0.4;
-  }
-
-    findMultiWordMatch(text: string, ingredient: string): boolean {
-    // Handle multi-word ingredient names like "Guanciale oder Pancetta"
-    // Split ingredient by common separators (oder, or, und, and, /, ,)
-    const separators = /\s+(oder|or|und|and|\/|,)\s+/i;
-    const ingredientParts = ingredient.split(separators);
-    
-    // Check if any individual word from the ingredient matches the text
-    return ingredientParts.some((part: string) => {
-      const trimmedPart = part.trim();
-      
-      // Skip common connecting words
-      if (['oder', 'or', 'und', 'and'].includes(trimmedPart.toLowerCase())) {
-        return false;
-      }
-      
-      // Only check meaningful words (3+ characters)
-      if (trimmedPart.length < 3) return false;
-      
-      // Use the same matching strategies for each part
-      return this.findDirectMatch(text, trimmedPart) ||
-             this.findPartialMatch(text, trimmedPart) ||
-             this.findPluralized(text, trimmedPart) ||
-             this.findStemMatch(text, trimmedPart) ||
-             this.findGermanCaseMatch(text, trimmedPart);
-    });
-  }
-
-  findGermanCaseMatch(text: string, ingredient: string): boolean {
-    // Handle German grammatical cases and adjective declensions
-    // Common patterns for adjectives and nouns in different cases
-    
-    // Split ingredient into words to handle multi-word ingredients
-    const ingredientWords = ingredient.split(/\s+/);
-    const textWords = text.split(/\s+/);
-    
-    // Check if we can match word by word with case variations
-    return ingredientWords.some((ingredientWord: string) => {
-      if (ingredientWord.length < 3) return false;
-      
-      return textWords.some((textWord: string) => {
-        const cleanTextWord = textWord.replace(/[.,!?;:()]/g, '').toLowerCase();
-        const cleanIngredientWord = ingredientWord.toLowerCase();
-        
-        if (cleanTextWord.length < 3) return false;
-        
-        // Direct match
-        if (cleanTextWord === cleanIngredientWord) return true;
-        
-        // German adjective declensions (schwarzer -> schwarzem, schwarzen, schwarze, etc.)
-        if (this.isGermanAdjectiveDeclension(cleanTextWord, cleanIngredientWord)) return true;
-        
-        // German noun declensions (Pfeffer -> Pfeffers, etc.)
-        if (this.isGermanNounDeclension(cleanTextWord, cleanIngredientWord)) return true;
-        
-        return false;
-      });
-    });
-  }
-
-  isGermanAdjectiveDeclension(word1: string, word2: string): boolean {
-    // Common German adjective endings
-    const adjEndings = ['er', 'en', 'em', 'es', 'e'];
-    
-    // Check if removing endings makes them match
-    for (const ending1 of adjEndings) {
-      if (word1.endsWith(ending1)) {
-        const stem1 = word1.slice(0, -ending1.length);
-        
-        for (const ending2 of adjEndings) {
-          if (word2.endsWith(ending2)) {
-            const stem2 = word2.slice(0, -ending2.length);
-            if (stem1 === stem2 && stem1.length >= 3) {
-              return true;
-            }
-          }
-        }
-        
-        // Also check if stem matches the full word2
-        if (stem1 === word2 && stem1.length >= 3) return true;
-      }
-    }
-    
-    // Check the reverse too
-    for (const ending of adjEndings) {
-      if (word2.endsWith(ending)) {
-        const stem = word2.slice(0, -ending.length);
-        if (stem === word1 && stem.length >= 3) return true;
-      }
-    }
-    
-    return false;
-  }
-
-  isGermanNounDeclension(word1: string, word2: string): boolean {
-    // Common German noun case endings
-    const nounEndings = ['s', 'es', 'n', 'en'];
-    
-    // Check if removing endings makes them match
-    for (const ending of nounEndings) {
-      if (word1.endsWith(ending) && word1.length > ending.length + 2) {
-        const stem = word1.slice(0, -ending.length);
-        if (stem === word2 && stem.length >= 3) return true;
-      }
-      
-      if (word2.endsWith(ending) && word2.length > ending.length + 2) {
-        const stem = word2.slice(0, -ending.length);
-        if (stem === word1 && stem.length >= 3) return true;
-      }
-    }
-    
-    return false;
-  }
-
-  escapeRegex(string: string): string {
-    // Escape special regex characters
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   showNotification(message: string, type: string = 'info'): void {
@@ -508,6 +456,73 @@ class IngredientLinker {
     }, 3000);
   }
 
+  getAllIngredientGroups(): Array<{id: string, title?: string, ingredients: Array<any>}> {
+    // Read current ingredient groups from DOM
+    const ingredientGroups: Array<{id: string, title?: string, ingredients: Array<any>}> = [];
+    
+    // Get all ingredient group elements from the DOM
+    const groupElements = document.querySelectorAll('.ingredient-group-edit');
+    
+    groupElements.forEach((groupElement: Element) => {
+      const titleInput = groupElement.querySelector('.group-title-input') as HTMLInputElement;
+      const isDefaultGroup = (groupElement as HTMLElement).classList.contains('default-group');
+      const groupId = (groupElement as HTMLElement).dataset.groupId;
+      
+      // Get group title
+      const groupTitle = isDefaultGroup ? undefined : (titleInput?.value.trim() || undefined);
+      
+      // Collect ingredients from this group
+      const ingredients: Array<any> = [];
+      const ingredientElements = groupElement.querySelectorAll('.ingredient-edit-item');
+      
+      ingredientElements.forEach((ingredientElement: Element) => {
+        const nameInput = ingredientElement.querySelector('input[type="text"]') as HTMLInputElement;
+        const descriptionInput = ingredientElement.querySelector('.ingredient-description-input') as HTMLInputElement;
+        const amountInput = ingredientElement.querySelector('input[type="number"]') as HTMLInputElement;
+        const unitSelect = ingredientElement.querySelector('select') as HTMLSelectElement;
+        const ingredientId = (ingredientElement as HTMLElement).dataset.ingredientId;
+        
+        const name = nameInput?.value.trim();
+        const description = descriptionInput?.value.trim();
+        const amount = parseFloat(amountInput?.value) || 0;
+        const unit = unitSelect?.value || '';
+        
+        // Only include ingredients with a name and id
+        if (name && ingredientId) {
+          ingredients.push({
+            id: ingredientId,
+            name: name,
+            description: description || undefined,
+            quantities: [{
+              amount: amount,
+              unit: unit
+            }]
+          });
+        }
+      });
+      
+      // Add group if it has ingredients
+      if (ingredients.length > 0) {
+        ingredientGroups.push({
+          id: groupId || 'default',
+          title: groupTitle,
+          ingredients: ingredients
+        });
+      }
+    });
+    
+    // If no groups found in DOM, fallback to recipe data
+    if (ingredientGroups.length === 0 && this.recipe) {
+      return this.recipe.ingredientGroups.map((group: any) => ({
+        id: group.id,
+        title: group.title,
+        ingredients: group.ingredients.filter((item: any) => item.id && item.name)
+      }));
+    }
+    
+    return ingredientGroups;
+  }
+
   openManualLinkModal(stepElement: HTMLElement): void {
     if (!this.recipe || !stepElement) return;
 
@@ -515,57 +530,153 @@ class IngredientLinker {
     this.currentStepId = stepElement.dataset.stepId || null;
     
     const modal = document.getElementById('ingredient-link-modal');
-    const ingredientList = document.getElementById('ingredient-list');
+    const regularIngredientList = document.getElementById('regular-ingredient-list');
+    const intermediateIngredientList = document.getElementById('intermediate-ingredient-list');
     
-    if (!modal || !ingredientList || !this.currentStepId) return;
+    console.log('Modal elements found:', { modal: !!modal, regularList: !!regularIngredientList, intermediateList: !!intermediateIngredientList });
+    
+    if (!modal || !regularIngredientList || !intermediateIngredientList || !this.currentStepId) return;
 
     // Get current linked ingredients for this step
     const currentLinks = this.linkedIngredients.get(this.currentStepId) || [];
-    const currentLinkedIds = new Set(currentLinks.map((link: LinkedIngredient) => link.ingredientId));
 
-    // Populate ingredient list
-    const allIngredients = this.getAllIngredients();
-    ingredientList.innerHTML = '';
+    // Debug: Log DOM structure
+    console.log('Looking for ingredient groups...');
+    const groupElements = document.querySelectorAll('.ingredient-group-edit');
+    console.log('Found group elements:', groupElements.length);
 
-    allIngredients.forEach((ingredient: any) => {
-      const isLinked = currentLinkedIds.has(ingredient.id);
-      const currentLink = currentLinks.find((link: LinkedIngredient) => link.ingredientId === ingredient.id);
-      
-      const ingredientDiv = document.createElement('div');
-      ingredientDiv.className = 'flex items-center space-x-3 p-2 border border-gray-200 dark:border-gray-600 rounded';
-      
-      ingredientDiv.innerHTML = `
-        <input type="checkbox" 
-               id="ingredient-${ingredient.id}" 
-               ${isLinked ? 'checked' : ''} 
-               class="ingredient-checkbox"
-               data-ingredient-id="${ingredient.id}">
-        <label for="ingredient-${ingredient.id}" class="flex-1 text-sm text-gray-900 dark:text-white">
-          ${ingredient.name}
-        </label>
-        <select class="quantity-select text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white" 
-                data-ingredient-id="${ingredient.id}" 
-                ${!isLinked ? 'disabled' : ''}>
-          ${ingredient.quantities.map((quantity: any, index: number) => 
-            `<option value="${index}" ${currentLink && currentLink.selectedQuantityIndex === index ? 'selected' : ''}>
-              ${quantity.amount} ${quantity.unit}
-            </option>`
-          ).join('')}
-        </select>
-      `;
+    // Populate regular ingredient list with groups
+    const ingredientGroups = this.getAllIngredientGroups();
+    console.log('Ingredient groups found:', ingredientGroups.length, ingredientGroups);
+    
+    regularIngredientList.innerHTML = '';
 
-      // Add event listener for checkbox
-      const checkbox = ingredientDiv.querySelector('.ingredient-checkbox') as HTMLInputElement;
-      const select = ingredientDiv.querySelector('.quantity-select') as HTMLSelectElement;
+    if (ingredientGroups.length === 0) {
+      regularIngredientList.innerHTML = '<p class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">Keine Zutaten verfügbar</p>';
+    } else {
+      ingredientGroups.forEach((group) => {
+        if (group.ingredients.length === 0) return;
+        
+        // Create group header
+        const groupHeader = document.createElement('div');
+        groupHeader.className = 'mb-3';
+        groupHeader.innerHTML = `
+          <h5 class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 border-b border-gray-200 dark:border-gray-600 pb-1">
+            ${group.title || 'Zutaten (ungruppiert)'}
+          </h5>
+        `;
+        regularIngredientList.appendChild(groupHeader);
+
+        // Add ingredients for this group
+        group.ingredients.forEach((ingredient: any) => {
+          const currentLink = currentLinks.find((link: LinkedIngredient) => link.ingredientId === ingredient.id && !link.isIntermediate);
+          const isLinked = !!currentLink;
+          
+          const ingredientDiv = document.createElement('div');
+          ingredientDiv.className = 'flex items-center space-x-3 p-2 border border-gray-200 dark:border-gray-600 rounded mb-2 ml-2';
+          
+          ingredientDiv.innerHTML = `
+            <input type="checkbox" 
+                   id="regular-ingredient-${ingredient.id}" 
+                   ${isLinked ? 'checked' : ''} 
+                   class="ingredient-checkbox"
+                   data-ingredient-id="${ingredient.id}"
+                   data-is-intermediate="false">
+            <label for="regular-ingredient-${ingredient.id}" class="flex-1 text-sm text-gray-900 dark:text-white">
+              ${ingredient.name}
+              ${ingredient.description ? `<span class="text-xs text-gray-500 dark:text-gray-400 block">${ingredient.description}</span>` : ''}
+            </label>
+            <select class="quantity-select text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white" 
+                    data-ingredient-id="${ingredient.id}" 
+                    ${!isLinked ? 'disabled' : ''}>
+              ${ingredient.quantities.map((quantity: any, index: number) => 
+                `<option value="${index}" ${currentLink && currentLink.selectedQuantityIndex === index ? 'selected' : ''}>
+                  ${quantity.amount} ${quantity.unit}
+                </option>`
+              ).join('')}
+            </select>
+          `;
+
+          // Add event listener for checkbox
+          const checkbox = ingredientDiv.querySelector('.ingredient-checkbox') as HTMLInputElement;
+          const select = ingredientDiv.querySelector('.quantity-select') as HTMLSelectElement;
+          
+          if (checkbox && select) {
+            checkbox.addEventListener('change', () => {
+              select.disabled = !checkbox.checked;
+            });
+          }
+
+          regularIngredientList.appendChild(ingredientDiv);
+        });
+      });
+    }
+
+    // Populate intermediate ingredient list
+    const allIntermediates = window.intermediateIngredientManager?.getAllIntermediateIngredientsForStep(this.currentStepId) || [];
+    intermediateIngredientList.innerHTML = '';
+
+    if (allIntermediates.length === 0) {
+      intermediateIngredientList.innerHTML = '<p class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">Keine Zwischenzutaten aus vorherigen Schritten verfügbar</p>';
+    } else {
+      // Group intermediate ingredients by their originating step
+      const intermediatesByStep = new Map<string, Array<IntermediateIngredient>>();
       
-      if (checkbox && select) {
-        checkbox.addEventListener('change', () => {
-          select.disabled = !checkbox.checked;
+      // Find which step each intermediate comes from
+      if (this.recipe) {
+        this.recipe.preparationGroups.forEach((group: any) => {
+          group.steps.forEach((step: any, stepIndex: number) => {
+            if (step.id && step.id !== this.currentStepId && step.intermediateIngredients) {
+              step.intermediateIngredients.forEach((intermediate: IntermediateIngredient) => {
+                if (allIntermediates.some(int => int.id === intermediate.id)) {
+                  const stepKey = `Schritt ${stepIndex + 1}`;
+                  if (!intermediatesByStep.has(stepKey)) {
+                    intermediatesByStep.set(stepKey, []);
+                  }
+                  intermediatesByStep.get(stepKey)!.push(intermediate);
+                }
+              });
+            }
+          });
         });
       }
 
-      ingredientList.appendChild(ingredientDiv);
-    });
+      // Create grouped display
+      intermediatesByStep.forEach((intermediates, stepName) => {
+        // Create group header
+        const groupHeader = document.createElement('div');
+        groupHeader.className = 'mb-3';
+        groupHeader.innerHTML = `
+          <h5 class="text-sm font-medium text-purple-600 dark:text-purple-400 mb-2 border-b border-purple-200 dark:border-purple-600 pb-1">
+            Zwischenzutaten aus ${stepName}
+          </h5>
+        `;
+        intermediateIngredientList.appendChild(groupHeader);
+
+        intermediates.forEach((intermediate: IntermediateIngredient) => {
+          const currentLink = currentLinks.find((link: LinkedIngredient) => link.ingredientId === intermediate.id && link.isIntermediate);
+          const isLinked = !!currentLink;
+          
+          const intermediateDiv = document.createElement('div');
+          intermediateDiv.className = 'flex items-center space-x-3 p-2 border border-purple-200 dark:border-purple-600 rounded bg-purple-50 dark:bg-purple-900/20 mb-2 ml-2';
+          
+          intermediateDiv.innerHTML = `
+            <input type="checkbox" 
+                   id="intermediate-ingredient-${intermediate.id}" 
+                   ${isLinked ? 'checked' : ''} 
+                   class="ingredient-checkbox"
+                   data-ingredient-id="${intermediate.id}"
+                   data-is-intermediate="true">
+            <label for="intermediate-ingredient-${intermediate.id}" class="flex-1 text-sm text-gray-900 dark:text-white">
+              ${intermediate.name}
+              ${intermediate.description ? `<span class="text-xs text-gray-500 dark:text-gray-400 block">${intermediate.description}</span>` : ''}
+            </label>
+          `;
+
+          intermediateIngredientList.appendChild(intermediateDiv);
+        });
+      });
+    }
 
     // Show modal
     modal.classList.remove('hidden');
@@ -583,24 +694,40 @@ class IngredientLinker {
   saveManualLinks(): void {
     if (!this.currentStepId) return;
 
-    const ingredientList = document.getElementById('ingredient-list');
-    if (!ingredientList) return;
+    const regularIngredientList = document.getElementById('regular-ingredient-list');
+    const intermediateIngredientList = document.getElementById('intermediate-ingredient-list');
+    if (!regularIngredientList || !intermediateIngredientList) return;
     
-    const checkboxes = ingredientList.querySelectorAll('.ingredient-checkbox:checked') as NodeListOf<HTMLInputElement>;
     const linkedIngredients: LinkedIngredient[] = [];
 
-    checkboxes.forEach((checkbox: HTMLInputElement) => {
+    // Process regular ingredients
+    const regularCheckboxes = regularIngredientList.querySelectorAll('.ingredient-checkbox:checked') as NodeListOf<HTMLInputElement>;
+    regularCheckboxes.forEach((checkbox: HTMLInputElement) => {
       const ingredientId = checkbox.dataset.ingredientId;
       if (!ingredientId) return;
       
-      const select = ingredientList.querySelector(`.quantity-select[data-ingredient-id="${ingredientId}"]`) as HTMLSelectElement;
+      const select = regularIngredientList.querySelector(`.quantity-select[data-ingredient-id="${ingredientId}"]`) as HTMLSelectElement;
       if (!select) return;
       
       const selectedQuantityIndex = parseInt(select.value);
 
       linkedIngredients.push({
         ingredientId,
-        selectedQuantityIndex
+        selectedQuantityIndex,
+        isIntermediate: false
+      });
+    });
+
+    // Process intermediate ingredients
+    const intermediateCheckboxes = intermediateIngredientList.querySelectorAll('.ingredient-checkbox:checked') as NodeListOf<HTMLInputElement>;
+    intermediateCheckboxes.forEach((checkbox: HTMLInputElement) => {
+      const ingredientId = checkbox.dataset.ingredientId;
+      if (!ingredientId) return;
+
+      linkedIngredients.push({
+        ingredientId,
+        selectedQuantityIndex: 0, // No quantities for intermediate ingredients
+        isIntermediate: true
       });
     });
 
@@ -612,7 +739,7 @@ class IngredientLinker {
     this.updateRecipeData();
     this.closeModal();
     
-    this.showNotification(`${linkedIngredients.length} Zutaten manuell verlinkt!`, 'success');
+    this.showNotification(`${linkedIngredients.length} Zutaten/Zwischenzutaten manuell verlinkt!`, 'success');
   }
 
   updateStepDisplay(stepElement: HTMLElement, stepId: string): void {
@@ -620,7 +747,9 @@ class IngredientLinker {
     if (!displayContainer) return;
 
     const linkedIngredients = this.linkedIngredients.get(stepId) || [];
-    const allIngredients = this.getAllIngredients();
+    const ingredientGroups = this.getAllIngredientGroups();
+    const allIngredients = ingredientGroups.flatMap(group => group.ingredients);
+    const allIntermediates = window.intermediateIngredientManager?.getAllIntermediateIngredientsForStep(stepId) || [];
 
     if (linkedIngredients.length === 0) {
       displayContainer.innerHTML = '';
@@ -628,19 +757,35 @@ class IngredientLinker {
     }
 
     const tagsHtml = linkedIngredients.map((link: LinkedIngredient) => {
-      const ingredient = allIngredients.find((ing: any) => ing.id === link.ingredientId);
-      if (!ingredient) return '';
-      
-      const quantity = ingredient.quantities[link.selectedQuantityIndex];
-      return `
-        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-          ${ingredient.name} (${quantity.amount} ${quantity.unit})
-          <button type="button" class="ml-1 text-blue-600 hover:text-blue-800" onclick="window.ingredientLinker.removeIngredientLink('${stepId}', '${link.ingredientId}')">
-            ×
-          </button>
-        </span>
-      `;
-    }).join('');
+      if (link.isIntermediate) {
+        // Find the intermediate ingredient
+        const intermediate = allIntermediates.find((int: IntermediateIngredient) => int.id === link.ingredientId);
+        if (!intermediate) return '';
+        
+        return `
+          <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+            ${intermediate.name} (Zwischenzutat)
+            <button type="button" class="ml-1 text-purple-600 hover:text-purple-800" onclick="window.ingredientLinker.removeIngredientLink('${stepId}', '${link.ingredientId}')">
+              ×
+            </button>
+          </span>
+        `;
+      } else {
+        // Regular ingredient
+        const ingredient = allIngredients.find((ing: any) => ing.id === link.ingredientId);
+        if (!ingredient) return '';
+        
+        const quantity = ingredient.quantities[link.selectedQuantityIndex];
+        return `
+          <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            ${ingredient.name} (${quantity.amount} ${quantity.unit})
+            <button type="button" class="ml-1 text-blue-600 hover:text-blue-800" onclick="window.ingredientLinker.removeIngredientLink('${stepId}', '${link.ingredientId}')">
+              ×
+            </button>
+          </span>
+        `;
+      }
+    }).filter(html => html !== '').join('');
 
     displayContainer.innerHTML = `
       <div class="flex flex-wrap gap-2 mb-2">
@@ -690,9 +835,59 @@ class IngredientLinker {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+  window.intermediateIngredientManager = new IntermediateIngredientManager();
   window.ingredientLinker = new IngredientLinker();
+  
+  // Set up modal event handlers
+  const cancelBtn = document.getElementById('cancel-link-modal');
+  const cancelBtn2 = document.getElementById('cancel-link-modal-2');
+  const saveBtn = document.getElementById('save-link-modal');
+  
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      window.ingredientLinker.closeModal();
+    });
+  }
+  
+  if (cancelBtn2) {
+    cancelBtn2.addEventListener('click', () => {
+      window.ingredientLinker.closeModal();
+    });
+  }
+  
+  if (saveBtn) {
+    saveBtn.addEventListener('click', () => {
+      window.ingredientLinker.saveManualLinks();
+    });
+  }
+  
+  // Handle manual link button clicks
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    
+    // Check if it's a manual link button or its child element
+    const manualLinkBtn = target.closest('.manual-link-btn');
+    if (manualLinkBtn) {
+      e.preventDefault();
+      const stepElement = manualLinkBtn.closest('.step-edit-item') as HTMLElement;
+      if (stepElement) {
+        window.ingredientLinker.openManualLinkModal(stepElement);
+      }
+    }
+    
+    // Check if it's an auto link button or its child element  
+    const autoLinkBtn = target.closest('.auto-link-btn');
+    if (autoLinkBtn) {
+      e.preventDefault();
+      const stepElement = autoLinkBtn.closest('.step-edit-item') as HTMLElement;
+      if (stepElement) {
+        window.ingredientLinker.autoLinkIngredients(stepElement);
+      }
+    }
+  });
 });
 
 // Export for use in other scripts
+window.IntermediateIngredientManager = IntermediateIngredientManager;
 window.IngredientLinker = IngredientLinker;
 </script> 
