@@ -141,7 +141,7 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
     
     return {
       title: getStringValue(data.name) || 'Untitled Recipe',
-      subtitle: getStringValue(data.description),
+      // Leave subtitle undefined unless it can be extracted from title
       description: getStringValue(data.description),
       servings: getNumberValue(data.recipeYield),
       preparationTime: getTimeValue(data.prepTime),

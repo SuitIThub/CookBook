@@ -462,13 +462,8 @@ export class LeckerExtractor extends BaseRecipeExtractor {
         const mainTitle = parts[0].trim();
         const titleSubtitle = parts.slice(1).join(separator).trim();
         
-        // If we have a good description, use that as subtitle, otherwise use the title part
-        if (cleanedDesc && cleanedDesc.length > titleSubtitle.length && !cleanedDesc.toLowerCase().includes('lecker.de')) {
-          return {
-            title: mainTitle,
-            subtitle: cleanedDesc
-          };
-        } else if (titleSubtitle) {
+        // Use the subtitle from the title if available
+        if (titleSubtitle) {
           return {
             title: mainTitle,
             subtitle: titleSubtitle
@@ -487,15 +482,7 @@ export class LeckerExtractor extends BaseRecipeExtractor {
       };
     }
 
-    // If no separator but we have a substantial description, use it as subtitle
-    if (cleanedDesc && cleanedDesc.length > 20 && !cleanedDesc.toLowerCase().includes('lecker.de')) {
-      return {
-        title: cleanedName,
-        subtitle: cleanedDesc
-      };
-    }
-
-    // Just return the title
+    // Just return the title without using description as subtitle
     return { title: cleanedName };
   }
 } 

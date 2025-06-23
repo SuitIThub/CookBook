@@ -483,15 +483,7 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
       };
     }
 
-    // If no dash separator, use description as subtitle if it's substantial
-    if (cleanedDesc && cleanedDesc.length > 20 && !cleanedDesc.toLowerCase().includes('importiert von:')) {
-      return {
-        title: cleanedName,
-        subtitle: cleanedDesc
-      };
-    }
-
-    // Just return the title
+    // Just return the title without using description as subtitle
     return { title: cleanedName };
   }
 } 

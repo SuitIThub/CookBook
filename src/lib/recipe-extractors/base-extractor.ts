@@ -57,7 +57,7 @@ export abstract class BaseRecipeExtractor {
       },
       ingredientGroups: [{
         id: this.generateId(),
-        title: 'Zutaten',
+        title: undefined,
         ingredients: data.ingredients.map(ingredient => this.parseIngredient(ingredient))
       }],
       preparationGroups: [{
@@ -158,26 +158,89 @@ export abstract class BaseRecipeExtractor {
     const cleaned = this.cleanText(ingredientStr);
     console.log('Parsing ingredient:', cleaned);
     
-    // Common German units (most specific first)
-    const unitPatterns = [
+    // Define unit mappings with their variations
+    const unitMappings = [
+      // Small measurement units
+      { unit: 'Msp.', variations: ['Messerspitze', 'Msp\\.?', 'MSP\\.?'] },
+      { unit: 'Prise', variations: ['Prise', 'Pr\\.?', 'PR\\.?'] },
+      { unit: 'Tropfen', variations: ['Tropfen', 'Tr\\.?', 'TR\\.?'] },
+      { unit: 'Spritzer', variations: ['Spritzer'] },
+      { unit: 'Schuss', variations: ['Schuss'] },
+      { unit: 'Hauch', variations: ['Hauch'] },
+      
       // Volume units
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Esslöffel|EL|Eßlöffel)\s+(.+)/i, unit: 'EL' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Teelöffel|TL)\s+(.+)/i, unit: 'TL' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Liter|l|L)\s+(.+)/i, unit: 'L' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Milliliter|ml|ML)\s+(.+)/i, unit: 'ml' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Tasse|Tassen)\s+(.+)/i, unit: 'Tasse' },
+      { unit: 'EL', variations: ['Esslöffel', 'EL', 'Eßlöffel'] },
+      { unit: 'TL', variations: ['Teelöffel', 'TL'] },
+      { unit: 'L', variations: ['Liter', 'l', 'L'] },
+      { unit: 'ml', variations: ['Milliliter', 'ml', 'ML'] },
+      { unit: 'Tasse', variations: ['Tasse', 'Tassen'] },
+      { unit: 'Becher', variations: ['Becher'] },
+      { unit: 'Glas', variations: ['Glas', 'Gläser'] },
       
       // Weight units
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Kilogramm|kg|KG)\s+(.+)/i, unit: 'kg' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Gramm|g|G)\s+(.+)/i, unit: 'g' },
+      { unit: 'kg', variations: ['Kilogramm', 'kg', 'KG'] },
+      { unit: 'g', variations: ['Gramm', 'g', 'G'] },
       
-      // Package/piece units with explicit recognition
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Packung|Pck\.|Pck|Pack)\s+(.+)/i, unit: 'Pck.' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Dose|Dosen)\s+(.+)/i, unit: 'Dose' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Stück|St\.|St)\s*\(?\w*\)?\s+(.+)/i, unit: 'Stück' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Zehe|Zehen)\s*\(?\w*\)?\s+(.+)/i, unit: 'Zehe' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Bund)\s*\(?\w*\)?\s+(.+)/i, unit: 'Bund' },
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(Scheibe|Scheiben)\s*\(?\w*\)?\s+(.+)/i, unit: 'Scheibe' },
+      // Package/piece units
+      { unit: 'Pck.', variations: ['Packung', 'Pck\\.?', 'Pack'] },
+      { unit: 'Päckchen', variations: ['Päckchen'] },
+      { unit: 'Dose', variations: ['Dose', 'Dosen'] },
+      { unit: 'Flasche', variations: ['Flasche', 'Flaschen'] },
+      { unit: 'Tube', variations: ['Tube', 'Tuben'] },
+      { unit: 'Würfel', variations: ['Würfel'] },
+      { unit: 'Riegel', variations: ['Riegel'] },
+      { unit: 'Rolle', variations: ['Rolle', 'Rollen'] },
+      { unit: 'Stück', variations: ['Stück', 'St\\.?', 'St'] },
+      
+      // Natural units
+      { unit: 'Zehe', variations: ['Zehe', 'Zehen'] },
+      { unit: 'Bund', variations: ['Bund'] },
+      { unit: 'Kopf', variations: ['Kopf', 'Köpfe'] },
+      { unit: 'Knolle', variations: ['Knolle', 'Knollen'] },
+      { unit: 'Stange', variations: ['Stange', 'Stangen'] },
+      { unit: 'Zweig', variations: ['Zweig', 'Zweige'] },
+      { unit: 'Blatt', variations: ['Blatt', 'Blätter'] },
+      { unit: 'Scheibe', variations: ['Scheibe', 'Scheiben'] },
+      { unit: 'Handvoll', variations: ['Handvoll'] }
+    ];
+
+    // Generate unit patterns dynamically
+    const unitPatterns = [];
+    
+    // Enhanced patterns for complex ingredients
+    for (const { unit, variations } of unitMappings) {
+      const variationPattern = variations.join('|');
+      
+      // Pattern with descriptive text between quantity and unit (e.g., "3 gestr. TL")
+      unitPatterns.push({
+        pattern: new RegExp(`^(\\d+(?:[,\\.]\\d+)?)\\s+([a-zäöüß\\.]+\\s+)?(${variationPattern})\\s+(.+)`, 'i'),
+        unit,
+        hasDescriptive: true
+      });
+      
+      // Standard pattern (e.g., "3 TL")
+      unitPatterns.push({
+        pattern: new RegExp(`^(\\d+(?:[,\\.]\\d+)?)\\s*(${variationPattern})\\s+(.+)`, 'i'),
+        unit
+      });
+    }
+
+    // Add special patterns at the beginning for priority
+    const specialPatterns = [
+      // Ingredients with parentheses info (e.g., "4 Eier (Gr. M)")
+      { pattern: /^(\d+(?:[,\.]\d+)?)\s+([A-Za-zäöüÄÖÜß]+)\s*\(([^)]+)\)(?:\s+(.+))?/i, parentheses: true },
+      
+      // Descriptive text with units (e.g., "3 gestr. TL Backpulver")
+      { pattern: /^(\d+(?:[,\.]\d+)?)\s+([a-zäöüß\.\s]+)\s+(TL|EL|g|kg|ml|L|Pck\.?|Msp\.?)\s+(.+)/i, descriptive: true },
+      
+      // Glas with content description (e.g., "1 Glas (à 720 ml) Sauerkirschen")
+      { pattern: /^(\d+(?:[,\.]\d+)?)\s+(Glas|Dose|Flasche)\s*\(([^)]+)\)\s+(.+)/i, container: true },
+      
+      // "Schale von..." pattern
+      { pattern: /^(Schale\s+von\s+.+)/i, description: true },
+      
+      // Compound ingredient names with units (e.g., "1 Zimtstange", "2 Knoblauchzehen")
+      { pattern: /^(\d+(?:[,\.]\d+)?)\s+(.*(?:stange|zehe|kopf|knolle|zweig|blatt|scheibe|bund)(?:n)?)$/i, compound: true },
       
       // Special Chefkoch patterns with parentheses like "Zwiebel(n)"
       { pattern: /^(\d+(?:[,\.]\d+)?)\s+([A-Za-zäöüÄÖÜß]+\([^)]*\))(?:\s+(.+))?/i, chefkoch: true },
@@ -190,14 +253,51 @@ export abstract class BaseRecipeExtractor {
       // Fractional amounts
       { pattern: /^(\d+(?:[,\.]\d+)?)\s*\/\s*(\d+)\s*([A-Za-zäöüÄÖÜß]+)\s+(.+)/i, fraction: true },
       
-      // Generic number + unit pattern (only for actual units)
-      { pattern: /^(\d+(?:[,\.]\d+)?)\s*(ml|g|kg|l|EL|TL|Pck|Dose|Stück|Bund|Zehe|Scheibe)\b\s*(.+)/i, generic: true },
+      // Text-based quantities (without numbers)
+      { pattern: /^(etwas)\s+(.+)/i, amount: 1, unit: 'etwas' },
+      { pattern: /^(wenig)\s+(.+)/i, amount: 1, unit: 'wenig' },
+      { pattern: /^(viel)\s+(.+)/i, amount: 1, unit: 'viel' },
+      { pattern: /^(ein wenig)\s+(.+)/i, amount: 1, unit: 'ein wenig' },
+      { pattern: /^(ein bisschen)\s+(.+)/i, amount: 1, unit: 'ein bisschen' },
+      { pattern: /^(nach Geschmack)\s+(.+)/i, amount: 1, unit: 'n. Geschmack' },
+      { pattern: /^(nach Belieben)\s+(.+)/i, amount: 1, unit: 'n. Belieben' },
+      { pattern: /^(n\.\s*B\.)\s+(.+)/i, amount: 1, unit: 'n. Belieben' },
+    ];
+
+    // Add special patterns first, then regular unit patterns
+    unitPatterns.unshift(...specialPatterns);
+
+    // Add generic patterns at the end
+    unitPatterns.push(
+      // Generic fallback pattern for short units
+      (() => {
+        const allShortUnits = unitMappings.flatMap(mapping => 
+          mapping.variations.filter(v => v.length <= 4 && !v.includes('\\'))
+        ).join('|');
+        return { 
+          pattern: new RegExp(`^(\\d+(?:[,\\.]\\d+)?)\\s*(${allShortUnits})\\b\\s*(.+)`, 'i'), 
+          generic: true 
+        };
+      })(),
       
       // Just a number at the start (fallback)
       { pattern: /^(\d+(?:[,\.]\d+)?)\s+(.+)/i, unit: 'Stück' }
-    ];
+    );
 
-    for (const { pattern, unit, amount: fixedAmount, fraction, generic, chefkoch } of unitPatterns) {
+    for (const patternObj of unitPatterns) {
+      const { pattern } = patternObj;
+      const unit = 'unit' in patternObj ? patternObj.unit : undefined;
+      const fixedAmount = 'amount' in patternObj ? patternObj.amount : undefined;
+      const fraction = 'fraction' in patternObj ? patternObj.fraction : false;
+      const generic = 'generic' in patternObj ? patternObj.generic : false;
+      const chefkoch = 'chefkoch' in patternObj ? patternObj.chefkoch : false;
+      const parentheses = 'parentheses' in patternObj ? patternObj.parentheses : false;
+      const descriptive = 'descriptive' in patternObj ? patternObj.descriptive : false;
+      const container = 'container' in patternObj ? patternObj.container : false;
+      const description = 'description' in patternObj ? patternObj.description : false;
+      const hasDescriptive = 'hasDescriptive' in patternObj ? patternObj.hasDescriptive : false;
+      const compound = 'compound' in patternObj ? patternObj.compound : false;
+      
       const match = cleaned.match(pattern);
       if (match) {
         console.log('Pattern matched:', pattern, 'Match groups:', match);
@@ -206,7 +306,120 @@ export abstract class BaseRecipeExtractor {
         let extractedUnit: string;
         let name: string;
 
-        if (fixedAmount !== undefined) {
+        if (description) {
+          // Special case for "Schale von..." - treat as single item
+          return {
+            id: this.generateId(),
+            name: match[1],
+            quantities: [{
+              amount: 1,
+              unit: 'Stück'
+            }]
+          };
+        } else if (parentheses) {
+          // Pattern like "4 Eier (Gr. M)"
+          amount = parseFloat(match[1].replace(',', '.'));
+          const baseName = match[2];
+          const ingredientDescription = match[3];
+          const additionalText = match[4] || '';
+          
+          // Determine unit based on ingredient name
+          let ingredientUnit = 'Stück';
+          if (baseName.toLowerCase().includes('ei')) {
+            ingredientUnit = 'Stück';
+          }
+          
+          name = baseName + (additionalText ? ' ' + additionalText : '');
+          extractedUnit = ingredientUnit;
+          
+          // Store description separately
+          const result = {
+            id: this.generateId(),
+            name: name.trim(),
+            description: ingredientDescription,
+            quantities: [{
+              amount: amount,
+              unit: extractedUnit
+            }]
+          };
+          
+          console.log('Parsed ingredient result with description:', result);
+          return result;
+        } else if (descriptive) {
+          // Pattern like "3 gestr. TL Backpulver"
+          amount = parseFloat(match[1].replace(',', '.'));
+          const descriptiveText = match[2].trim();
+          extractedUnit = match[3];
+          const ingredientName = match[4];
+          
+          name = ingredientName;
+          
+          // Store descriptive text as description
+          const result = {
+            id: this.generateId(),
+            name: name.trim(),
+            description: descriptiveText,
+            quantities: [{
+              amount: amount,
+              unit: extractedUnit
+            }]
+          };
+          
+          console.log('Parsed ingredient result with description:', result);
+          return result;
+                         } else if (container) {
+          // Pattern like "1 Glas (à 720 ml) Sauerkirschen"
+          amount = parseFloat(match[1].replace(',', '.'));
+          const containerType = match[2];
+          const containerDescription = match[3];
+          const contents = match[4];
+          
+          extractedUnit = containerType;
+          name = contents;
+          
+          // Store container description as description
+          const result = {
+            id: this.generateId(),
+            name: name.trim(),
+            description: containerDescription,
+            quantities: [{
+              amount: amount,
+              unit: extractedUnit
+            }]
+          };
+          
+          console.log('Parsed ingredient result with description:', result);
+          return result;
+         } else if (compound) {
+           // Pattern like "1 Zimtstange" - ingredient name contains the unit
+           amount = parseFloat(match[1].replace(',', '.'));
+           name = match[2];
+           extractedUnit = 'Stück'; // Default to pieces for compound ingredients
+         } else if (hasDescriptive) {
+          // Pattern with descriptive text between quantity and unit
+          amount = parseFloat(match[1].replace(',', '.'));
+          const descriptiveText = match[2] ? match[2].trim() : '';
+          extractedUnit = unit || match[3];
+          const ingredientName = match[4] || '';
+          
+          name = ingredientName;
+          
+          // If there's descriptive text, store it as description
+          if (descriptiveText) {
+            const result = {
+              id: this.generateId(),
+              name: name.trim(),
+              description: descriptiveText,
+              quantities: [{
+                amount: amount,
+                unit: extractedUnit
+              }]
+            };
+            
+            console.log('Parsed ingredient result with description:', result);
+            return result;
+          }
+        } else if (fixedAmount !== undefined) {
           // Fixed amount (like ½)
           amount = fixedAmount;
           extractedUnit = match[2] || 'Stück';

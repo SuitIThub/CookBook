@@ -652,8 +652,8 @@ const { recipe } = Astro.props;
     const formData = {
       ...updatedRecipe,
       title: document.getElementById('edit-title')?.value || updatedRecipe.title,
-      subtitle: document.getElementById('edit-subtitle')?.value || updatedRecipe.subtitle,
-      description: document.getElementById('edit-description')?.value || updatedRecipe.description,
+      subtitle: document.getElementById('edit-subtitle')?.value ?? updatedRecipe.subtitle,
+      description: document.getElementById('edit-description')?.value ?? updatedRecipe.description,
       metadata: {
         ...updatedRecipe.metadata,
         servings: parseInt(document.getElementById('edit-servings')?.value) || updatedRecipe.metadata.servings,
