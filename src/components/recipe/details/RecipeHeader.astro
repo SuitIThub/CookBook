@@ -18,7 +18,7 @@ const { recipe } = Astro.props;
           <p class="text-xl text-gray-700 dark:text-gray-300 mb-3">{recipe.subtitle}</p>
         )}
         {recipe.description && (
-          <p class="text-gray-600 dark:text-gray-400 leading-relaxed">{recipe.description}</p>
+          <p class="text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{recipe.description}</p>
         )}
       </div>
       <div class="ml-6 flex space-x-2">
@@ -46,7 +46,7 @@ const { recipe } = Astro.props;
           <p class="text-lg sm:text-xl text-gray-700 dark:text-gray-300 mb-3">{recipe.subtitle}</p>
         )}
         {recipe.description && (
-          <p class="text-gray-600 dark:text-gray-400 leading-relaxed text-sm sm:text-base">{recipe.description}</p>
+          <p class="text-gray-600 dark:text-gray-400 leading-relaxed text-sm sm:text-base whitespace-pre-wrap">{recipe.description}</p>
         )}
       </div>
       
