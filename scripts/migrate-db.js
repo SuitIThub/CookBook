@@ -35,6 +35,7 @@ const EXPECTED_SCHEMA = {
       columns: [
         { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
         { name: 'name', type: 'TEXT', nullable: false, unique: true },
+        { name: 'description', type: 'TEXT', nullable: true },
         { name: 'usage_count', type: 'INTEGER', nullable: true, defaultValue: '1' }
       ]
     },

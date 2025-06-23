@@ -43,42 +43,52 @@ const { recipe } = Astro.props;
           !group.title ? group.ingredients.map((ingredient) => (
             'name' in ingredient ? (
               <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" data-ingredient-id={(ingredient as Ingredient).id}>
-                <div class="flex space-x-3 items-center">
-                  <input 
-                    type="text" 
-                    value={(ingredient as Ingredient).name}
-                    placeholder="Zutatename"
-                    class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                  />
-                  <input 
-                    type="number" 
-                    value={(ingredient as Ingredient).quantities[0]?.amount || ''}
-                    placeholder="Menge"
-                    step="0.1"
-                    class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                  />
-                  <select class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                    <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
-                      {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
-                    </option>
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="ml">ml</option>
-                    <option value="l">l</option>
-                    <option value="Stück">Stück</option>
-                    <option value="TL">TL</option>
-                    <option value="EL">EL</option>
-                    <option value="Tasse">Tasse</option>
-                    <option value="Prise">Prise</option>
-                  </select>
-                  <button 
-                    type="button" 
-                    class="remove-ingredient-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                    </svg>
-                  </button>
+                <div class="space-y-3">
+                  <div class="flex space-x-3 items-center">
+                    <input 
+                      type="text" 
+                      value={(ingredient as Ingredient).name}
+                      placeholder="Zutatename"
+                      class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                    />
+                    <input 
+                      type="number" 
+                      value={(ingredient as Ingredient).quantities[0]?.amount || ''}
+                      placeholder="Menge"
+                      step="0.1"
+                      class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                    />
+                    <select class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                      <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
+                        {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
+                      </option>
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="l">l</option>
+                      <option value="Stück">Stück</option>
+                      <option value="TL">TL</option>
+                      <option value="EL">EL</option>
+                      <option value="Tasse">Tasse</option>
+                      <option value="Prise">Prise</option>
+                    </select>
+                    <button 
+                      type="button" 
+                      class="remove-ingredient-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <div>
+                    <input 
+                      type="text" 
+                      value={(ingredient as Ingredient).description || ''}
+                      placeholder="Beschreibung (optional)"
+                      class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
+                    />
+                  </div>
                 </div>
               </div>
             ) : null
@@ -119,42 +129,52 @@ const { recipe } = Astro.props;
             {group.ingredients.map((ingredient) => (
               'name' in ingredient ? (
                 <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" data-ingredient-id={(ingredient as Ingredient).id}>
-                  <div class="flex space-x-3 items-center">
-                    <input 
-                      type="text" 
-                      value={(ingredient as Ingredient).name}
-                      placeholder="Zutatename"
-                      class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                    />
-                    <input 
-                      type="number" 
-                      value={(ingredient as Ingredient).quantities[0]?.amount || ''}
-                      placeholder="Menge"
-                      step="0.1"
-                      class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                    />
-                    <select class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                      <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
-                        {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
-                      </option>
-                      <option value="g">g</option>
-                      <option value="kg">kg</option>
-                      <option value="ml">ml</option>
-                      <option value="l">l</option>
-                      <option value="Stück">Stück</option>
-                      <option value="TL">TL</option>
-                      <option value="EL">EL</option>
-                      <option value="Tasse">Tasse</option>
-                      <option value="Prise">Prise</option>
-                    </select>
-                    <button 
-                      type="button" 
-                      class="remove-ingredient-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                      </svg>
-                    </button>
+                  <div class="space-y-3">
+                    <div class="flex space-x-3 items-center">
+                      <input 
+                        type="text" 
+                        value={(ingredient as Ingredient).name}
+                        placeholder="Zutatename"
+                        class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                      />
+                      <input 
+                        type="number" 
+                        value={(ingredient as Ingredient).quantities[0]?.amount || ''}
+                        placeholder="Menge"
+                        step="0.1"
+                        class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                      />
+                      <select class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
+                          {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
+                        </option>
+                        <option value="g">g</option>
+                        <option value="kg">kg</option>
+                        <option value="ml">ml</option>
+                        <option value="l">l</option>
+                        <option value="Stück">Stück</option>
+                        <option value="TL">TL</option>
+                        <option value="EL">EL</option>
+                        <option value="Tasse">Tasse</option>
+                        <option value="Prise">Prise</option>
+                      </select>
+                      <button 
+                        type="button" 
+                        class="remove-ingredient-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </div>
+                    <div>
+                      <input 
+                        type="text" 
+                        value={(ingredient as Ingredient).description || ''}
+                        placeholder="Beschreibung (optional)"
+                        class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
               ) : null

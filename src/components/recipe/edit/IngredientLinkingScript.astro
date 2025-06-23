@@ -193,20 +193,22 @@ class IngredientLinker {
     }
   }
 
-  getAllIngredients(): Array<{id: string, name: string, quantities: Array<{amount: number, unit: string}>}> {
+  getAllIngredients(): Array<{id: string, name: string, description?: string, quantities: Array<{amount: number, unit: string}>}> {
     // Read current ingredients from DOM instead of cached recipe data
-    const ingredients: Array<{id: string, name: string, quantities: Array<{amount: number, unit: string}>}> = [];
+    const ingredients: Array<{id: string, name: string, description?: string, quantities: Array<{amount: number, unit: string}>}> = [];
     
     // Get all ingredient elements from the DOM
     const ingredientElements = document.querySelectorAll('.ingredient-edit-item');
     
     ingredientElements.forEach((ingredientElement: Element) => {
       const nameInput = ingredientElement.querySelector('input[type="text"]') as HTMLInputElement;
+      const descriptionInput = ingredientElement.querySelector('.ingredient-description-input') as HTMLInputElement;
       const amountInput = ingredientElement.querySelector('input[type="number"]') as HTMLInputElement;
       const unitSelect = ingredientElement.querySelector('select') as HTMLSelectElement;
       const ingredientId = (ingredientElement as HTMLElement).dataset.ingredientId;
       
       const name = nameInput?.value.trim();
+      const description = descriptionInput?.value.trim();
       const amount = parseFloat(amountInput?.value) || 0;
       const unit = unitSelect?.value || '';
       
@@ -215,6 +217,7 @@ class IngredientLinker {
         ingredients.push({
           id: ingredientId,
           name: name,
+          description: description || undefined,
           quantities: [{
             amount: amount,
             unit: unit

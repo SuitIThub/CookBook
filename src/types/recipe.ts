@@ -13,6 +13,7 @@ export interface Quantity {
 export interface Ingredient {
   id: string;
   name: string;
+  description?: string;
   quantities: Quantity[];
 }
 

@@ -45,6 +45,7 @@ class CookbookDatabase {
       CREATE TABLE IF NOT EXISTS ingredients (
         id TEXT PRIMARY KEY,
         name TEXT UNIQUE NOT NULL,
+        description TEXT,
         usage_count INTEGER DEFAULT 1
       )
     `);
@@ -306,14 +307,14 @@ class CookbookDatabase {
 
   private addIngredientsToAutocomplete(ingredientGroups: any[]): void {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO ingredients (id, name, usage_count) 
-      VALUES (?, ?, COALESCE((SELECT usage_count FROM ingredients WHERE name = ?) + 1, 1))
+      INSERT OR REPLACE INTO ingredients (id, name, description, usage_count) 
+      VALUES (?, ?, ?, COALESCE((SELECT usage_count FROM ingredients WHERE name = ?) + 1, 1))
     `);
 
     ingredientGroups.forEach(group => {
       group.ingredients.forEach((ingredient: any) => {
         if (ingredient.name) {
-          stmt.run(uuidv4(), ingredient.name, ingredient.name);
+          stmt.run(uuidv4(), ingredient.name, ingredient.description, ingredient.name);
         }
       });
     });

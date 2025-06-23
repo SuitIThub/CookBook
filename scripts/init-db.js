@@ -33,6 +33,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS ingredients (
     id TEXT PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
+    description TEXT,
     usage_count INTEGER DEFAULT 1
   )
 `);
@@ -57,21 +58,25 @@ const sampleRecipes = [
           {
             id: uuidv4(),
             name: 'Spaghetti',
+            description: 'Lange, dünne Nudeln aus Hartweizengrieß',
             quantities: [{ amount: 400, unit: 'g' }]
           },
           {
             id: uuidv4(),
             name: 'Guanciale oder Pancetta',
+            description: 'Italienischer Schweinebauchspeck, ungeräuchert',
             quantities: [{ amount: 150, unit: 'g' }]
           },
           {
             id: uuidv4(),
             name: 'Eier',
+            description: 'Frisch, am besten aus Freilandhaltung',
             quantities: [{ amount: 3, unit: 'Stück' }]
           },
           {
             id: uuidv4(),
             name: 'Pecorino Romano',
+            description: 'Italienischer Hartkäse aus Schafsmilch',
             quantities: [{ amount: 100, unit: 'g' }]
           },
           {
@@ -174,11 +179,13 @@ const sampleRecipes = [
           {
             id: uuidv4(),
             name: 'Äpfel',
+            description: 'Säuerlich-süße Äpfel, z.B. Boskoop oder Braeburn',
             quantities: [{ amount: 4, unit: 'Stück' }]
           },
           {
             id: uuidv4(),
             name: 'Zimt',
+            description: 'Gemahlener Ceylon-Zimt für das beste Aroma',
             quantities: [{ amount: 1, unit: 'TL' }]
           },
           {
