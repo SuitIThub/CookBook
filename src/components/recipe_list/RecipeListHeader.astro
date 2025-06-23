@@ -69,19 +69,33 @@ const { recipeCount } = Astro.props;
 
 <!-- Import/Export Modal -->
 <div id="import-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-  <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-    <h3 class="text-lg font-medium mb-4">Rezepte importieren</h3>
-    <div id="import-content">
-      <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Rezepte importieren</h3>
+    
+    <!-- Import Type Selector -->
+    <div class="mb-4">
+      <div class="flex border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700">
+        <button id="import-file-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-l-lg border-r border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
+          Datei
+        </button>
+        <button id="import-url-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
+          URL
+        </button>
+      </div>
+    </div>
+    
+    <!-- File Import Content -->
+    <div id="import-file-content">
+      <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-orange-400 dark:hover:border-orange-500 transition-colors">
+        <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48">
           <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3-3m-3 3l3 3m-3-3H21" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <div class="mt-4">
           <label for="file-upload" class="cursor-pointer">
-            <span class="mt-2 block text-sm font-medium text-gray-900">
+            <span class="mt-2 block text-sm font-medium text-gray-900 dark:text-white">
               Datei auswählen oder hier ablegen
             </span>
-            <span class="mt-1 block text-xs text-gray-500">
+            <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
               JSON oder RCB Dateien (.json, .rcb)
             </span>
           </label>
@@ -89,9 +103,35 @@ const { recipeCount } = Astro.props;
         </div>
       </div>
     </div>
+    
+    <!-- URL Import Content -->
+    <div id="import-url-content" class="hidden">
+      <div class="space-y-4">
+        <div>
+          <label for="recipe-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Rezept-URL eingeben
+          </label>
+          <input 
+            type="url" 
+            id="recipe-url" 
+            placeholder="https://www.chefkoch.de/rezepte/..." 
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-white"
+          >
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Unterstützt: Chefkoch.de, Lecker.de und viele andere Websites mit Rezept-Daten
+          </p>
+        </div>
+        <div id="url-preview" class="hidden p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+          <div class="text-sm text-gray-600 dark:text-gray-300">
+            <strong>Erkannte Website:</strong> <span id="detected-site" class="text-orange-600 dark:text-orange-400"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <div class="mt-6 flex justify-end space-x-3">
-      <button id="cancel-import" class="btn btn-secondary">Abbrechen</button>
-      <button id="confirm-import" class="btn btn-primary" disabled>Importieren</button>
+      <button id="cancel-import" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Abbrechen</button>
+      <button id="confirm-import" class="px-4 py-2 text-sm font-medium text-white bg-orange-500 border border-transparent rounded-md hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Importieren</button>
     </div>
   </div>
 </div>
@@ -132,18 +172,40 @@ const { recipeCount } = Astro.props;
   const fileUpload = document.getElementById('file-upload');
   const cancelImport = document.getElementById('cancel-import');
   const confirmImport = document.getElementById('confirm-import');
+  
+  // Tab elements
+  const importFileTab = document.getElementById('import-file-tab');
+  const importUrlTab = document.getElementById('import-url-tab');
+  const importFileContent = document.getElementById('import-file-content');
+  const importUrlContent = document.getElementById('import-url-content');
+  
+  // URL elements
+  const recipeUrl = document.getElementById('recipe-url') as HTMLInputElement;
+  const urlPreview = document.getElementById('url-preview');
+  const detectedSite = document.getElementById('detected-site');
+  
   let selectedFile: File | null = null;
+  let currentImportType: 'file' | 'url' = 'file';
+  let supportedSites: any[] = [];
+
+  // Load supported sites
+  loadSupportedSites();
 
   importBtn?.addEventListener('click', () => {
     importModal?.classList.remove('hidden');
+    setImportType('file');
   });
 
   cancelImport?.addEventListener('click', () => {
     importModal?.classList.add('hidden');
-    selectedFile = null;
-    updateImportButton();
+    resetImportModal();
   });
 
+  // Tab switching
+  importFileTab?.addEventListener('click', () => setImportType('file'));
+  importUrlTab?.addEventListener('click', () => setImportType('url'));
+
+  // File upload
   fileUpload?.addEventListener('change', (e) => {
     const target = e.target as HTMLInputElement;
     if (target.files && target.files[0]) {
@@ -153,7 +215,99 @@ const { recipeCount } = Astro.props;
     }
   });
 
+  // URL input
+  recipeUrl?.addEventListener('input', (e) => {
+    const target = e.target as HTMLInputElement;
+    const url = target.value.trim();
+    
+    if (url) {
+      updateUrlPreview(url);
+      updateImportButton();
+    } else {
+      hideUrlPreview();
+      updateImportButton();
+    }
+  });
+
   confirmImport?.addEventListener('click', async () => {
+    if (currentImportType === 'file') {
+      await handleFileImport();
+    } else {
+      await handleUrlImport();
+    }
+  });
+
+  function setImportType(type: 'file' | 'url') {
+    currentImportType = type;
+    
+    if (type === 'file') {
+      // Activate file tab
+      importFileTab?.classList.add('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
+      importFileTab?.classList.remove('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
+      
+      // Deactivate URL tab
+      importUrlTab?.classList.add('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
+      importUrlTab?.classList.remove('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
+      
+      importFileContent?.classList.remove('hidden');
+      importUrlContent?.classList.add('hidden');
+    } else {
+      // Activate URL tab
+      importUrlTab?.classList.add('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
+      importUrlTab?.classList.remove('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
+      
+      // Deactivate file tab
+      importFileTab?.classList.add('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
+      importFileTab?.classList.remove('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
+      
+      importUrlContent?.classList.remove('hidden');
+      importFileContent?.classList.add('hidden');
+    }
+    
+    updateImportButton();
+  }
+
+  async function loadSupportedSites() {
+    try {
+      const response = await fetch('/api/recipe-import-url');
+      if (response.ok) {
+        const data = await response.json();
+        supportedSites = data.supportedSites || [];
+      }
+    } catch (error) {
+      console.error('Failed to load supported sites:', error);
+    }
+  }
+
+  function updateUrlPreview(url: string) {
+    try {
+      const urlObj = new URL(url);
+      const domain = urlObj.hostname.toLowerCase();
+      
+      // Find matching extractor
+      const matchingSite = supportedSites.find(site => 
+        site.domains.some((d: string) => 
+          domain === d || domain.endsWith(`.${d}`) || domain.includes(d)
+        )
+      );
+      
+      if (matchingSite) {
+        if (detectedSite) detectedSite.textContent = matchingSite.name;
+        urlPreview?.classList.remove('hidden');
+      } else {
+        if (detectedSite) detectedSite.textContent = 'Allgemeine Website (JSON-LD Fallback)';
+        urlPreview?.classList.remove('hidden');
+      }
+    } catch {
+      hideUrlPreview();
+    }
+  }
+
+  function hideUrlPreview() {
+    urlPreview?.classList.add('hidden');
+  }
+
+  async function handleFileImport() {
     if (!selectedFile) return;
 
     try {
@@ -179,25 +333,114 @@ const { recipeCount } = Astro.props;
     }
 
     importModal?.classList.add('hidden');
-    selectedFile = null;
-    updateImportButton();
-  });
+    resetImportModal();
+  }
+
+  async function handleUrlImport() {
+    const url = recipeUrl?.value.trim();
+    if (!url) return;
+
+    // Show loading state
+    if (confirmImport) {
+      (confirmImport as HTMLButtonElement).disabled = true;
+      (confirmImport as HTMLButtonElement).textContent = 'Importiere...';
+    }
+
+    try {
+      const response = await fetch('/api/recipe-import-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ url })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert(`Erfolgreich Rezept "${result.recipe.title}" importiert mit ${result.extractorUsed}!`);
+        window.location.reload();
+      } else {
+        alert(`Import fehlgeschlagen: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`Import fehlgeschlagen: ${error}`);
+    }
+
+    // Reset loading state
+    if (confirmImport) {
+      (confirmImport as HTMLButtonElement).disabled = false;
+      (confirmImport as HTMLButtonElement).textContent = 'Importieren';
+    }
+
+    importModal?.classList.add('hidden');
+    resetImportModal();
+  }
 
   function updateImportButton() {
     if (confirmImport) {
-      (confirmImport as HTMLButtonElement).disabled = !selectedFile;
+      const isValid = currentImportType === 'file' 
+        ? !!selectedFile 
+        : !!(recipeUrl?.value.trim());
+      (confirmImport as HTMLButtonElement).disabled = !isValid;
     }
   }
 
+  function resetImportModal() {
+    selectedFile = null;
+    if (recipeUrl) recipeUrl.value = '';
+    hideUrlPreview();
+    updateImportButton();
+    resetFileDisplay();
+  }
+
   function updateFileDisplay() {
-    const content = document.getElementById('import-content');
+    const content = document.getElementById('import-file-content');
     if (content && selectedFile) {
       content.innerHTML = `
-        <div class="text-center">
-          <div class="text-sm font-medium text-gray-900">${selectedFile.name}</div>
-          <div class="text-xs text-gray-500">${(selectedFile.size / 1024).toFixed(1)} KB</div>
+        <div class="border-2 border-dashed border-green-300 dark:border-green-600 rounded-lg p-6 text-center bg-green-50 dark:bg-green-900/20">
+          <svg class="mx-auto h-8 w-8 text-green-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <div class="text-sm font-medium text-gray-900 dark:text-white">${selectedFile.name}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400">${(selectedFile.size / 1024).toFixed(1)} KB</div>
         </div>
       `;
+    }
+  }
+
+  function resetFileDisplay() {
+    const content = document.getElementById('import-file-content');
+    if (content) {
+      content.innerHTML = `
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+          <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3-3m-3 3l3 3m-3-3H21" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="mt-4">
+            <label for="file-upload" class="cursor-pointer">
+              <span class="mt-2 block text-sm font-medium text-gray-900">
+                Datei auswählen oder hier ablegen
+              </span>
+              <span class="mt-1 block text-xs text-gray-500">
+                JSON oder RCB Dateien (.json, .rcb)
+              </span>
+            </label>
+            <input id="file-upload" name="file-upload" type="file" accept=".json,.rcb" class="sr-only">
+          </div>
+        </div>
+      `;
+      
+      // Re-attach event listener
+      const newFileUpload = document.getElementById('file-upload');
+      newFileUpload?.addEventListener('change', (e) => {
+        const target = e.target as HTMLInputElement;
+        if (target.files && target.files[0]) {
+          selectedFile = target.files[0];
+          updateImportButton();
+          updateFileDisplay();
+        }
+      });
     }
   }
 </script> 

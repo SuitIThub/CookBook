@@ -141,16 +141,34 @@ export const DELETE: APIRoute = async ({ url }) => {
       });
     }
 
-    const deleted = db.deleteRecipe(id);
-    
-    if (!deleted) {
+    // Get recipe data before deletion to access images for cleanup
+    const recipe = db.getRecipe(id);
+    if (!recipe) {
       return new Response(JSON.stringify({ error: 'Recipe not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // Delete associated image files from filesystem
+    await cleanupRecipeImages(recipe.images || []);
+
+    // Delete recipe from database
+    const deleted = db.deleteRecipe(id);
+    
+    if (!deleted) {
+      return new Response(JSON.stringify({ error: 'Failed to delete recipe from database' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    console.log(`Successfully deleted recipe "${recipe.title}" and cleaned up ${recipe.images?.length || 0} associated image files`);
+
+    return new Response(JSON.stringify({ 
+      success: true,
+      deletedImages: recipe.images?.length || 0 
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
@@ -161,4 +179,46 @@ export const DELETE: APIRoute = async ({ url }) => {
       headers: { 'Content-Type': 'application/json' }
     });
   }
-}; 
+};
+
+/**
+ * Clean up image files from the filesystem
+ */
+async function cleanupRecipeImages(images: any[]) {
+  const fs = await import('fs/promises');
+  const path = await import('path');
+  
+  const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads', 'recipes');
+  let deletedCount = 0;
+  let skippedCount = 0;
+
+  for (const image of images) {
+    try {
+      // Only delete files that are actually stored locally (have a filename and start with /uploads/)
+      if (image.filename && image.url && image.url.startsWith('/uploads/')) {
+        const filePath = path.join(UPLOADS_DIR, image.filename);
+        
+        // Check if file exists before trying to delete
+        try {
+          await fs.access(filePath);
+          await fs.unlink(filePath);
+          deletedCount++;
+          console.log(`Deleted image file: ${image.filename}`);
+        } catch (accessError) {
+          // File doesn't exist, that's fine
+          console.log(`Image file already deleted or not found: ${image.filename}`);
+          skippedCount++;
+        }
+      } else {
+        // Skip external URLs (like imported images from websites)
+        console.log(`Skipped external image: ${image.url}`);
+        skippedCount++;
+      }
+    } catch (error) {
+      console.error(`Failed to delete image file ${image.filename}:`, error);
+      skippedCount++;
+    }
+  }
+
+  console.log(`Image cleanup completed: ${deletedCount} deleted, ${skippedCount} skipped`);
+} 

@@ -44,21 +44,19 @@ const images = recipe.images || [];
         ))}
         
         <div class="flex-shrink-0">
-          <label class="block w-32 h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-orange-400 dark:hover:border-orange-500 transition-colors bg-gray-50 dark:bg-gray-700/50">
+          <button 
+            type="button"
+            class="block w-32 h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-orange-400 dark:hover:border-orange-500 transition-colors bg-gray-50 dark:bg-gray-700/50"
+            data-recipe-id={recipe.id}
+            id="add-image-btn"
+          >
             <div class="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
               <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
               </svg>
               <span class="text-xs text-center">Bild hinzufügen</span>
             </div>
-            <input 
-              type="file" 
-              accept="image/*" 
-              class="hidden" 
-              id="add-image-input"
-              data-recipe-id={recipe.id}
-            />
-          </label>
+          </button>
         </div>
       </div>
     </div>
@@ -68,19 +66,17 @@ const images = recipe.images || [];
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 p-6">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Bilder</h2>
-        <label class="flex items-center space-x-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors">
+        <button 
+          type="button"
+          class="flex items-center space-x-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors"
+          data-recipe-id={recipe.id}
+          id="add-first-image-btn"
+        >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
           </svg>
           <span>Erstes Bild hinzufügen</span>
-          <input 
-            type="file" 
-            accept="image/*" 
-            class="hidden" 
-            id="add-first-image-input"
-            data-recipe-id={recipe.id}
-          />
-        </label>
+        </button>
       </div>
       <p class="text-gray-600 dark:text-gray-400 text-sm mt-2">Fügen Sie Bilder hinzu, um Ihr Rezept visuell zu präsentieren.</p>
     </div>
@@ -113,6 +109,102 @@ const images = recipe.images || [];
       )}
     </div>
   </div>
+
+  <!-- Image Upload Modal -->
+  <div id="image-upload-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Bild hinzufügen</h3>
+        <button id="close-upload-modal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="p-6">
+        <!-- Tab Navigation -->
+        <div class="flex space-x-1 mb-6 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+          <button 
+            id="file-tab" 
+            class="flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 shadow-sm"
+          >
+            Datei hochladen
+          </button>
+          <button 
+            id="url-tab" 
+            class="flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            URL eingeben
+          </button>
+        </div>
+
+        <!-- File Upload Tab -->
+        <div id="file-upload-section" class="space-y-4">
+          <div 
+            id="upload-dropzone"
+            class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-orange-400 dark:hover:border-orange-500 transition-colors cursor-pointer"
+          >
+            <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+            <p class="text-gray-600 dark:text-gray-400 mb-2">
+              <span class="font-medium">Klicken Sie hier</span> oder ziehen Sie eine Datei hierher
+            </p>
+            <p class="text-sm text-gray-500 dark:text-gray-500">PNG, JPG, JPEG oder WEBP (max. 10MB)</p>
+            <input 
+              type="file" 
+              id="file-input" 
+              accept="image/*" 
+              class="hidden"
+            />
+          </div>
+        </div>
+
+        <!-- URL Input Tab -->
+        <div id="url-input-section" class="space-y-4 hidden">
+          <div>
+            <label for="image-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Bild-URL
+            </label>
+            <input 
+              type="url" 
+              id="image-url" 
+              placeholder="https://example.com/image.jpg"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+          <div id="url-preview" class="hidden">
+            <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Vorschau:</p>
+            <img id="preview-image" src="" alt="Vorschau" class="w-full h-32 object-cover rounded-md border">
+          </div>
+        </div>
+
+        <!-- Loading state -->
+        <div id="upload-loading" class="hidden text-center py-4">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+          <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Bild wird hochgeladen...</p>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <button 
+            id="cancel-upload" 
+            class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            Abbrechen
+          </button>
+          <button 
+            id="upload-confirm" 
+            class="px-4 py-2 text-sm font-medium text-white bg-orange-500 border border-transparent rounded-md hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+          >
+            Hinzufügen
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -128,11 +220,69 @@ const images = recipe.images || [];
       recipeId = container.dataset.recipeId || '';
     }
 
-    // File upload handlers
-    const addImageInputs = document.querySelectorAll('#add-image-input, #add-first-image-input');
-    addImageInputs.forEach(input => {
-      input.addEventListener('change', handleImageUpload);
+    // Modal handlers
+    const addImageBtns = document.querySelectorAll('#add-image-btn, #add-first-image-btn');
+    const uploadModal = document.getElementById('image-upload-modal');
+    const closeUploadModal = document.getElementById('close-upload-modal');
+    const cancelUpload = document.getElementById('cancel-upload');
+    
+    addImageBtns.forEach(btn => {
+      btn.addEventListener('click', openUploadModal);
     });
+    
+    if (closeUploadModal) {
+      closeUploadModal.addEventListener('click', closeModal);
+    }
+    
+    if (cancelUpload) {
+      cancelUpload.addEventListener('click', closeModal);
+    }
+    
+    // Click outside modal to close
+    if (uploadModal) {
+      uploadModal.addEventListener('click', (e) => {
+        if (e.target === uploadModal) {
+          closeModal();
+        }
+      });
+    }
+    
+    // Tab switching
+    const fileTab = document.getElementById('file-tab');
+    const urlTab = document.getElementById('url-tab');
+    const fileSection = document.getElementById('file-upload-section');
+    const urlSection = document.getElementById('url-input-section');
+    
+    if (fileTab && urlTab && fileSection && urlSection) {
+      fileTab.addEventListener('click', () => switchTab('file'));
+      urlTab.addEventListener('click', () => switchTab('url'));
+    }
+    
+    // File upload functionality
+    const dropzone = document.getElementById('upload-dropzone');
+    const fileInput = document.getElementById('file-input');
+    
+    if (dropzone && fileInput) {
+      dropzone.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('dragover', handleDragOver);
+      dropzone.addEventListener('drop', handleDrop);
+      fileInput.addEventListener('change', handleFileSelect);
+    }
+    
+    // URL input functionality
+    const imageUrlInput = document.getElementById('image-url');
+    const urlPreview = document.getElementById('url-preview');
+    const previewImage = document.getElementById('preview-image');
+    
+    if (imageUrlInput) {
+      imageUrlInput.addEventListener('input', handleUrlInput);
+    }
+    
+    // Upload confirm button
+    const uploadConfirm = document.getElementById('upload-confirm');
+    if (uploadConfirm) {
+      uploadConfirm.addEventListener('click', handleUploadConfirm);
+    }
 
     // Delete image handlers
     const deleteButtons = document.querySelectorAll('.delete-image-btn');
@@ -180,44 +330,7 @@ const images = recipe.images || [];
       }
     });
 
-    async function handleImageUpload(event: Event) {
-      const target = event.target as HTMLInputElement;
-      const file = target.files?.[0];
-      if (!file) return;
 
-      const targetRecipeId = target.dataset.recipeId || recipeId;
-      if (!targetRecipeId) return;
-
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('recipeId', targetRecipeId);
-
-      try {
-        const response = await fetch('/api/recipe-images', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (response.ok) {
-          const newImage = await response.json();
-          showNotification('Bild erfolgreich hochgeladen!', 'success');
-          
-          // Reload page to show new image
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
-        } else {
-          const error = await response.json();
-          showNotification(error.error || 'Fehler beim Hochladen des Bildes', 'error');
-        }
-      } catch (error) {
-        console.error('Upload error:', error);
-        showNotification('Fehler beim Hochladen des Bildes', 'error');
-      }
-
-      // Reset input
-      target.value = '';
-    }
 
     async function handleImageDelete(event: Event) {
       const target = event.target as HTMLButtonElement;
@@ -298,6 +411,279 @@ const images = recipe.images || [];
       setTimeout(() => {
         notification.remove();
       }, 3000);
+    }
+
+    // Modal management functions
+    let currentFile: File | null = null;
+    let currentUrl: string | null = null;
+    let currentRecipeId: string = '';
+
+    function openUploadModal(event: Event) {
+      const target = event.target as HTMLElement;
+      const btn = target.closest('button') as HTMLButtonElement;
+      currentRecipeId = btn?.dataset.recipeId || recipeId;
+      
+      const modal = document.getElementById('image-upload-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        resetModal();
+      }
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('image-upload-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+        resetModal();
+      }
+    }
+
+    function resetModal() {
+      currentFile = null;
+      currentUrl = null;
+      
+      // Reset file input
+      const fileInput = document.getElementById('file-input') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+      
+      // Reset URL input
+      const urlInput = document.getElementById('image-url') as HTMLInputElement;
+      if (urlInput) urlInput.value = '';
+      
+      // Hide URL preview
+      const urlPreview = document.getElementById('url-preview');
+      if (urlPreview) urlPreview.classList.add('hidden');
+      
+      // Reset to file tab
+      switchTab('file');
+      
+      // Disable confirm button
+      const confirmBtn = document.getElementById('upload-confirm') as HTMLButtonElement;
+      if (confirmBtn) confirmBtn.disabled = true;
+      
+      // Hide loading
+      const loading = document.getElementById('upload-loading');
+      if (loading) loading.classList.add('hidden');
+    }
+
+    function switchTab(tab: 'file' | 'url') {
+      const fileTab = document.getElementById('file-tab');
+      const urlTab = document.getElementById('url-tab');
+      const fileSection = document.getElementById('file-upload-section');
+      const urlSection = document.getElementById('url-input-section');
+      
+      if (!fileTab || !urlTab || !fileSection || !urlSection) return;
+      
+      if (tab === 'file') {
+        fileTab.className = 'flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 shadow-sm';
+        urlTab.className = 'flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200';
+        fileSection.classList.remove('hidden');
+        urlSection.classList.add('hidden');
+      } else {
+        urlTab.className = 'flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 shadow-sm';
+        fileTab.className = 'flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200';
+        urlSection.classList.remove('hidden');
+        fileSection.classList.add('hidden');
+      }
+      
+      updateConfirmButton();
+    }
+
+    // File upload functions
+    function handleDragOver(event: DragEvent) {
+      event.preventDefault();
+      const dropzone = event.currentTarget as HTMLElement;
+      dropzone.classList.add('border-orange-400', 'dark:border-orange-500');
+    }
+
+    function handleDrop(event: DragEvent) {
+      event.preventDefault();
+      const dropzone = event.currentTarget as HTMLElement;
+      dropzone.classList.remove('border-orange-400', 'dark:border-orange-500');
+      
+      const files = event.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith('image/')) {
+          currentFile = file;
+          updateConfirmButton();
+          showFileInfo(file);
+        } else {
+          showNotification('Bitte wählen Sie eine gültige Bilddatei aus.', 'error');
+        }
+      }
+    }
+
+    function handleFileSelect(event: Event) {
+      const input = event.target as HTMLInputElement;
+      const file = input.files?.[0];
+      if (file) {
+        currentFile = file;
+        updateConfirmButton();
+        showFileInfo(file);
+      }
+    }
+
+    function showFileInfo(file: File) {
+      const dropzone = document.getElementById('upload-dropzone');
+      if (dropzone) {
+        dropzone.innerHTML = `
+          <svg class="w-8 h-8 mx-auto mb-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <p class="text-gray-600 dark:text-gray-400 mb-2">
+            <span class="font-medium">${file.name}</span>
+          </p>
+          <p class="text-sm text-gray-500">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+        `;
+      }
+    }
+
+    // URL input functions
+    function handleUrlInput(event: Event) {
+      const input = event.target as HTMLInputElement;
+      const url = input.value.trim();
+      
+      if (url && isValidImageUrl(url)) {
+        currentUrl = url;
+        showUrlPreview(url);
+        updateConfirmButton();
+      } else {
+        currentUrl = null;
+        hideUrlPreview();
+        updateConfirmButton();
+      }
+    }
+
+    function isValidImageUrl(url: string): boolean {
+      try {
+        new URL(url);
+        return /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url) || url.includes('images.') || url.includes('img.');
+      } catch {
+        return false;
+      }
+    }
+
+    function showUrlPreview(url: string) {
+      const preview = document.getElementById('url-preview');
+      const img = document.getElementById('preview-image') as HTMLImageElement;
+      
+      if (preview && img) {
+        img.src = url;
+        img.onload = () => preview.classList.remove('hidden');
+        img.onerror = () => {
+          hideUrlPreview();
+          showNotification('Bild konnte nicht geladen werden. Bitte überprüfen Sie die URL.', 'error');
+        };
+      }
+    }
+
+    function hideUrlPreview() {
+      const preview = document.getElementById('url-preview');
+      if (preview) preview.classList.add('hidden');
+    }
+
+    function updateConfirmButton() {
+      const confirmBtn = document.getElementById('upload-confirm') as HTMLButtonElement;
+      if (confirmBtn) {
+        confirmBtn.disabled = !currentFile && !currentUrl;
+      }
+    }
+
+    // Upload confirmation
+    async function handleUploadConfirm() {
+      if (!currentRecipeId) {
+        showNotification('Fehler: Keine Rezept-ID gefunden.', 'error');
+        return;
+      }
+
+      const loading = document.getElementById('upload-loading');
+      const confirmBtn = document.getElementById('upload-confirm') as HTMLButtonElement;
+      
+      if (loading) loading.classList.remove('hidden');
+      if (confirmBtn) confirmBtn.disabled = true;
+
+      try {
+        if (currentFile) {
+          await uploadFile(currentFile, currentRecipeId);
+        } else if (currentUrl) {
+          await uploadFromUrl(currentUrl, currentRecipeId);
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+        showNotification('Fehler beim Hinzufügen des Bildes', 'error');
+      } finally {
+        if (loading) loading.classList.add('hidden');
+        if (confirmBtn) confirmBtn.disabled = false;
+      }
+    }
+
+    async function uploadFile(file: File, recipeId: string) {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('recipeId', recipeId);
+
+      const response = await fetch('/api/recipe-images', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        showNotification('Bild erfolgreich hochgeladen!', 'success');
+        closeModal();
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        const error = await response.json();
+        showNotification(error.error || 'Fehler beim Hochladen des Bildes', 'error');
+      }
+    }
+
+    async function uploadFromUrl(url: string, recipeId: string) {
+      // For URL uploads, we'll need to create a new API endpoint or modify the existing one
+      // For now, let's use a simple approach of creating a RecipeImage object directly
+      const imageId = `url-${Date.now()}`;
+      const newImage = {
+        id: imageId,
+        filename: `url-image-${Date.now()}.jpg`,
+        url: url,
+        uploadedAt: new Date()
+      };
+
+      try {
+        // Get current recipe
+        const response = await fetch(`/api/recipes?id=${recipeId}`);
+        if (!response.ok) throw new Error('Failed to fetch recipe');
+        
+        const recipe = await response.json();
+        const updatedImages = [...(recipe.images || []), newImage];
+        
+        // Update recipe with new image
+        const updateResponse = await fetch('/api/recipes', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: recipeId,
+            images: updatedImages
+          })
+        });
+
+        if (updateResponse.ok) {
+          showNotification('Bild erfolgreich hinzugefügt!', 'success');
+          closeModal();
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        } else {
+          throw new Error('Failed to update recipe');
+        }
+      } catch (error) {
+        showNotification('Fehler beim Hinzufügen des Bildes', 'error');
+        throw error;
+      }
     }
   });
 </script>
