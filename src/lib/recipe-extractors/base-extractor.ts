@@ -635,8 +635,18 @@ export abstract class BaseRecipeExtractor {
         
         const parenthesesMatch = finalName.match(/^([^(]+)\s*\(([^)]+)\)(.*)$/);
         if (parenthesesMatch) {
-          finalName = (parenthesesMatch[1] + (parenthesesMatch[3] || '')).trim();
-          ingredientDescription = parenthesesMatch[2].trim();
+          const parenthesesContent = parenthesesMatch[2].trim();
+          
+          // Check if this is a German plural ending - if so, keep it as part of the name
+          if (this.isGermanPluralEnding(parenthesesContent)) {
+            // Keep the plural ending as part of the name, don't treat as description
+            finalName = finalName; // Keep original name with parentheses
+            ingredientDescription = undefined;
+          } else {
+            // Normal description in parentheses
+            finalName = (parenthesesMatch[1] + (parenthesesMatch[3] || '')).trim();
+            ingredientDescription = parenthesesContent;
+          }
         }
 
         const result = {
@@ -663,8 +673,18 @@ export abstract class BaseRecipeExtractor {
     
     const parenthesesMatch = cleaned.match(/^([^(]+)\s*\(([^)]+)\)(.*)$/);
     if (parenthesesMatch) {
-      name = (parenthesesMatch[1] + (parenthesesMatch[3] || '')).trim();
-      ingredientDescription = parenthesesMatch[2].trim();
+      const parenthesesContent = parenthesesMatch[2].trim();
+      
+      // Check if this is a German plural ending - if so, keep it as part of the name
+      if (this.isGermanPluralEnding(parenthesesContent)) {
+        // Keep the plural ending as part of the name, don't treat as description
+        name = cleaned; // Keep original name with parentheses
+        ingredientDescription = undefined;
+      } else {
+        // Normal description in parentheses
+        name = (parenthesesMatch[1] + (parenthesesMatch[3] || '')).trim();
+        ingredientDescription = parenthesesContent;
+      }
     }
     
     return {
@@ -888,5 +908,27 @@ export abstract class BaseRecipeExtractor {
     
     // Return original if no mapping found
     return category;
+  }
+
+  /**
+   * Check if parentheses content is a German plural ending
+   * Examples: (n), (e), (s), (en), (er) are common German plural endings
+   */
+  private isGermanPluralEnding(content: string): boolean {
+    if (!content) return false;
+    
+    const trimmed = content.trim().toLowerCase();
+    
+    // Common German plural endings in parentheses
+    const pluralEndings = [
+      'n',        // Tomate(n)
+      'e',        // Apfel(e) - though less common
+      's',        // Auto(s)
+      'en',       // Zwiebel(en) - though usually just (n)
+      'er',       // Ei(er)
+      'nen',      // Bohne(nen) - rare but possible
+    ];
+    
+    return pluralEndings.includes(trimmed);
   }
 } 

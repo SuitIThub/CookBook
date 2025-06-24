@@ -218,9 +218,21 @@ const { recipe } = Astro.props;
 <script>
 // Drag and Drop functionality for ingredients
 document.addEventListener('DOMContentLoaded', function() {
-  let draggedElement = null;
-  let draggedData = null;
-  let placeholder = null;
+  let draggedElement: HTMLElement | null = null;
+  let draggedData: any = null;
+  let placeholder: HTMLElement | null = null;
+  
+  // Touch-specific variables
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchCurrentX = 0;
+  let touchCurrentY = 0;
+  let isDragging = false;
+  let dragPreview = null;
+  let touchTarget = null;
+  
+  // Check if device supports touch
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
   function initDragAndDrop() {
     // Add event listeners to all ingredient group containers AND their ingredients-list children
@@ -249,12 +261,352 @@ document.addEventListener('DOMContentLoaded', function() {
     ingredientItems.forEach(item => {
       if (!item.hasAttribute('data-drag-initialized')) {
         item.setAttribute('data-drag-initialized', 'true');
+        
+        // Add mouse events to the whole item
         item.addEventListener('dragstart', handleDragStart);
         item.addEventListener('dragend', handleDragEnd);
+        
+        // Add touch events only to the drag handle
+        if (isTouchDevice) {
+          const dragHandle = item.querySelector('.drag-handle');
+          if (dragHandle) {
+            dragHandle.addEventListener('touchstart', handleTouchStart, { passive: false });
+          }
+        }
       }
     });
   }
 
+  // Touch event handlers
+  function handleTouchStart(e) {
+    e.preventDefault(); // Prevent default touch behavior
+    const touch = e.touches[0];
+    const ingredientItem = e.currentTarget.closest('.ingredient-edit-item');
+    
+    if (!ingredientItem) return;
+    
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchCurrentX = touch.clientX;
+    touchCurrentY = touch.clientY;
+    touchTarget = ingredientItem;
+    
+    // Add global touch move and end listeners
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    
+    // Small delay to distinguish between tap and drag
+    setTimeout(() => {
+      if (touchTarget === ingredientItem && !isDragging) {
+        const currentTouch = getCurrentTouch();
+        if (currentTouch) {
+          const deltaX = Math.abs(currentTouch.clientX - touchStartX);
+          const deltaY = Math.abs(currentTouch.clientY - touchStartY);
+          
+          // Start drag if moved more than 10px
+          if (deltaX > 10 || deltaY > 10) {
+            startTouchDrag(ingredientItem, currentTouch);
+          }
+        }
+      }
+    }, 150);
+  }
+  
+  function handleTouchMove(e) {
+    if (!touchTarget) return;
+    
+    const touch = e.touches[0];
+    
+    if (!isDragging) {
+      const deltaX = Math.abs(touch.clientX - touchStartX);
+      const deltaY = Math.abs(touch.clientY - touchStartY);
+      
+      // Start drag if moved more than 10px
+      if ((deltaX > 10 || deltaY > 10) && touchTarget) {
+        startTouchDrag(touchTarget, touch);
+      }
+      return;
+    }
+    
+    // Only prevent default after drag has started
+    e.preventDefault();
+    
+    touchCurrentX = touch.clientX;
+    touchCurrentY = touch.clientY;
+    
+    // Update drag preview position
+    if (dragPreview) {
+      dragPreview.style.left = touchCurrentX - 50 + 'px';
+      dragPreview.style.top = touchCurrentY - 25 + 'px';
+    }
+    
+    // Auto-scroll when near screen edges
+    handleAutoScroll(touchCurrentY);
+    
+    // Show scroll zone indicators
+    updateScrollZoneIndicators(touchCurrentY);
+    
+    // Find element under touch point
+    const elementBelow = document.elementFromPoint(touchCurrentX, touchCurrentY);
+    const ingredientsList = elementBelow?.closest('.ingredients-list');
+    
+    if (ingredientsList) {
+      // Simulate drag over for positioning placeholder
+      const afterElement = getTouchDragAfterElement(ingredientsList, touchCurrentY);
+      ingredientsList.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+      
+      if (afterElement == null) {
+        ingredientsList.appendChild(placeholder);
+      } else {
+        ingredientsList.insertBefore(placeholder, afterElement);
+      }
+      
+      ingredientsList.classList.add('drag-over');
+      
+      // Remove drag-over from other containers
+      document.querySelectorAll('.ingredients-list').forEach(container => {
+        if (container !== ingredientsList) {
+          container.classList.remove('drag-over');
+        }
+      });
+    }
+  }
+  
+  function handleTouchEnd(e) {
+    // Remove global listeners
+    document.removeEventListener('touchmove', handleTouchMove);
+    document.removeEventListener('touchend', handleTouchEnd);
+    
+    if (!isDragging) {
+      touchTarget = null;
+      return;
+    }
+    
+    e.preventDefault();
+    
+    // Stop auto-scroll
+    stopAutoScroll();
+    
+    // Find drop target
+    const elementBelow = document.elementFromPoint(touchCurrentX, touchCurrentY);
+    const targetContainer = elementBelow?.closest('.ingredients-list');
+    
+    if (targetContainer && placeholder && placeholder.parentNode === targetContainer) {
+      // Perform drop
+      const targetGroup = targetContainer.closest('.ingredient-group-edit');
+      const targetIndex = Array.from(targetContainer.children).indexOf(placeholder);
+      
+      draggedElement.remove();
+      
+      if (targetIndex >= targetContainer.children.length - 1) {
+        targetContainer.appendChild(draggedElement);
+      } else {
+        const nextElement = targetContainer.children[targetIndex + 1];
+        targetContainer.insertBefore(draggedElement, nextElement);
+      }
+      
+      // Update ingredient linker if available
+      if (window.updateIngredientLinker) {
+        window.updateIngredientLinker();
+      }
+    } else {
+      // Drop failed, restore element
+      if (draggedData.sourceGroup) {
+        const sourceContainer = draggedData.sourceGroup.querySelector('.ingredients-list');
+        if (sourceContainer) {
+          sourceContainer.appendChild(draggedElement);
+        }
+      }
+    }
+    
+    endTouchDrag();
+  }
+  
+  function startTouchDrag(element, touch) {
+    isDragging = true;
+    draggedElement = element;
+    
+    const parent = draggedElement.parentNode;
+    draggedData = {
+      ingredientId: draggedElement.dataset.ingredientId,
+      sourceGroup: draggedElement.closest('.ingredient-group-edit'),
+      sourceIndex: parent ? Array.from(parent.children).indexOf(draggedElement) : -1
+    };
+
+    // Create placeholder
+    placeholder = document.createElement('div');
+    placeholder.className = 'ingredient-placeholder border-2 border-dashed border-orange-400 dark:border-orange-500 rounded-md p-3 bg-orange-50 dark:bg-orange-900/20 transition-colors duration-200';
+    placeholder.innerHTML = '<div class="text-center text-orange-600 dark:text-orange-400 font-medium">Hier ablegen</div>';
+
+    // Create drag preview
+    dragPreview = draggedElement.cloneNode(true);
+    dragPreview.style.position = 'fixed';
+    dragPreview.style.pointerEvents = 'none';
+    dragPreview.style.zIndex = '1000';
+    dragPreview.style.opacity = '0.8';
+    dragPreview.style.transform = 'rotate(5deg) scale(0.95)';
+    dragPreview.style.left = touchCurrentX - 50 + 'px';
+    dragPreview.style.top = touchCurrentY - 25 + 'px';
+    dragPreview.style.width = draggedElement.offsetWidth + 'px';
+    document.body.appendChild(dragPreview);
+
+    draggedElement.style.opacity = '0.3';
+  }
+  
+  function endTouchDrag() {
+    isDragging = false;
+    touchTarget = null;
+    
+    if (draggedElement) {
+      draggedElement.style.opacity = '1';
+    }
+    
+    if (dragPreview) {
+      dragPreview.remove();
+      dragPreview = null;
+    }
+    
+    document.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+    document.querySelectorAll('.ingredients-list').forEach(container => {
+      container.classList.remove('drag-over');
+    });
+    
+    // Clean up scroll zone indicators
+    cleanupScrollZoneIndicators();
+    
+    draggedElement = null;
+    draggedData = null;
+    placeholder = null;
+  }
+  
+  function getTouchDragAfterElement(container: Element, y: number) {
+    const draggableElements = [...container.querySelectorAll('.ingredient-edit-item:not(.dragging)')].filter(el => el !== draggedElement);
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  // Helper function to get current touch point
+  function getCurrentTouch() {
+    return document.querySelector(':active') ? null : { clientX: touchCurrentX, clientY: touchCurrentY };
+  }
+  
+  // Auto-scroll functionality
+  let autoScrollInterval = null;
+  const SCROLL_ZONE = 150; // pixels from edge to trigger scroll (increased from 80)
+  const SCROLL_SPEED_BASE = 8; // base pixels per interval (increased from 5)
+  const SCROLL_ACCELERATION = 2; // acceleration factor based on proximity
+  
+  function handleAutoScroll(touchY) {
+    const viewportHeight = window.innerHeight;
+    
+    stopAutoScroll(); // Clear any existing interval
+    
+    let scrollDirection = 0;
+    let scrollSpeed = SCROLL_SPEED_BASE;
+    
+    if (touchY < SCROLL_ZONE) {
+      // Near top edge - scroll up
+      scrollDirection = -1;
+      // Increase speed when closer to edge
+      const proximity = (SCROLL_ZONE - touchY) / SCROLL_ZONE;
+      scrollSpeed = SCROLL_SPEED_BASE + (proximity * SCROLL_ACCELERATION * 5);
+    } else if (touchY > viewportHeight - SCROLL_ZONE) {
+      // Near bottom edge - scroll down
+      scrollDirection = 1;
+      // Increase speed when closer to edge
+      const proximity = (touchY - (viewportHeight - SCROLL_ZONE)) / SCROLL_ZONE;
+      scrollSpeed = SCROLL_SPEED_BASE + (proximity * SCROLL_ACCELERATION * 5);
+    }
+    
+    if (scrollDirection !== 0) {
+      autoScrollInterval = setInterval(() => {
+        const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const documentHeight = document.documentElement.scrollHeight;
+        const windowHeight = window.innerHeight;
+        const maxScroll = Math.max(0, documentHeight - windowHeight);
+        
+        let newScrollTop;
+        if (scrollDirection < 0) {
+          // Scroll up
+          newScrollTop = Math.max(0, currentScrollTop - scrollSpeed);
+        } else {
+          // Scroll down
+          newScrollTop = Math.min(maxScroll, currentScrollTop + scrollSpeed);
+        }
+        
+        // Use scrollBy for smoother scrolling
+        if (scrollDirection < 0) {
+          window.scrollBy(0, -scrollSpeed);
+        } else {
+          window.scrollBy(0, scrollSpeed);
+        }
+        
+        // Check if we've reached the limits and stop
+        const afterScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        if (afterScrollTop === currentScrollTop) {
+          stopAutoScroll();
+        }
+      }, 16); // ~60fps
+    }
+  }
+  
+  function stopAutoScroll() {
+    if (autoScrollInterval) {
+      clearInterval(autoScrollInterval);
+      autoScrollInterval = null;
+    }
+  }
+  
+  // Visual feedback for scroll zones
+  function updateScrollZoneIndicators(touchY) {
+    const viewportHeight = window.innerHeight;
+    
+    // Remove existing indicators
+    document.querySelectorAll('.scroll-zone-indicator').forEach(el => el.remove());
+    
+    if (touchY < SCROLL_ZONE || touchY > viewportHeight - SCROLL_ZONE) {
+      const indicator = document.createElement('div');
+      indicator.className = 'scroll-zone-indicator';
+      indicator.style.cssText = `
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 8px 16px;
+        background: rgba(249, 115, 22, 0.9);
+        color: white;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        z-index: 1001;
+        pointer-events: none;
+        transition: all 0.2s ease;
+      `;
+      
+      if (touchY < SCROLL_ZONE) {
+        indicator.style.top = '20px';
+        indicator.textContent = '↑ Scrolle nach oben';
+      } else {
+        indicator.style.bottom = '20px';
+        indicator.textContent = '↓ Scrolle nach unten';
+      }
+      
+      document.body.appendChild(indicator);
+    }
+  }
+  
+  // Clean up scroll zone indicators
+  function cleanupScrollZoneIndicators() {
+    document.querySelectorAll('.scroll-zone-indicator').forEach(el => el.remove());
+  }
+
+  // Original drag handlers (for mouse/desktop)
   function handleDragStart(e) {
     draggedElement = e.currentTarget;
     const parent = draggedElement.parentNode;
@@ -386,7 +738,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  function getDragAfterElement(container, y) {
+  function getDragAfterElement(container: any, y: number) {
     const draggableElements = [...container.querySelectorAll('.ingredient-edit-item:not(.dragging)')];
     return draggableElements.reduce((closest, child) => {
       const box = child.getBoundingClientRect();
@@ -424,6 +776,49 @@ document.addEventListener('DOMContentLoaded', function() {
       border-radius: 4px;
       transition: all 0.2s ease;
     }
+    
+    /* Touch-specific styles */
+    @media (hover: none) and (pointer: coarse) {
+      .ingredient-edit-item {
+        user-select: none;
+      }
+      
+      .drag-handle {
+        padding: 12px;
+        margin: -12px;
+        touch-action: none;
+        cursor: grab;
+        position: relative;
+      }
+      
+      .drag-handle:active {
+        cursor: grabbing;
+      }
+      
+      /* Make drag handle more prominent on touch devices */
+      .drag-handle::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(156, 163, 175, 0.1);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      
+      .drag-handle:active::after {
+        opacity: 1;
+      }
+      
+      /* Prevent accidental input focus during drag */
+      .ingredient-edit-item input {
+        touch-action: manipulation;
+      }
+    }
   `;
   document.head.appendChild(style);
 
@@ -440,7 +835,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (element.classList && element.classList.contains('ingredient-group-edit')) {
               // New group added, reinitialize all drag and drop
               initDragAndDrop();
-            } else if (element.querySelectorAll) {
+            } else if (element instanceof Element && element.querySelectorAll) {
               const ingredientItems = element.querySelectorAll('.ingredient-edit-item');
               const groupItems = element.querySelectorAll('.ingredient-group-edit');
               if (ingredientItems.length > 0 || groupItems.length > 0) {
