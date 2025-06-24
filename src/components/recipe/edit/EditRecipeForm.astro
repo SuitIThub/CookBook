@@ -678,7 +678,10 @@ const { recipe } = Astro.props;
           ...updatedRecipe.metadata,
                   servings: parseInt(document.getElementById('edit-servings')?.value) || updatedRecipe.metadata.servings,
         timeEntries: window.getCurrentTimeEntries ? window.getCurrentTimeEntries() : (updatedRecipe.metadata.timeEntries || []),
-        difficulty: document.getElementById('edit-difficulty')?.value || updatedRecipe.metadata.difficulty,
+        difficulty: (() => {
+          const difficultyValue = document.getElementById('edit-difficulty')?.value;
+          return difficultyValue && difficultyValue !== '' ? difficultyValue : undefined;
+        })(),
           nutrition: {
             calories: parseFloat(document.getElementById('edit-calories')?.value) || undefined,
             carbohydrates: parseFloat(document.getElementById('edit-carbohydrates')?.value) || undefined,

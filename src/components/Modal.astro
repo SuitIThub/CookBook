@@ -1,0 +1,163 @@
+---
+interface Props {
+  id?: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+}
+
+const { id = 'modal', size = 'md' } = Astro.props;
+
+const sizeClasses = {
+  sm: 'max-w-sm',
+  md: 'max-w-md', 
+  lg: 'max-w-lg',
+  xl: 'max-w-2xl'
+};
+---
+
+<!-- Modal Backdrop -->
+<div id={id} class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 transition-all duration-200">
+  <div class={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full mx-4 transition-all duration-200 ${sizeClasses[size]}`}>
+    <!-- Modal Header -->
+    <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+      <h3 id={`${id}-title`} class="text-lg font-medium text-gray-900 dark:text-white">
+        <!-- Title will be set dynamically -->
+      </h3>
+      <button id={`${id}-close`} class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    
+    <!-- Modal Body -->
+    <div class="p-6">
+      <div id={`${id}-content`} class="text-gray-700 dark:text-gray-300">
+        <!-- Content will be set dynamically -->
+      </div>
+    </div>
+    
+    <!-- Modal Footer -->
+    <div id={`${id}-footer`} class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
+      <!-- Buttons will be added dynamically -->
+    </div>
+  </div>
+</div>
+
+<script define:vars={{ id }}>
+  // Modal functionality
+  class Modal {
+    constructor(modalId) {
+      this.modalId = modalId;
+      this.modal = document.getElementById(modalId);
+      this.titleElement = document.getElementById(`${modalId}-title`);
+      this.contentElement = document.getElementById(`${modalId}-content`);
+      this.footerElement = document.getElementById(`${modalId}-footer`);
+      this.closeButton = document.getElementById(`${modalId}-close`);
+      
+      this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+      // Close button
+      this.closeButton?.addEventListener('click', () => this.hide());
+      
+      // Click outside to close
+      this.modal?.addEventListener('click', (e) => {
+        if (e.target === this.modal) {
+          this.hide();
+        }
+      });
+      
+      // Escape key to close
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !this.modal?.classList.contains('hidden')) {
+          this.hide();
+        }
+      });
+    }
+    
+    show(options = {}) {
+      const {
+        title = '',
+        content = '',
+        buttons = [{ text: 'OK', type: 'primary', action: () => this.hide() }],
+        icon = null
+      } = options;
+      
+      // Set title
+      if (this.titleElement) {
+        this.titleElement.innerHTML = title;
+      }
+      
+      // Set content with optional icon
+      if (this.contentElement) {
+        let contentHTML = '';
+        if (icon) {
+          contentHTML += `<div class="flex items-start space-x-3">`;
+          contentHTML += `<div class="flex-shrink-0">${icon}</div>`;
+          contentHTML += `<div class="flex-1">${content}</div>`;
+          contentHTML += `</div>`;
+        } else {
+          contentHTML = content;
+        }
+        this.contentElement.innerHTML = contentHTML;
+      }
+      
+      // Set buttons
+      if (this.footerElement) {
+        this.footerElement.innerHTML = '';
+        buttons.forEach(button => {
+          const btn = document.createElement('button');
+          btn.textContent = button.text;
+          btn.className = this.getButtonClasses(button.type || 'secondary');
+          btn.addEventListener('click', button.action || (() => this.hide()));
+          this.footerElement.appendChild(btn);
+        });
+      }
+      
+      // Show modal
+      this.modal?.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    
+    hide() {
+      this.modal?.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+    
+    getButtonClasses(type) {
+      const baseClasses = 'px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2';
+      
+      switch (type) {
+        case 'primary':
+          return `${baseClasses} bg-orange-600 text-white hover:bg-orange-700 focus:ring-orange-500`;
+        case 'success':
+          return `${baseClasses} bg-green-600 text-white hover:bg-green-700 focus:ring-green-500`;
+        case 'danger':
+          return `${baseClasses} bg-red-600 text-white hover:bg-red-700 focus:ring-red-500`;
+        case 'secondary':
+        default:
+          return `${baseClasses} bg-gray-300 text-gray-700 hover:bg-gray-400 focus:ring-gray-500 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500`;
+      }
+    }
+  }
+  
+  // Initialize modal
+  window[`modal_${id}`] = new Modal(id);
+</script>
+
+<style>
+  /* Smooth transitions */
+  #modal {
+    transition: opacity 0.2s ease-out;
+  }
+  
+  #modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  
+  #modal:not(.hidden) {
+    opacity: 1;
+  }
+</style> 

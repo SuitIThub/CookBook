@@ -17,7 +17,7 @@ export class LeckerExtractor extends BaseRecipeExtractor {
     console.log(`JSON-LD found: ${jsonLdData ? 'YES' : 'NO'}`);
     if (jsonLdData) {
       console.log(`Using JSON-LD extraction path`);
-      const result = this.parseJsonLdRecipe(jsonLdData, url);
+      const result = this.parseJsonLdRecipe(jsonLdData, url, html); // Pass HTML for difficulty extraction
       console.log(`JSON-LD result imageUrl: ${result.imageUrl}`);
       return result;
     }
@@ -65,7 +65,7 @@ export class LeckerExtractor extends BaseRecipeExtractor {
            (Array.isArray(type) && type.includes('Recipe'));
   }
   
-  private parseJsonLdRecipe(data: any, url: string): ExtractedRecipeData {
+  private parseJsonLdRecipe(data: any, url: string, html: string): ExtractedRecipeData {
     const getTimeValue = (value: any): number => {
       if (!value) return 0;
       
@@ -167,54 +167,34 @@ export class LeckerExtractor extends BaseRecipeExtractor {
     // Extract nutrition from JSON-LD
     const nutrition = this.extractNutritionFromJsonLd(data);
 
-    // Extract time information with better fallbacks
+    // Extract time information from JSON-LD cookTime only
     console.log('🕐 Extracting time information from Lecker.de JSON-LD...');
-    let prepTime = getTimeValue(data.prepTime);
-    let cookTime = getTimeValue(data.cookTime);
+    const timeEntries = [];
     
-    if (prepTime > 0) console.log(`✅ Found preparation time in JSON-LD: ${prepTime} minutes`);
-    if (cookTime > 0) console.log(`✅ Found cooking time in JSON-LD: ${cookTime} minutes`);
+    // Extract only cookTime from JSON-LD and label it as "Zubereitungszeit"
+    const cookTime = getTimeValue(data.cookTime);
     
-    // If no specific prep/cook times, try to extract from total time
-    if (!prepTime && !cookTime && data.totalTime) {
-      const totalTime = getTimeValue(data.totalTime);
-      if (totalTime > 0) {
-        console.log(`⚡ Using total time (${totalTime} min) to estimate prep/cook times`);
-        // Split total time intelligently
-        if (totalTime <= 30) {
-          prepTime = totalTime;
-          console.log(`📝 Short recipe: all ${totalTime} minutes assigned to prep time`);
-        } else {
-          prepTime = Math.floor(totalTime * 0.3); // 30% for prep
-          cookTime = Math.floor(totalTime * 0.7); // 70% for cooking
-          console.log(`📝 Split total time: ${prepTime} min prep + ${cookTime} min cook`);
-        }
-      }
-    }
-    
-    // Additional time sources to check
-    if (!prepTime && !cookTime) {
-      // Check for performTime (some sites use this)
-      prepTime = getTimeValue(data.performTime);
-      
-      // Check for duration
-      if (!prepTime) {
-        prepTime = getTimeValue(data.duration);
-      }
+    if (cookTime > 0) {
+      timeEntries.push({ label: 'Zubereitungszeit', minutes: cookTime });
+      console.log(`✅ Found cookTime in JSON-LD: ${cookTime} minutes → labeled as "Zubereitungszeit"`);
+    } else {
+      console.log('⚠️ No cookTime found in JSON-LD, timeEntries will be empty');
     }
 
     // Extract keywords and category from JSON-LD
     const keywords = this.extractKeywordsFromJsonLd(data, title, data.description);
     const category = this.extractCategoryFromJsonLd(data, title, data.description);
 
+    // Extract difficulty from HTML (not JSON-LD)
+    const difficulty = this.extractDifficultyFromHtml(html);
+
     return {
       title,
       subtitle,
       description: data.description,
       servings: this.parseServings(data.recipeYield),
-      preparationTime: prepTime,
-      cookingTime: cookTime,
-      difficulty: this.mapLeckerDifficulty(data.difficulty),
+      timeEntries: timeEntries,
+      difficulty: difficulty,
       keywords,
       category,
       ingredients,
@@ -325,63 +305,10 @@ export class LeckerExtractor extends BaseRecipeExtractor {
       servings = parseInt(servingMatch[1]);
     }
     
-    // Extract preparation and cooking times
-    console.log('🕐 Extracting time information from Lecker.de HTML...');
-    let prepTime = 0;
-    let cookTime = 0;
-    
-    // Pattern 1: Specific time labels
-    const prepTimeMatch = html.match(/(?:Zubereitungszeit|Vorbereitung|Arbeitszeit):\s*\*?\*?(\d+)\s*Min/i);
-    if (prepTimeMatch) {
-      prepTime = parseInt(prepTimeMatch[1]);
-      console.log(`✅ Found preparation time: ${prepTime} minutes`);
-    }
-    
-    const cookTimeMatch = html.match(/(?:Kochzeit|Backzeit|Garzeit|Bratzeit):\s*\*?\*?(\d+)\s*Min/i);
-    if (cookTimeMatch) {
-      cookTime = parseInt(cookTimeMatch[1]);
-      console.log(`✅ Found cooking time: ${cookTime} minutes`);
-    }
-    
-    // Pattern 2: Look for time information in structured data or lists
-    const timeListMatch = html.match(/(?:Zeit|Dauer|Time)[\s\S]*?(\d+)\s*(?:Min|Minuten)/gi);
-    if (timeListMatch && timeListMatch.length > 0) {
-      // Try to extract multiple times
-      const times = timeListMatch.map(match => {
-        const timeMatch = match.match(/(\d+)/);
-        return timeMatch ? parseInt(timeMatch[1]) : 0;
-      }).filter(t => t > 0);
-      
-      if (times.length > 0 && !prepTime) {
-        prepTime = times[0]; // First time as prep time
-      }
-      if (times.length > 1 && !cookTime) {
-        cookTime = times[1]; // Second time as cook time
-      }
-    }
-    
-    // Pattern 3: Generic time patterns
-    if (!prepTime && !cookTime) {
-      const genericTimeMatch = html.match(/(\d+)\s*Min\.?/i);
-      if (genericTimeMatch) {
-        const totalTime = parseInt(genericTimeMatch[1]);
-        // If only one time found, split it as prep + cook
-        if (totalTime > 30) {
-          prepTime = Math.floor(totalTime * 0.3); // 30% for prep
-          cookTime = Math.floor(totalTime * 0.7); // 70% for cooking
-        } else {
-          prepTime = totalTime;
-        }
-      }
-    }
-    
-    // Pattern 4: Look for time in meta description or page text
-    if (!prepTime && !cookTime) {
-      const metaTimeMatch = description.match(/(\d+)\s*(?:Min|Minuten)/i);
-      if (metaTimeMatch) {
-        prepTime = parseInt(metaTimeMatch[1]);
-      }
-    }
+    // Time extraction for Lecker.de: NO HTML extraction - only JSON-LD cookTime is used
+    console.log('🕐 Lecker.de time extraction: HTML times ignored, only JSON-LD cookTime is used');
+    const timeEntries: Array<{label: string, minutes: number}> = [];
+    // Empty - times are only extracted from JSON-LD in parseJsonLdRecipe method
     
     // Extract difficulty from HTML with improved patterns
     const difficulty = this.extractDifficultyFromHtml(html);
@@ -507,17 +434,18 @@ export class LeckerExtractor extends BaseRecipeExtractor {
     
     console.log(`Final recipe data - imageUrl: ${imageUrl}`);
     
-    // Extract keywords and category from HTML
-    const keywords = this.extractKeywords(html, title, description);
-    const category = this.extractCategory(html, title, description);
+    // Keywords and category extraction for Lecker.de: NO HTML extraction - only JSON-LD is used
+    console.log('🏷️ Lecker.de keywords extraction: HTML ignored, only JSON-LD "keywords" field is used');
+    console.log('📂 Lecker.de category extraction: HTML ignored, only JSON-LD "recipeCategory" field is used');
+    const keywords: string[] = []; // Empty - only extracted from JSON-LD
+    const category: string | undefined = undefined; // Empty - only extracted from JSON-LD
 
     return {
       title,
       subtitle,
       description: description || `Recipe from Lecker.de: ${url}`,
       servings,
-      preparationTime: prepTime,
-      cookingTime: cookTime,
+      timeEntries: timeEntries,
       difficulty,
       keywords,
       category,
@@ -718,143 +646,91 @@ export class LeckerExtractor extends BaseRecipeExtractor {
     return 4; // Default
   }
   
-  private extractDifficultyFromHtml(html: string): 'leicht' | 'mittel' | 'schwer' {
+  private extractDifficultyFromHtml(html: string): 'leicht' | 'mittel' | 'schwer' | undefined {
     console.log('🎯 Extracting difficulty from Lecker.de HTML...');
     
-    // Pattern 1: Look for specific difficulty indicators in recipe metadata or content
-    const difficultyPatterns = [
-      /(?:Schwierigkeitsgrad|Difficulty|Schwierigkeit):\s*([^<\n]+)/i,
-      /<span[^>]*class[^>]*difficulty[^>]*>([^<]+)<\/span>/i,
-      /<div[^>]*class[^>]*difficulty[^>]*>([^<]+)<\/div>/i,
-      /(?:ganz einfach|super einfach|total einfach)/gi,
-      /(?:kinderleicht|einfach)/gi,
-      /(?:kompliziert|schwierig|anspruchsvoll|schwer)/gi
-    ];
+    // Pattern 1: Specific Lecker.de "Niveau" field extraction
+    // Looking for: <li><div>Niveau:</div><div><strong>ganz einfach</strong></div></li>
+    const niveauPattern = /<li[^>]*>\s*<div[^>]*>Niveau:<\/div>\s*<div[^>]*><strong[^>]*>([^<]+)<\/strong><\/div>\s*<\/li>/i;
+    const niveauMatch = html.match(niveauPattern);
     
-    for (const pattern of difficultyPatterns) {
-      const match = html.match(pattern);
-      if (match) {
-        console.log(`Found difficulty text: "${match[0]}"`);
-        const difficultyText = match[1] || match[0];
+    if (niveauMatch) {
+      const difficultyText = niveauMatch[1].trim();
+      console.log(`   → Found "Niveau" field: "${difficultyText}"`);
+      const mappedDifficulty = this.mapLeckerDifficulty(difficultyText);
+      console.log(`✅ Extracted difficulty from HTML "Niveau" field: ${mappedDifficulty}`);
+      return mappedDifficulty;
+    }
+    
+    // Pattern 2: Alternative "Niveau" extraction (more flexible)
+    const flexibleNiveauPattern = /Niveau:.*?<strong[^>]*>([^<]+)<\/strong>/is;
+    const flexibleMatch = html.match(flexibleNiveauPattern);
+    
+    if (flexibleMatch) {
+      const difficultyText = flexibleMatch[1].trim();
+      console.log(`   → Found flexible "Niveau" pattern: "${difficultyText}"`);
+      const mappedDifficulty = this.mapLeckerDifficulty(difficultyText);
+      console.log(`✅ Extracted difficulty from flexible HTML pattern: ${mappedDifficulty}`);
+      return mappedDifficulty;
+    }
+    
+    // Pattern 3: Even more generic "Niveau" search
+    const genericNiveauPattern = /Niveau:.*?([^<\n]+)/i;
+    const genericMatch = html.match(genericNiveauPattern);
+    
+    if (genericMatch) {
+      const difficultyText = this.cleanText(genericMatch[1]).trim();
+      if (difficultyText.length > 0) {
+        console.log(`   → Found generic "Niveau" text: "${difficultyText}"`);
         const mappedDifficulty = this.mapLeckerDifficulty(difficultyText);
-        console.log(`✅ Mapped difficulty: ${mappedDifficulty}`);
+        console.log(`✅ Extracted difficulty from generic HTML pattern: ${mappedDifficulty}`);
         return mappedDifficulty;
       }
     }
     
-    // Pattern 2: Look for star ratings or visual difficulty indicators
-    const starPatterns = [
-      /<i[^>]*class[^>]*star[^>]*>/gi,
-      /★+/g,
-      /⭐+/g
-    ];
-    
-    for (const pattern of starPatterns) {
-      const matches = html.match(pattern);
-      if (matches) {
-        const starCount = matches.length;
-        console.log(`Found ${starCount} star indicators`);
-        if (starCount <= 2) return 'leicht';
-        if (starCount >= 4) return 'schwer';
-        return 'mittel';
-      }
-    }
-    
-    // Pattern 3: Check for common German difficulty terms in title or description
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    if (titleMatch) {
-      const titleContent = titleMatch[1].toLowerCase();
-      if (titleContent.includes('einfach') || titleContent.includes('schnell') || titleContent.includes('simpel')) {
-        console.log('✅ Found "leicht" in title');
-        return 'leicht';
-      }
-      if (titleContent.includes('schwer') || titleContent.includes('schwierig') || titleContent.includes('aufwendig')) {
-        console.log('✅ Found "schwer" in title');
-        return 'schwer';
-      }
-    }
-    
-    // Pattern 4: Check meta description
-    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)/i);
-    if (metaDescMatch) {
-      const metaContent = metaDescMatch[1].toLowerCase();
-      if (metaContent.includes('einfach') || metaContent.includes('schnell') || metaContent.includes('simpel')) {
-        console.log('✅ Found "leicht" in meta description');
-        return 'leicht';
-      }
-      if (metaContent.includes('schwer') || metaContent.includes('schwierig') || metaContent.includes('aufwendig')) {
-        console.log('✅ Found "schwer" in meta description');
-        return 'schwer';
-      }
-    }
-    
-    // Pattern 5: Recipe text analysis - check for time indicators
-    // Very quick recipes (under 30 min) are often easy
-    const timeMatch = html.match(/(\d+)\s*(?:Min|Minuten)/i);
-    if (timeMatch) {
-      const totalTime = parseInt(timeMatch[1]);
-      if (totalTime <= 15) {
-        console.log(`🚀 Very quick recipe (${totalTime} min) -> "leicht"`);
-        return 'leicht';
-      }
-    }
-    
-    console.log('🔄 No difficulty found, defaulting to "mittel"');
-    return 'mittel';
+    console.log('⚠️ No "Niveau" field found in HTML, returning undefined');
+    return undefined;
   }
 
   private extractKeywordsFromJsonLd(data: any, title: string, description?: string): string[] {
     console.log('🏷️ Extracting keywords from Lecker.de JSON-LD...');
     
-    const keywords: Set<string> = new Set();
+    const keywords: string[] = [];
     
-    // Extract from JSON-LD keywords if available
+    // Extract ONLY from JSON-LD keywords field
     if (data.keywords) {
       if (Array.isArray(data.keywords)) {
         data.keywords.forEach((keyword: string) => {
-          if (keyword && keyword.trim().length > 2) {
-            keywords.add(keyword.trim());
+          if (keyword && keyword.trim().length > 0) {
+            keywords.push(keyword.trim());
+            console.log(`   → Found keyword: "${keyword.trim()}"`);
           }
         });
       } else if (typeof data.keywords === 'string') {
+        // Handle comma-separated string
         data.keywords.split(',').forEach((keyword: string) => {
           const cleaned = keyword.trim();
-          if (cleaned.length > 2) keywords.add(cleaned);
+          if (cleaned.length > 0) {
+            keywords.push(cleaned);
+            console.log(`   → Found keyword: "${cleaned}"`);
+          }
         });
       }
     }
     
-    // Extract from recipeCategory in JSON-LD
-    if (data.recipeCategory) {
-      if (Array.isArray(data.recipeCategory)) {
-        data.recipeCategory.forEach((cat: string) => keywords.add(cat.trim()));
-      } else if (typeof data.recipeCategory === 'string') {
-        keywords.add(data.recipeCategory.trim());
-      }
+    if (keywords.length > 0) {
+      console.log(`✅ Extracted ${keywords.length} keywords from JSON-LD "keywords" field:`, keywords);
+    } else {
+      console.log('⚠️ No keywords found in JSON-LD "keywords" field');
     }
     
-    // Extract from recipeCuisine in JSON-LD
-    if (data.recipeCuisine) {
-      if (Array.isArray(data.recipeCuisine)) {
-        data.recipeCuisine.forEach((cuisine: string) => keywords.add(cuisine.trim()));
-      } else if (typeof data.recipeCuisine === 'string') {
-        keywords.add(data.recipeCuisine.trim());
-      }
-    }
-    
-    // Fallback to base extraction method (note: no html parameter for JSON-LD method)
-    const baseKeywords = this.extractKeywords('', title, description);
-    baseKeywords.forEach(keyword => keywords.add(keyword));
-    
-    const result = Array.from(keywords).slice(0, 10);
-    console.log(`✅ Extracted ${result.length} keywords from Lecker: ${result.join(', ')}`);
-    return result;
+    return keywords;
   }
 
   private extractCategoryFromJsonLd(data: any, title: string, description?: string): string | undefined {
     console.log('📂 Extracting category from Lecker.de JSON-LD...');
     
-    // Try JSON-LD recipeCategory first
+    // Extract ONLY from JSON-LD recipeCategory field
     if (data.recipeCategory) {
       const category = Array.isArray(data.recipeCategory) 
         ? data.recipeCategory[0] 
@@ -862,22 +738,65 @@ export class LeckerExtractor extends BaseRecipeExtractor {
       
       if (category && typeof category === 'string') {
         const normalized = this.normalizeCategory(category);
-        console.log(`✅ Found category in JSON-LD: ${normalized}`);
+        console.log(`   → Found category "${category}" → normalized to "${normalized}"`);
+        console.log(`✅ Extracted category from JSON-LD "recipeCategory" field: ${normalized}`);
         return normalized;
       }
     }
     
-    // Fallback to base extraction method
-    return this.extractCategory('', title, description);
+    console.log('⚠️ No category found in JSON-LD "recipeCategory" field');
+    return undefined;
   }
 
-  private mapLeckerDifficulty(difficulty: any): 'leicht' | 'mittel' | 'schwer' {
+  private mapLeckerDifficulty(difficulty: any): 'leicht' | 'mittel' | 'schwer' | undefined {
     if (typeof difficulty === 'string') {
-      const d = difficulty.toLowerCase();
-      if (d.includes('einfach') || d.includes('leicht') || d.includes('simpel') || d.includes('schnell') || d.includes('kinderleicht') || d.includes('ganz einfach')) return 'leicht';
-      if (d.includes('schwer') || d.includes('schwierig') || d.includes('komplex') || d.includes('kompliziert') || d.includes('anspruchsvoll') || d.includes('aufwendig')) return 'schwer';
+      const d = difficulty.toLowerCase().trim();
+      
+      // Match exact common Lecker.de difficulty terms first
+      const exactMatches: { [key: string]: 'leicht' | 'mittel' | 'schwer' } = {
+        'ganz einfach': 'leicht',
+        'super einfach': 'leicht',
+        'sehr einfach': 'leicht',
+        'total einfach': 'leicht',
+        'kinderleicht': 'leicht',
+        'einfach': 'leicht',
+        'leicht': 'leicht',
+        'simpel': 'leicht',
+        'schnell': 'leicht',
+        
+        'mittel': 'mittel',
+        'mittelschwer': 'mittel',
+        'normal': 'mittel',
+        
+        'schwer': 'schwer',
+        'schwierig': 'schwer',
+        'sehr schwer': 'schwer',
+        'kompliziert': 'schwer',
+        'komplex': 'schwer',
+        'anspruchsvoll': 'schwer',
+        'aufwendig': 'schwer',
+        'profi': 'schwer'
+      };
+      
+      // Check for exact matches first
+      if (exactMatches[d]) {
+        console.log(`   → Exact match: "${d}" → ${exactMatches[d]}`);
+        return exactMatches[d];
+      }
+      
+      // Check for partial matches if no exact match found
+      if (d.includes('einfach') || d.includes('leicht') || d.includes('simpel') || d.includes('schnell') || d.includes('kinderleicht')) {
+        console.log(`   → Contains "leicht" keywords: "${d}" → leicht`);
+        return 'leicht';
+      }
+      if (d.includes('schwer') || d.includes('schwierig') || d.includes('komplex') || d.includes('kompliziert') || d.includes('anspruchsvoll') || d.includes('aufwendig') || d.includes('profi')) {
+        console.log(`   → Contains "schwer" keywords: "${d}" → schwer`);
+        return 'schwer';
+      }
+      
+      console.log(`   → No clear mapping found for "${d}" → returning undefined`);
     }
-    return 'mittel';
+    return undefined;
   }
 
   /**

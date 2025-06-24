@@ -7,10 +7,17 @@ interface Props {
 
 const { recipe } = Astro.props;
 
+// Safety check: ensure preparationGroups exists and handle empty arrays
+const preparationGroups = recipe?.preparationGroups || [];
+const hasAnySteps = preparationGroups.some(group => 
+  group?.steps && group.steps.length > 0 && group.steps.some(step => 'text' in step && step.text.trim())
+);
+
 // Helper function to get all ingredients from the recipe
 function getAllIngredients(recipe: Recipe) {
-  return recipe.ingredientGroups.flatMap(group => 
-    group.ingredients.filter(item => 'id' in item && 'name' in item)
+  const ingredientGroups = recipe?.ingredientGroups || [];
+  return ingredientGroups.flatMap(group => 
+    (group?.ingredients || []).filter(item => 'id' in item && 'name' in item)
   );
 }
 
@@ -65,9 +72,14 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
       Zubereitung
     </h2>
     
-    <div class="space-y-4">
-      {/* First show ungrouped steps */}
-      {recipe.preparationGroups.filter(group => !group.title).map((group, groupIndex) => {
+    {!hasAnySteps ? (
+      <div class="text-gray-500 dark:text-gray-400 italic">
+        Keine Zubereitungsschritte gefunden - bitte manuell hinzufügen.
+      </div>
+    ) : (
+      <div class="space-y-4">
+        {/* First show ungrouped steps */}
+        {preparationGroups.filter(group => group && !group.title).map((group, groupIndex) => {
         const ungroupedGroupIndex = recipe.preparationGroups.findIndex(g => g === group);
         
         return (
@@ -87,7 +99,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                   </div>
                   <div class="flex-1">
                     <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={preparationStep.text.replace(
-                      /(\d+(?:[-–]\d+)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+                      /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
                       `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
                     )}></p>
                     
@@ -119,7 +131,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                             const quantity = ingredient.quantities[link.selectedQuantityIndex];
                             const wasUsedBefore = usedIngredients.has(link.ingredientId);
                             let quantityElement = null;
-                            if (quantity.amount > 1 && quantity.unit !== '') {
+                            if (quantity.amount >= 1 && quantity.unit !== '') {
                               quantityElement = (
                                 <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
                                   (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
@@ -127,7 +139,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                               );
                             } else if (quantity.amount === 0 && quantity.unit !== '') {
                               quantityElement = <span> ({quantity.unit})</span>;
-                            } else if (quantity.amount > 1 && quantity.unit === '') {
+                            } else if (quantity.amount >= 1 && quantity.unit === '') {
                               quantityElement = (
                                 <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
                                   (<span class="amount-value">{quantity.amount}</span>)
@@ -156,17 +168,17 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
         );
       })}
       
-      {/* Then show grouped steps */}
-      {recipe.preparationGroups.filter(group => group.title).map((group) => {
-        const groupedGroupIndex = recipe.preparationGroups.findIndex(g => g === group);
-        
-        return (
-          <div>
-            <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b border-gray-200 dark:border-gray-600 pb-1">
-              {group.title}
-            </h3>
-            <ol class="space-y-4">
-              {group.steps.map((step, index) => {
+              {/* Then show grouped steps */}
+        {preparationGroups.filter(group => group && group.title).map((group) => {
+          const groupedGroupIndex = preparationGroups.findIndex(g => g === group);
+          
+          return (
+            <div>
+              <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b border-gray-200 dark:border-gray-600 pb-1">
+                {group.title}
+              </h3>
+              <ol class="space-y-4">
+                {(group.steps || []).map((step, index) => {
                 if (!('text' in step)) return null;
                 const preparationStep = step as PreparationStep;
                 const allIngredients = getAllIngredients(recipe);
@@ -181,7 +193,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                     </div>
                     <div class="flex-1">
                       <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={preparationStep.text.replace(
-                        /(\d+(?:[-–]\d+)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+                        /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
                         `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
                       )}></p>
                       
@@ -213,7 +225,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                               const quantity = ingredient.quantities[link.selectedQuantityIndex];
                               const wasUsedBefore = usedIngredients.has(link.ingredientId);
                               let quantityElement = null;
-                              if (quantity.amount > 1 && quantity.unit !== '') {
+                              if (quantity.amount >= 1 && quantity.unit !== '') {
                                 quantityElement = (
                                   <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
                                     (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
@@ -221,7 +233,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                                 );
                               } else if (quantity.amount === 0 && quantity.unit !== '') {
                                 quantityElement = <span> ({quantity.unit})</span>;
-                              } else if (quantity.amount > 1 && quantity.unit === '') {
+                              } else if (quantity.amount >= 1 && quantity.unit === '') {
                                 quantityElement = (
                                   <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
                                     (<span class="amount-value">{quantity.amount}</span>)
@@ -250,6 +262,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
           </div>
         );
       })}
-    </div>
+      </div>
+    )}
   </div>
 </div> 

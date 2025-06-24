@@ -197,7 +197,7 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
       servings: getNumberValue(data.recipeYield),
       preparationTime: prepTime,
       cookingTime: cookTime,
-      difficulty: 'mittel',
+      difficulty: undefined, // No difficulty extraction from JSON-LD generic
       keywords,
       category,
       ingredients,

@@ -12,19 +12,44 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     const html = await this.fetchHtml(url);
     console.log('HTML fetched, length:', html.length, 'characters');
 
-    // First try JSON-LD extraction
+    // Primary: Extract recipe from JSON-LD
+    console.log('Trying JSON-LD extraction first...');
     const jsonLdData = this.extractFromJsonLd(html);
-    if (jsonLdData) {
-      console.log('Using JSON-LD extraction path');
-      return {
-        ...jsonLdData,
-        sourceUrl: url
-      };
+    
+    if (jsonLdData && jsonLdData.ingredients.length > 0 && jsonLdData.instructions.length > 0) {
+      console.log('JSON-LD extraction successful, enhancing with HTML times...');
+      
+      // Extract all times from HTML to enhance JSON-LD data
+      const htmlTimeEntries = this.extractAllTimesFromWprm(html);
+      
+      // Prefer HTML times, fallback to JSON-LD times only if HTML extraction failed
+      if (htmlTimeEntries.length > 0) {
+        console.log(`✅ Using HTML time entries (preferred):`, htmlTimeEntries);
+        jsonLdData.timeEntries = htmlTimeEntries;
+      } else {
+        console.log(`⚠️ No HTML times found, using JSON-LD fallback times:`, jsonLdData.timeEntries || []);
+        // Keep the JSON-LD timeEntries that were already created
+      }
+      
+      // Extract keywords from HTML to enhance JSON-LD data
+      const htmlKeywords = this.extractKeywordsFromHtml(html);
+      
+      // Prefer HTML keywords, fallback to JSON-LD keywords only if HTML extraction failed
+      if (htmlKeywords.length > 0) {
+        console.log(`✅ Using HTML keywords (preferred):`, htmlKeywords);
+        jsonLdData.keywords = htmlKeywords;
+      } else {
+        console.log(`⚠️ No HTML keywords found, using JSON-LD fallback keywords:`, jsonLdData.keywords || []);
+        // Keep the JSON-LD keywords that were already created
+      }
+      
+      return jsonLdData;
     }
-
-    // Fallback to HTML parsing
-    console.log('Using HTML fallback extraction path');
-    return this.extractFromHtml(html, url);
+    
+    // Fallback: Try HTML extraction if JSON-LD failed completely
+    console.log('JSON-LD extraction failed, trying HTML fallback...');
+    const htmlData = this.extractFromHtml(html, url);
+    return htmlData;
   }
 
   private extractFromJsonLd(html: string): ExtractedRecipeData | null {
@@ -75,51 +100,32 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
             const nutrition = this.extractNutritionFromJsonLd(recipe);
             console.log('Extracted nutrition:', nutrition);
 
-            // Extract time information with better fallbacks
+            // Extract time information with better fallbacks (for JSON-LD only, will be overridden by HTML)
             console.log('🕐 Extracting time information from Gaumenfreundin JSON-LD...');
-            let prepTime = this.parseTimeToMinutes(recipe.prepTime || '');
-            let cookTime = this.parseTimeToMinutes(recipe.cookTime || '');
+            const prepTime = this.parseTimeToMinutes(recipe.prepTime || '');
+            const cookTime = this.parseTimeToMinutes(recipe.cookTime || '');
             const totalTime = this.parseTimeToMinutes(recipe.totalTime || '');
             
-            if (prepTime > 0) console.log(`✅ Found preparation time in JSON-LD: ${prepTime} minutes`);
-            if (cookTime > 0) console.log(`✅ Found cooking time in JSON-LD: ${cookTime} minutes`);
-            if (totalTime > 0) console.log(`📊 Found total time in JSON-LD: ${totalTime} minutes`);
+            console.log(`📊 JSON-LD prep time: ${prepTime} minutes`);
+            console.log(`📊 JSON-LD cook time: ${cookTime} minutes`);
+            console.log(`📊 JSON-LD total time: ${totalTime} minutes`);
             
-            // If no specific prep/cook times, try to extract from total time
-            if (!prepTime && !cookTime && totalTime > 0) {
-              console.log(`⚡ Using total time (${totalTime} min) to estimate prep/cook times`);
-              if (totalTime <= 30) {
-                prepTime = totalTime;
-                console.log(`📝 Short recipe: all ${totalTime} minutes assigned to prep time`);
-              } else {
-                prepTime = Math.floor(totalTime * 0.3); // 30% for prep
-                cookTime = Math.floor(totalTime * 0.7); // 70% for cooking
-                console.log(`📝 Split total time: ${prepTime} min prep + ${cookTime} min cook`);
-              }
-            } else if (prepTime > 0 && !cookTime && totalTime > prepTime) {
-              // Calculate cook time from total - prep
-              cookTime = totalTime - prepTime;
-              console.log(`🧮 Calculated cooking time: ${totalTime} - ${prepTime} = ${cookTime} minutes`);
+            // Create fallback timeEntries from JSON-LD (will be overridden by HTML if available)
+            const jsonLdTimeEntries = [];
+            if (prepTime > 0) {
+              jsonLdTimeEntries.push({ label: 'Vorbereitung', minutes: prepTime });
+            }
+            if (cookTime > 0) {
+              jsonLdTimeEntries.push({ label: 'Kochzeit', minutes: cookTime });
             }
             
-            // Additional time sources to check
-            if (!prepTime && !cookTime) {
-              // Check for performTime (some sites use this)
-              prepTime = this.parseTimeToMinutes(recipe.performTime || '');
-              
-              // Check for duration
-              if (!prepTime) {
-                prepTime = this.parseTimeToMinutes(recipe.duration || '');
-              }
-            }
-
             // Only return if we actually got ingredients and instructions
             if (ingredients.length > 0 && instructions.length > 0) {
               // Extract title and subtitle from recipe name and description
               const { title, subtitle } = this.extractTitleAndSubtitle(recipe.name, recipe.description);
               
-              // Extract keywords and category from JSON-LD
-              const keywords = this.extractKeywordsFromJsonLd(recipe, title, recipe.description);
+              // Extract keywords and category from JSON-LD (will be overridden by HTML if available)
+              const jsonLdKeywords = this.extractKeywordsFromJsonLd(recipe, title, recipe.description);
               const category = this.extractCategoryFromJsonLd(recipe, title, recipe.description);
 
               return {
@@ -127,10 +133,9 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
                 subtitle,
                 description: this.cleanText(recipe.description || ''),
                 servings: this.extractServings(recipe.recipeYield),
-                preparationTime: prepTime || 15,
-                cookingTime: cookTime,
+                timeEntries: jsonLdTimeEntries,
                 difficulty: this.mapDifficulty(recipe.difficulty || ''),
-                keywords,
+                keywords: jsonLdKeywords,
                 category,
                 ingredients,
                 instructions,
@@ -186,18 +191,20 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
 
     // Extract time information
     console.log('🕐 Extracting time information from Gaumenfreundin HTML...');
-    const prepTime = this.extractTimeFromHtml(html, 'prep');
-    const cookTime = this.extractTimeFromHtml(html, 'cook');
+    const timeEntries = this.extractAllTimesFromWprm(html);
     
-    if (prepTime > 0) console.log(`✅ Found preparation time in HTML: ${prepTime} minutes`);
-    if (cookTime > 0) console.log(`✅ Found cooking time in HTML: ${cookTime} minutes`);
+    if (timeEntries.length > 0) {
+      console.log(`✅ Found time entries in HTML:`, timeEntries);
+    } else {
+      console.log('❌ No time entries found in HTML');
+    }
 
     // Extract nutrition information
     const nutrition = this.extractNutritionFromHtml(html);
     console.log('HTML extracted nutrition:', nutrition);
 
     // Extract keywords and category from HTML
-    const keywords = this.extractKeywords(html, title, description);
+    const keywords = this.extractKeywordsFromHtml(html);
     const category = this.extractCategory(html, title, description);
 
     return {
@@ -205,8 +212,7 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
       subtitle,
       description,
       servings: 4, // Default for Gaumenfreundin
-      preparationTime: prepTime || 15,
-      cookingTime: cookTime || 0,
+      timeEntries: timeEntries,
       difficulty: 'mittel',
       keywords,
       category,
@@ -508,100 +514,88 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     return undefined;
   }
 
-  private extractTimeFromHtml(html: string, type: 'prep' | 'cook'): number {
-    // Pattern 1: Specific time labels based on type
-    if (type === 'prep') {
-      const prepPatterns = [
-        /(?:Zubereitungszeit|Vorbereitung|Arbeitszeit):\s*\*?\*?(\d+)\s*(?:Min|Minuten)/i,
-        /Zubereitung\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
-        /Prep\s*time\s*:\s*(\d+)\s*(?:Min|minutes)/i
-      ];
-      
-      for (const pattern of prepPatterns) {
-        const match = html.match(pattern);
-        if (match) {
-          console.log(`Found prep time pattern: ${match[0]}`);
-          return parseInt(match[1]);
-        }
-      }
-    } else if (type === 'cook') {
-      const cookPatterns = [
-        /(?:Kochzeit|Backzeit|Garzeit|Bratzeit):\s*\*?\*?(\d+)\s*(?:Min|Minuten)/i,
-        /(?:Cook|Bake|Roast)\s*time\s*:\s*(\d+)\s*(?:Min|minutes)/i,
-        /Im\s*Ofen\s*(\d+)\s*(?:Min|Minuten)/i
-      ];
-      
-      for (const pattern of cookPatterns) {
-        const match = html.match(pattern);
-        if (match) {
-          console.log(`Found cook time pattern: ${match[0]}`);
-          return parseInt(match[1]);
-        }
-      }
-    }
-    
-    // Pattern 2: Look for Gaumenfreundin specific recipe card time data
-    const recipeCardMatch = html.match(/<div[^>]*class[^>]*wprm-recipe[^>]*>[\s\S]*?<\/div>/gi);
-    if (recipeCardMatch) {
-      for (const card of recipeCardMatch) {
-        // Look for time values in recipe cards
-        const timePatterns = [
-          /<span[^>]*class[^>]*prep[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i,
-          /<span[^>]*class[^>]*cook[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i,
-          /<div[^>]*class[^>]*time[^>]*>[\s\S]*?(\d+)\s*(?:Min|Minuten)/i
-        ];
-        
-        for (const pattern of timePatterns) {
-          const match = card.match(pattern);
-          if (match) {
-            console.log(`Found recipe card time: ${match[0]}`);
-            return parseInt(match[1]);
-          }
-        }
-      }
-    }
-    
-    // Pattern 3: General time patterns as fallback
-    const generalPatterns = [
-      /Gesamtzeit\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
-      /Zeit\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
-      /Dauer\s*:\s*(\d+)\s*(?:Min|Minuten)/i,
-      /(\d+)\s*(?:Min|Minuten)(?:\s*(?:Zubereitung|Kochen|Backen))?/i
-    ];
 
-    for (const pattern of generalPatterns) {
-      const match = html.match(pattern);
-      if (match) {
-        console.log(`Found general time pattern: ${match[0]}`);
-        const time = parseInt(match[1]);
-        
-        // If we found a general time, try to be intelligent about assignment
-        if (type === 'prep' && time <= 30) {
-          return time;
-        } else if (type === 'cook' && time > 30) {
-          return Math.floor(time * 0.7); // 70% for cooking
-        } else if (type === 'prep' && time > 30) {
-          return Math.floor(time * 0.3); // 30% for prep
-        }
+
+  private extractAllTimesFromWprm(html: string): Array<{label: string, minutes: number}> {
+    console.log(`🔍 Extracting all WPRM time containers...`);
+    const times: Array<{label: string, minutes: number}> = [];
+    const seenLabels = new Set<string>(); // Track already extracted labels
+    
+    // Find all time containers except total time
+    const containerPattern = /<div[^>]*wprm-recipe-(\w+)-time-container[^>]*>([^]*?)<\/div>/gi;
+    let match;
+    
+    while ((match = containerPattern.exec(html)) !== null) {
+      const timeType = match[1]; // e.g., 'cook', 'custom', 'prep'
+      const containerContent = match[2];
+      
+      // Skip total time
+      if (timeType === 'total') {
+        console.log(`   → Skipping total time container`);
+        continue;
+      }
+      
+      console.log(`   → Found ${timeType} time container`);
+      
+      // Extract label from the container
+      const labelMatch = containerContent.match(/<span[^>]*wprm-recipe-time-label[^>]*>([^<]+)</i);
+      const label = labelMatch ? labelMatch[1].trim() : timeType;
+      
+      // Skip if we already extracted this label
+      if (seenLabels.has(label)) {
+        console.log(`   → Skipping duplicate label: "${label}"`);
+        continue;
+      }
+      
+      let totalMinutes = 0;
+      
+      // Extract hours using wildcard pattern for this specific time type
+      const hoursPattern = new RegExp(`<span[^>]*wprm-recipe-${timeType}_time[^>]*-hours[^>]*>(\\d+)`, 'i');
+      const hoursMatch = containerContent.match(hoursPattern);
+      if (hoursMatch) {
+        const hours = parseInt(hoursMatch[1]);
+        totalMinutes += hours * 60;
+        console.log(`      → Found ${hours} hour(s) in ${label}`);
+      }
+      
+      // Extract minutes using wildcard pattern for this specific time type
+      const minutesPattern = new RegExp(`<span[^>]*wprm-recipe-${timeType}_time[^>]*-minutes[^>]*>(\\d+)`, 'i');
+      const minutesMatch = containerContent.match(minutesPattern);
+      if (minutesMatch) {
+        const minutes = parseInt(minutesMatch[1]);
+        totalMinutes += minutes;
+        console.log(`      → Found ${minutes} minute(s) in ${label}`);
+      }
+      
+      if (totalMinutes > 0) {
+        times.push({ label, minutes: totalMinutes });
+        seenLabels.add(label); // Mark this label as seen
+        console.log(`      ✅ Extracted: ${label} = ${totalMinutes} minutes`);
       }
     }
     
-    // Pattern 4: Look in meta description
-    const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)/i);
-    if (metaDescMatch) {
-      const metaTimeMatch = metaDescMatch[1].match(/(\d+)\s*(?:Min|Minuten)/i);
-      if (metaTimeMatch) {
-        console.log(`Found time in meta description: ${metaTimeMatch[0]}`);
-        const time = parseInt(metaTimeMatch[1]);
-        if (type === 'prep') {
-          return time <= 30 ? time : Math.floor(time * 0.3);
-        } else {
-          return time > 30 ? Math.floor(time * 0.7) : 0;
-        }
+    console.log(`📊 Found ${times.length} unique time entries:`, times.map(t => `${t.label}: ${t.minutes}min`));
+    return times;
+  }
+
+  private extractKeywordsFromHtml(html: string): string[] {
+    console.log(`🏷️ Extracting keywords from Gaumenfreundin HTML...`);
+    const keywords: string[] = [];
+    
+    // Extract from recipe-tag class links
+    const tagPattern = /<a[^>]*class="[^"]*recipe-tag[^"]*"[^>]*>([^<]+)<\/a>/gi;
+    let match;
+    
+    while ((match = tagPattern.exec(html)) !== null) {
+      const tag = this.cleanText(match[1]).trim();
+      if (tag && tag.length > 0 && !keywords.includes(tag)) {
+        keywords.push(tag);
+        console.log(`   → Found recipe tag: "${tag}"`);
       }
     }
-
-    return 0;
+    
+    console.log(`📊 Found ${keywords.length} keywords from HTML:`, keywords);
+    return keywords;
   }
 
   private extractServings(recipeYield: any): number {
@@ -628,16 +622,22 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     return 4;
   }
 
-  private mapDifficulty(difficulty: string): 'leicht' | 'mittel' | 'schwer' {
+  private mapDifficulty(difficulty: string): 'leicht' | 'mittel' | 'schwer' | undefined {
+    if (!difficulty || difficulty.trim() === '') {
+      return undefined;
+    }
+    
     const diffStr = difficulty.toLowerCase();
     
     if (diffStr.includes('einfach') || diffStr.includes('leicht') || diffStr.includes('easy')) {
       return 'leicht';
     } else if (diffStr.includes('schwer') || diffStr.includes('difficult') || diffStr.includes('hard')) {
       return 'schwer';
+    } else if (diffStr.includes('mittel') || diffStr.includes('medium') || diffStr.includes('normal')) {
+      return 'mittel';
     }
     
-    return 'mittel';
+    return undefined;
   }
 
   private extractNutritionFromJsonLd(recipe: any): NutritionData | undefined {
@@ -807,69 +807,129 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
   private extractKeywordsFromJsonLd(data: any, title: string, description?: string): string[] {
     console.log('🏷️ Extracting keywords from Gaumenfreundin JSON-LD...');
     
-    const keywords: Set<string> = new Set();
+    const keywords: string[] = [];
     
-    // Extract from JSON-LD keywords if available
-    if (data.keywords) {
-      if (Array.isArray(data.keywords)) {
-        data.keywords.forEach((keyword: string) => {
-          if (keyword && keyword.trim().length > 2) {
-            keywords.add(keyword.trim());
+    // Helper function to extract strings from various formats
+    const extractStrings = (value: any): string[] => {
+      if (!value) return [];
+      
+      if (typeof value === 'string') {
+        // Handle comma-separated strings
+        return value.split(/[,;]/).map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+      } else if (Array.isArray(value)) {
+        // Handle array of keywords
+        const result: string[] = [];
+        value.forEach((item: any) => {
+          if (typeof item === 'string') {
+            result.push(item.trim());
+          } else if (item && item.name) {
+            result.push(item.name.trim());
           }
         });
-      } else if (typeof data.keywords === 'string') {
-        data.keywords.split(',').forEach((keyword: string) => {
-          const cleaned = keyword.trim();
-          if (cleaned.length > 2) keywords.add(cleaned);
-        });
+        return result;
       }
+      
+      return [];
+    };
+    
+    // Extract from keywords field
+    if (data.keywords) {
+      const keywordList = extractStrings(data.keywords);
+      keywords.push(...keywordList);
+      console.log(`   → Found ${keywordList.length} keywords from 'keywords' field:`, keywordList);
     }
     
-    // Extract from recipeCategory in JSON-LD
-    if (data.recipeCategory) {
-      if (Array.isArray(data.recipeCategory)) {
-        data.recipeCategory.forEach((cat: string) => keywords.add(cat.trim()));
-      } else if (typeof data.recipeCategory === 'string') {
-        keywords.add(data.recipeCategory.trim());
-      }
-    }
-    
-    // Extract from recipeCuisine in JSON-LD
+    // Extract from recipeCuisine field
     if (data.recipeCuisine) {
-      if (Array.isArray(data.recipeCuisine)) {
-        data.recipeCuisine.forEach((cuisine: string) => keywords.add(cuisine.trim()));
-      } else if (typeof data.recipeCuisine === 'string') {
-        keywords.add(data.recipeCuisine.trim());
-      }
+      const cuisineList = extractStrings(data.recipeCuisine);
+      keywords.push(...cuisineList);
+      console.log(`   → Found ${cuisineList.length} keywords from 'recipeCuisine' field:`, cuisineList);
     }
     
-    // Fallback to base extraction method
-    const baseKeywords = this.extractKeywords('', title, description);
-    baseKeywords.forEach(keyword => keywords.add(keyword));
+    // Extract from recipeCategory field
+    if (data.recipeCategory) {
+      const categoryList = extractStrings(data.recipeCategory);
+      keywords.push(...categoryList);
+      console.log(`   → Found ${categoryList.length} keywords from 'recipeCategory' field:`, categoryList);
+    }
     
-    const result = Array.from(keywords).slice(0, 10);
-    console.log(`✅ Extracted ${result.length} keywords from Gaumenfreundin: ${result.join(', ')}`);
-    return result;
+    // Clean up and deduplicate
+    const cleanedKeywords = keywords
+      .map(k => this.cleanText(k))
+      .filter(k => k.length > 0 && k.length < 50) // Filter reasonable length keywords
+      .filter((k, index, arr) => arr.indexOf(k) === index); // Remove duplicates
+    
+    console.log(`📊 Extracted ${cleanedKeywords.length} keywords from JSON-LD:`, cleanedKeywords);
+    return cleanedKeywords;
   }
 
   private extractCategoryFromJsonLd(data: any, title: string, description?: string): string | undefined {
     console.log('📂 Extracting category from Gaumenfreundin JSON-LD...');
     
-    // Try JSON-LD recipeCategory first
-    if (data.recipeCategory) {
-      const category = Array.isArray(data.recipeCategory) 
-        ? data.recipeCategory[0] 
-        : data.recipeCategory;
+    // Helper function to extract and normalize category from various formats
+    const extractAndNormalizeCategory = (value: any): string | undefined => {
+      if (!value) return undefined;
       
-      if (category && typeof category === 'string') {
-        const normalized = this.normalizeCategory(category);
-        console.log(`✅ Found category in JSON-LD: ${normalized}`);
-        return normalized;
+      let categoryText: string;
+      
+      if (typeof value === 'string') {
+        categoryText = value;
+      } else if (Array.isArray(value) && value.length > 0) {
+        categoryText = typeof value[0] === 'string' ? value[0] : value[0].name || value[0];
+      } else if (value.name) {
+        categoryText = value.name;
+      } else {
+        return undefined;
+      }
+      
+      const normalized = this.normalizeCategory(categoryText.trim());
+      console.log(`   → Found category "${categoryText}" → normalized to "${normalized}"`);
+      return normalized;
+    };
+    
+    // Try recipeCategory field first
+    if (data.recipeCategory) {
+      const category = extractAndNormalizeCategory(data.recipeCategory);
+      if (category) {
+        console.log(`✅ Found category in 'recipeCategory' field: ${category}`);
+        return category;
       }
     }
     
-    // Fallback to base extraction method
+    // Try recipeCuisine field as secondary source
+    if (data.recipeCuisine) {
+      const category = extractAndNormalizeCategory(data.recipeCuisine);
+      if (category) {
+        console.log(`✅ Found category in 'recipeCuisine' field: ${category}`);
+        return category;
+      }
+    }
+    
+    // Try keywords field for category-like terms
+    if (data.keywords) {
+      const keywordList = Array.isArray(data.keywords) ? data.keywords : [data.keywords];
+      for (const keyword of keywordList) {
+        if (typeof keyword === 'string') {
+          const category = extractAndNormalizeCategory(keyword);
+          if (category && this.isValidCategory(category)) {
+            console.log(`✅ Found category in 'keywords' field: ${category}`);
+            return category;
+          }
+        }
+      }
+    }
+    
+    console.log('⚠️ No valid category found in JSON-LD, using content-based detection');
+    // Fallback to base extraction method (content analysis)
     return this.extractCategory('', title, description);
+  }
+  
+  private isValidCategory(category: string): boolean {
+    const validCategories = [
+      'Vorspeise', 'Hauptgericht', 'Dessert', 'Suppe', 'Salat', 
+      'Beilage', 'Getränk', 'Frühstück', 'Snack', 'Brot & Gebäck'
+    ];
+    return validCategories.includes(category);
   }
 
   getCapabilities() {

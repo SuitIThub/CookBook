@@ -32,11 +32,19 @@
         window.location.href = `/rezept/${newRecipe.id}?edit=true`;
       } else {
         console.error('Failed to create recipe');
-        alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+        if (window.showError) {
+          window.showError('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+        } else {
+          alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+        }
       }
     } catch (error) {
       console.error('Error creating recipe:', error);
-      alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+      if (window.showError) {
+        window.showError('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+      } else {
+        alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
+      }
     }
   }
 

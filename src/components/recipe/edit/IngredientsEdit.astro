@@ -42,9 +42,14 @@ const { recipe } = Astro.props;
         {recipe.ingredientGroups.map((group) => 
           !group.title ? group.ingredients.map((ingredient) => (
             'name' in ingredient ? (
-              <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" data-ingredient-id={(ingredient as Ingredient).id}>
+              <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={(ingredient as Ingredient).id}>
                 <div class="space-y-3">
                   <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
+                    <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
+                      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                      </svg>
+                    </div>
                     <div class="flex-1 relative">
                       <input 
                         type="text" 
@@ -134,9 +139,14 @@ const { recipe } = Astro.props;
           <div class="ingredients-list space-y-3">
             {group.ingredients.map((ingredient) => (
               'name' in ingredient ? (
-                <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" data-ingredient-id={(ingredient as Ingredient).id}>
+                <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={(ingredient as Ingredient).id}>
                   <div class="space-y-3">
                     <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
+                      <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                        </svg>
+                      </div>
                       <div class="flex-1 relative">
                         <input 
                           type="text" 
@@ -204,3 +214,251 @@ const { recipe } = Astro.props;
     )}
   </div>
 </div> 
+
+<script>
+// Drag and Drop functionality for ingredients
+document.addEventListener('DOMContentLoaded', function() {
+  let draggedElement = null;
+  let draggedData = null;
+  let placeholder = null;
+
+  function initDragAndDrop() {
+    // Add event listeners to all ingredient group containers AND their ingredients-list children
+    const ingredientGroups = document.querySelectorAll('.ingredient-group-edit');
+    const ingredientContainers = document.querySelectorAll('.ingredients-list');
+    
+    // Add listeners to ingredient containers
+    ingredientContainers.forEach(container => {
+      container.addEventListener('dragover', handleDragOver);
+      container.addEventListener('drop', handleDrop);
+      container.addEventListener('dragenter', handleDragEnter);
+      container.addEventListener('dragleave', handleDragLeave);
+    });
+    
+    // Also add listeners to the ingredient group containers for better cross-group support
+    ingredientGroups.forEach(group => {
+      group.addEventListener('dragover', handleDragOverGroup);
+      group.addEventListener('drop', handleDropGroup);
+    });
+    
+    updateIngredientEventListeners();
+  }
+
+  function updateIngredientEventListeners() {
+    const ingredientItems = document.querySelectorAll('.ingredient-edit-item');
+    ingredientItems.forEach(item => {
+      if (!item.hasAttribute('data-drag-initialized')) {
+        item.setAttribute('data-drag-initialized', 'true');
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragend', handleDragEnd);
+      }
+    });
+  }
+
+  function handleDragStart(e) {
+    draggedElement = e.currentTarget;
+    const parent = draggedElement.parentNode;
+    draggedData = {
+      ingredientId: draggedElement.dataset.ingredientId,
+      sourceGroup: draggedElement.closest('.ingredient-group-edit'),
+      sourceIndex: parent ? Array.from(parent.children).indexOf(draggedElement) : -1
+    };
+
+    placeholder = document.createElement('div');
+    placeholder.className = 'ingredient-placeholder border-2 border-dashed border-orange-400 dark:border-orange-500 rounded-md p-3 bg-orange-50 dark:bg-orange-900/20 transition-colors duration-200';
+    placeholder.innerHTML = '<div class="text-center text-orange-600 dark:text-orange-400 font-medium">Hier ablegen</div>';
+
+    draggedElement.style.opacity = '0.5';
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/html', draggedElement.outerHTML);
+    }
+  }
+
+  function handleDragEnd(e) {
+    if (draggedElement) {
+      draggedElement.style.opacity = '1';
+    }
+    document.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+    draggedElement = null;
+    draggedData = null;
+    placeholder = null;
+    document.querySelectorAll('.ingredients-list').forEach(container => {
+      container.classList.remove('drag-over');
+    });
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    const container = e.currentTarget;
+    // Use setTimeout to ensure this runs after any potential dragenter events
+    setTimeout(() => {
+      if (!container.contains(e.relatedTarget)) {
+        container.classList.remove('drag-over');
+        // Only remove placeholders from this specific container
+        container.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+      }
+    }, 10);
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (!draggedElement || !placeholder) return;
+
+    const container = e.currentTarget;
+    const afterElement = getDragAfterElement(container, e.clientY);
+    container.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+    
+    if (afterElement == null) {
+      container.appendChild(placeholder);
+    } else {
+      container.insertBefore(placeholder, afterElement);
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    if (!draggedElement || !draggedData || !placeholder) return;
+
+    const targetContainer = e.currentTarget;
+    const targetGroup = targetContainer.closest('.ingredient-group-edit');
+    const targetIndex = Array.from(targetContainer.children).indexOf(placeholder);
+    
+    draggedElement.remove();
+    
+    if (targetIndex >= targetContainer.children.length - 1) {
+      targetContainer.appendChild(draggedElement);
+    } else {
+      const nextElement = targetContainer.children[targetIndex + 1];
+      targetContainer.insertBefore(draggedElement, nextElement);
+    }
+    
+    placeholder.remove();
+    targetContainer.classList.remove('drag-over');
+    draggedElement.style.opacity = '1';
+
+    // Update ingredient linker if available
+    if (window.updateIngredientLinker) {
+      window.updateIngredientLinker();
+    }
+  }
+
+  function handleDragOverGroup(e) {
+    e.preventDefault();
+    if (!draggedElement || !placeholder) return;
+    
+    // Find the ingredients-list within this group
+    const ingredientsContainer = e.currentTarget.querySelector('.ingredients-list');
+    if (ingredientsContainer) {
+      // Forward the event to the ingredients container
+      const afterElement = getDragAfterElement(ingredientsContainer, e.clientY);
+      ingredientsContainer.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+      
+      if (afterElement == null) {
+        ingredientsContainer.appendChild(placeholder);
+      } else {
+        ingredientsContainer.insertBefore(placeholder, afterElement);
+      }
+      
+      ingredientsContainer.classList.add('drag-over');
+    }
+  }
+
+  function handleDropGroup(e) {
+    e.preventDefault();
+    if (!draggedElement || !draggedData || !placeholder) return;
+    
+    // Find the ingredients-list within this group
+    const ingredientsContainer = e.currentTarget.querySelector('.ingredients-list');
+    if (ingredientsContainer && ingredientsContainer.contains(placeholder)) {
+      // Forward to the regular drop handler
+      const fakeEvent = { 
+        preventDefault: () => {}, 
+        currentTarget: ingredientsContainer 
+      };
+      handleDrop(fakeEvent);
+    }
+  }
+
+  function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.ingredient-edit-item:not(.dragging)')];
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .ingredients-list.drag-over {
+      background-color: rgba(251, 146, 60, 0.1);
+      border-color: rgba(251, 146, 60, 0.3);
+    }
+    .dark .ingredients-list.drag-over {
+      background-color: rgba(251, 146, 60, 0.05);
+      border-color: rgba(251, 146, 60, 0.2);
+    }
+    .ingredient-edit-item[draggable="true"] {
+      cursor: grab;
+    }
+    .ingredient-edit-item[draggable="true"]:active {
+      cursor: grabbing;
+    }
+    .ingredient-group-edit {
+      min-height: 120px;
+    }
+    .ingredients-list {
+      min-height: 80px;
+      padding: 8px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+  `;
+  document.head.appendChild(style);
+
+  initDragAndDrop();
+
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      if (mutation.type === 'childList') {
+        mutation.addedNodes.forEach(function(node) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node;
+            if (element.classList && element.classList.contains('ingredient-edit-item')) {
+              updateIngredientEventListeners();
+            } else if (element.classList && element.classList.contains('ingredient-group-edit')) {
+              // New group added, reinitialize all drag and drop
+              initDragAndDrop();
+            } else if (element.querySelectorAll) {
+              const ingredientItems = element.querySelectorAll('.ingredient-edit-item');
+              const groupItems = element.querySelectorAll('.ingredient-group-edit');
+              if (ingredientItems.length > 0 || groupItems.length > 0) {
+                initDragAndDrop();
+              }
+            }
+          }
+        });
+      }
+    });
+  });
+
+  const ingredientsContainer = document.getElementById('ingredients-edit-container');
+  if (ingredientsContainer) {
+    observer.observe(ingredientsContainer, { 
+      childList: true, 
+      subtree: true 
+    });
+  }
+});
+</script> 

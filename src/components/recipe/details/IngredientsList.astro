@@ -6,6 +6,12 @@ interface Props {
 }
 
 const { recipe } = Astro.props;
+
+// Safety check: ensure ingredientGroups exists and handle empty arrays
+const ingredientGroups = recipe?.ingredientGroups || [];
+const hasAnyIngredients = ingredientGroups.some(group => 
+  group?.ingredients && group.ingredients.length > 0
+);
 ---
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors duration-200">
@@ -17,44 +23,16 @@ const { recipe } = Astro.props;
       Zutaten
     </h2>
     
-    <div class="space-y-4">
-      {/* First show ungrouped ingredients */}
-      {recipe.ingredientGroups.filter(group => !group.title).map((group) => (
-        <ul class="space-y-2">
-          {group.ingredients.map((ingredient) => (
-            'name' in ingredient ? (
-              <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <div class="flex-1">
-                  <span class="font-medium text-gray-900 dark:text-white">{(ingredient as Ingredient).name}</span>
-                  {(ingredient as Ingredient).description && (
-                    <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                      {(ingredient as Ingredient).description}
-                    </div>
-                  )}
-                </div>
-                <div class="flex space-x-2">
-                  {(ingredient as Ingredient).quantities.map((qty, index) => (
-                    <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
-                          data-original-amount={qty.amount} 
-                          data-unit={qty.unit}>
-                      <span class="amount-value">{qty.amount}</span> {qty.unit}
-                    </span>
-                  ))}
-                </div>
-              </li>
-            ) : null
-          ))}
-        </ul>
-      ))}
-      
-      {/* Then show grouped ingredients */}
-      {recipe.ingredientGroups.filter(group => group.title).map((group) => (
-        <div>
-          <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2 border-b border-gray-200 dark:border-gray-600 pb-1">
-            {group.title}
-          </h3>
+    {!hasAnyIngredients ? (
+      <div class="text-gray-500 dark:text-gray-400 italic">
+        Keine Zutaten gefunden - bitte manuell hinzufügen.
+      </div>
+    ) : (
+      <div class="space-y-4">
+        {/* First show ungrouped ingredients */}
+        {ingredientGroups.filter(group => group && !group.title).map((group) => (
           <ul class="space-y-2">
-            {group.ingredients.map((ingredient) => (
+            {(group.ingredients || []).map((ingredient) => (
               'name' in ingredient ? (
                 <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                   <div class="flex-1">
@@ -66,20 +44,66 @@ const { recipe } = Astro.props;
                     )}
                   </div>
                   <div class="flex space-x-2">
-                    {(ingredient as Ingredient).quantities.map((qty, index) => (
-                      <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
-                            data-original-amount={qty.amount} 
-                            data-unit={qty.unit}>
-                        <span class="amount-value">{qty.amount}</span> {qty.unit}
-                      </span>
-                    ))}
+                    {((ingredient as Ingredient).quantities || []).map((qty, index) => {
+                      // Only show quantity if amount > 0 or unit is not empty
+                      if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                        return (
+                          <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
+                                data-original-amount={qty.amount} 
+                                data-unit={qty.unit}>
+                            <span class="amount-value">{qty.amount}</span> {qty.unit}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })}
                   </div>
                 </li>
               ) : null
             ))}
           </ul>
-        </div>
-      ))}
-    </div>
+        ))}
+        
+        {/* Then show grouped ingredients */}
+        {ingredientGroups.filter(group => group && group.title).map((group) => (
+          <div>
+            <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2 border-b border-gray-200 dark:border-gray-600 pb-1">
+              {group.title}
+            </h3>
+            <ul class="space-y-2">
+              {(group.ingredients || []).map((ingredient) => (
+                'name' in ingredient ? (
+                  <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <div class="flex-1">
+                      <span class="font-medium text-gray-900 dark:text-white">{(ingredient as Ingredient).name}</span>
+                      {(ingredient as Ingredient).description && (
+                        <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                          {(ingredient as Ingredient).description}
+                        </div>
+                      )}
+                    </div>
+                    <div class="flex space-x-2">
+                      {((ingredient as Ingredient).quantities || []).map((qty, index) => {
+                        // Only show quantity if amount > 0 or unit is not empty
+                        if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                          return (
+                            <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
+                                  data-original-amount={qty.amount} 
+                                  data-unit={qty.unit}>
+                              <span class="amount-value">{qty.amount}</span> {qty.unit}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  </li>
+                ) : null
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 </div> 

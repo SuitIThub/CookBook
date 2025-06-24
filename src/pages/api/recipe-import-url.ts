@@ -54,10 +54,11 @@ export const POST: APIRoute = async ({ request }) => {
       description: extractedData.description 
         ? `${extractedData.description}\n\nImportiert von: ${url}`
         : `Importiert von: ${url}`,
+      category: recipeData.category, // Add category from extractor
+      tags: recipeData.tags || [], // Add tags/keywords from extractor
       metadata: recipeData.metadata || {
         servings: extractedData.servings || 4,
-        preparationTime: extractedData.preparationTime || 30,
-        cookingTime: extractedData.cookingTime || 30,
+        timeEntries: [],
         difficulty: extractedData.difficulty || 'mittel'
       },
       ingredientGroups: recipeData.ingredientGroups || [],

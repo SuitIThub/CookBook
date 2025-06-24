@@ -7,7 +7,7 @@ export interface TimeEntry {
 export interface RecipeMetadata {
   servings: number;
   timeEntries: TimeEntry[]; // New: flexible time entries
-  difficulty: 'leicht' | 'mittel' | 'schwer';
+  difficulty?: 'leicht' | 'mittel' | 'schwer'; // Optional: may be undefined if not extractable
   nutrition?: NutritionData; // New: optional nutrition data
 }
 

@@ -66,32 +66,34 @@ try {
         const stepDescription = target.dataset.stepDescription || '';
         const stepId = target.dataset.stepId || '';
         
-        // Parse time string correctly to handle hours and minutes
+        // Parse time string correctly to handle hours and minutes with decimals
         function parseTimeToSeconds(timeStr) {
           const str = timeStr.toLowerCase();
           let totalMinutes = 0;
           
-          // Match hours (Stunden, Std.)
-          const hourMatch = str.match(/(\d+)\s*(?:stunden?|std\.?)/i);
+          // Match hours (Stunden, Std.) - support decimals like 1,5 or 1.5
+          const hourMatch = str.match(/(\d+(?:[,\.]\d+)?)\s*(?:stunden?|std\.?)/i);
           if (hourMatch) {
-            totalMinutes += parseInt(hourMatch[1]) * 60;
+            const hours = parseFloat(hourMatch[1].replace(',', '.'));
+            totalMinutes += hours * 60;
           }
           
-          // Match minutes (Minuten, Min.)
-          const minuteMatch = str.match(/(\d+)\s*(?:minuten?|min\.?)/i);
+          // Match minutes (Minuten, Min.) - support decimals like 2,5 or 2.5
+          const minuteMatch = str.match(/(\d+(?:[,\.]\d+)?)\s*(?:minuten?|min\.?)/i);
           if (minuteMatch) {
-            totalMinutes += parseInt(minuteMatch[1]);
+            const minutes = parseFloat(minuteMatch[1].replace(',', '.'));
+            totalMinutes += minutes;
           }
           
-          // If no specific unit found, assume minutes
+          // If no specific unit found, assume minutes and support decimals
           if (totalMinutes === 0) {
-            const numberMatch = str.match(/(\d+)/);
+            const numberMatch = str.match(/(\d+(?:[,\.]\d+)?)/);
             if (numberMatch) {
-              totalMinutes = parseInt(numberMatch[1]);
+              totalMinutes = parseFloat(numberMatch[1].replace(',', '.'));
             }
           }
           
-          return totalMinutes * 60; // Convert to seconds
+          return Math.round(totalMinutes * 60); // Convert to seconds and round
         }
         
         const seconds = parseTimeToSeconds(timeText);
@@ -281,42 +283,106 @@ try {
         }
         
         if (addedCount > 0) {
-          alert(`${addedCount} Zutat(en) zur Einkaufsliste hinzugefügt!`);
+          if (window.showSuccess) {
+            window.showSuccess(`${addedCount} Zutat(en) zur Einkaufsliste hinzugefügt!`);
+          } else {
+            alert(`${addedCount} Zutat(en) zur Einkaufsliste hinzugefügt!`);
+          }
         } else {
-          alert('Keine Zutaten zum Hinzufügen gefunden.');
+          if (window.showWarning) {
+            window.showWarning('Keine Zutaten zum Hinzufügen gefunden.');
+          } else {
+            alert('Keine Zutaten zum Hinzufügen gefunden.');
+          }
         }
         
       } catch (error) {
         console.error('Error adding to shopping list:', error);
-        alert('Fehler beim Hinzufügen zur Einkaufsliste. Bitte versuchen Sie es erneut.');
+        if (window.showError) {
+          window.showError('Fehler beim Hinzufügen zur Einkaufsliste. Bitte versuchen Sie es erneut.');
+        } else {
+          alert('Fehler beim Hinzufügen zur Einkaufsliste. Bitte versuchen Sie es erneut.');
+        }
       }
     }
 
     addToShoppingBtn?.addEventListener('click', addRecipeToShoppingList);
     addToShoppingBtnMobile?.addEventListener('click', addRecipeToShoppingList);
 
-    // Edit mode event handlers
-    document.getElementById('cancel-edit-btn')?.addEventListener('click', () => {
-      toggleEditMode(); // Switch back to view mode
+    // Edit mode event handlers - handle both mobile and desktop cancel buttons
+    const cancelButtons = [
+      document.getElementById('cancel-edit-btn'),
+      document.getElementById('cancel-edit-btn-desktop')
+    ].filter(Boolean);
+    
+    cancelButtons.forEach(cancelBtn => {
+      cancelBtn?.addEventListener('click', () => {
+        toggleEditMode(); // Switch back to view mode
+      });
     });
 
-    // Delete recipe functionality
-    document.getElementById('delete-recipe-btn')?.addEventListener('click', async () => {
+    // Delete recipe functionality - handle both mobile and desktop buttons
+    const deleteButtons = [
+      document.getElementById('delete-recipe-btn'),
+      document.getElementById('delete-recipe-btn-desktop')
+    ].filter(Boolean);
+    
+    deleteButtons.forEach(deleteBtn => {
+      deleteBtn?.addEventListener('click', async () => {
       const titleElement = document.getElementById('edit-title');
       const recipeTitle = titleElement?.value || 'Dieses Rezept';
       
-      const confirmed = confirm(`Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`);
+      let action = 'cancel';
       
-      if (!confirmed) {
-        return;
+      // Debug: Check what's available
+      console.log('Modal functions available:', {
+        showDeleteConfirm: !!window.showDeleteConfirm,
+        showModal: !!window.showModal,
+        'modal_notification-modal': !!window['modal_notification-modal'],
+        availableModals: Object.keys(window).filter(key => key.startsWith('modal_'))
+      });
+      
+      // Wait longer for modal functions to be available
+      let attempts = 0;
+      while (!window.showDeleteConfirm && attempts < 10) {
+        console.log('Waiting for modal functions, attempt:', attempts + 1);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        attempts++;
       }
       
+      if (window.showDeleteConfirm) {
+        console.log('Using modal for delete confirmation');
+        action = await window.showDeleteConfirm(
+          `Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`,
+          'Rezept löschen',
+          () => {
+            // Export function - export as RCB (with images)
+            const recipeId = window.location.pathname.split('/').pop();
+            window.location.href = `/api/recipe-export?id=${recipeId}&format=rcb`;
+          }
+        );
+      } else {
+        console.warn('Modal functions still not available after waiting, using fallback confirm');
+        const confirmed = confirm(`Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`);
+        action = confirmed ? 'delete' : 'cancel';
+      }
+      
+      if (action === 'cancel') {
+        return;
+      } else if (action === 'export') {
+        // User chose to export - don't delete, just return
+        return;
+      }
+      // If action === 'delete', continue with deletion
+      
       try {
-        const deleteBtn = document.getElementById('delete-recipe-btn');
-        if (deleteBtn) {
-          deleteBtn.textContent = 'Löschen...';
-          deleteBtn.setAttribute('disabled', 'true');
-        }
+        // Disable all delete buttons during processing
+        deleteButtons.forEach(btn => {
+          if (btn) {
+            btn.textContent = 'Löschen...';
+            btn.setAttribute('disabled', 'true');
+          }
+        });
         
         const recipeId = window.location.pathname.split('/').pop();
         
@@ -328,7 +394,9 @@ try {
         });
         
         if (response.ok) {
-          alert('Rezept wurde erfolgreich gelöscht.');
+          if (window.showSuccess) {
+            await window.showSuccess('Rezept wurde erfolgreich gelöscht.');
+          }
           window.location.href = '/';
         } else {
           const error = await response.text();
@@ -338,14 +406,21 @@ try {
         
       } catch (error) {
         console.error('Error deleting recipe:', error);
-        alert('Fehler beim Löschen des Rezepts. Bitte versuchen Sie es erneut.');
-        
-        const deleteBtn = document.getElementById('delete-recipe-btn');
-        if (deleteBtn) {
-          deleteBtn.textContent = 'Rezept löschen';
-          deleteBtn.removeAttribute('disabled');
+        if (window.showError) {
+          window.showError('Fehler beim Löschen des Rezepts. Bitte versuchen Sie es erneut.');
+        } else {
+          alert('Fehler beim Löschen des Rezepts. Bitte versuchen Sie es erneut.');
         }
+        
+        // Re-enable all delete buttons on error
+        deleteButtons.forEach(btn => {
+          if (btn) {
+            btn.textContent = 'Rezept löschen';
+            btn.removeAttribute('disabled');
+          }
+        });
       }
+      });
     });
 
     // Check if we should auto-enter edit mode (for new recipes)

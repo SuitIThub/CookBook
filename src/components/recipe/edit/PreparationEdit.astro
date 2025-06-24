@@ -75,23 +75,25 @@ const { recipe } = Astro.props;
                       </div>
                       <div class="intermediate-ingredients-list space-y-2">
                         {(step as PreparationStep).intermediateIngredients?.map((intermediate) => (
-                          <div class="intermediate-ingredient-item flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded border" data-intermediate-id={intermediate.id}>
+                          <div class="intermediate-ingredient-item flex flex-col space-y-3 p-3 bg-teal-50 dark:bg-teal-900/20 rounded border" data-intermediate-id={intermediate.id}>
+                            <!-- Name field - full width on mobile -->
                             <input 
                               type="text" 
                               value={intermediate.name}
                               placeholder="Name der Zwischenzutat"
-                              class="intermediate-name-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                              class="intermediate-name-input w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                             />
-                            <div class="flex space-x-2">
+                            <!-- Description field and delete button -->
+                            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                               <input 
                                 type="text" 
                                 value={intermediate.description || ''}
                                 placeholder="Beschreibung (optional)"
-                                class="intermediate-description-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                class="intermediate-description-input flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                               />
                               <button 
                                 type="button" 
-                                class="remove-intermediate-btn text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors px-1"
+                                class="remove-intermediate-btn text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors px-3 py-2 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 self-start sm:self-auto"
                               >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -249,23 +251,25 @@ const { recipe } = Astro.props;
                         </div>
                         <div class="intermediate-ingredients-list space-y-2">
                           {(step as PreparationStep).intermediateIngredients?.map((intermediate) => (
-                            <div class="intermediate-ingredient-item flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded border" data-intermediate-id={intermediate.id}>
+                            <div class="intermediate-ingredient-item flex flex-col space-y-3 p-3 bg-teal-50 dark:bg-teal-900/20 rounded border" data-intermediate-id={intermediate.id}>
+                              <!-- Name field - full width on mobile -->
                               <input 
                                 type="text" 
                                 value={intermediate.name}
                                 placeholder="Name der Zwischenzutat"
-                                class="intermediate-name-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                class="intermediate-name-input w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                               />
-                              <div class="flex space-x-2">
+                              <!-- Description field and delete button -->
+                              <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
                                 <input 
                                   type="text" 
                                   value={intermediate.description || ''}
                                   placeholder="Beschreibung (optional)"
-                                  class="intermediate-description-input flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                  class="intermediate-description-input flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                 />
                                 <button 
                                   type="button" 
-                                  class="remove-intermediate-btn text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors px-1"
+                                  class="remove-intermediate-btn text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors px-3 py-2 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 self-start sm:self-auto"
                                 >
                                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -368,5 +372,263 @@ const { recipe } = Astro.props;
     )}
   </div>
 </div>
+
+<script>
+// Drag and Drop functionality for preparation steps
+document.addEventListener('DOMContentLoaded', function() {
+  let draggedElement = null;
+  let draggedData = null;
+  let placeholder = null;
+
+  function initDragAndDrop() {
+    // Add event listeners to all preparation group containers AND their steps-list children
+    const preparationGroups = document.querySelectorAll('.preparation-group-edit');
+    const stepContainers = document.querySelectorAll('.steps-list');
+    
+    // Add listeners to step containers
+    stepContainers.forEach(container => {
+      container.addEventListener('dragover', handleDragOver);
+      container.addEventListener('drop', handleDrop);
+      container.addEventListener('dragenter', handleDragEnter);
+      container.addEventListener('dragleave', handleDragLeave);
+    });
+    
+    // Also add listeners to the preparation group containers for better cross-group support
+    preparationGroups.forEach(group => {
+      group.addEventListener('dragover', handleDragOverGroup);
+      group.addEventListener('drop', handleDropGroup);
+    });
+    
+    updateStepEventListeners();
+  }
+
+  function updateStepEventListeners() {
+    const stepItems = document.querySelectorAll('.step-edit-item');
+    stepItems.forEach(item => {
+      if (!item.hasAttribute('data-drag-initialized')) {
+        item.setAttribute('data-drag-initialized', 'true');
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragend', handleDragEnd);
+      }
+    });
+  }
+
+  function handleDragStart(e) {
+    draggedElement = e.currentTarget;
+    const parent = draggedElement.parentNode;
+    draggedData = {
+      stepId: draggedElement.dataset.stepId,
+      sourceGroup: draggedElement.closest('.preparation-group-edit'),
+      sourceIndex: parent ? Array.from(parent.children).indexOf(draggedElement) : -1
+    };
+
+    placeholder = document.createElement('div');
+    placeholder.className = 'step-placeholder border-2 border-dashed border-orange-400 dark:border-orange-500 rounded-md p-4 bg-orange-50 dark:bg-orange-900/20 transition-colors duration-200';
+    placeholder.innerHTML = '<div class="text-center text-orange-600 dark:text-orange-400 font-medium">Hier ablegen</div>';
+
+    draggedElement.style.opacity = '0.5';
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/html', draggedElement.outerHTML);
+    }
+  }
+
+  function handleDragEnd(e) {
+    if (draggedElement) {
+      draggedElement.style.opacity = '1';
+    }
+    document.querySelectorAll('.step-placeholder').forEach(p => p.remove());
+    draggedElement = null;
+    draggedData = null;
+    placeholder = null;
+    document.querySelectorAll('.steps-list').forEach(container => {
+      container.classList.remove('drag-over');
+    });
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    const container = e.currentTarget;
+    // Use setTimeout to ensure this runs after any potential dragenter events
+    setTimeout(() => {
+      if (!container.contains(e.relatedTarget)) {
+        container.classList.remove('drag-over');
+        // Only remove placeholders from this specific container
+        container.querySelectorAll('.step-placeholder').forEach(p => p.remove());
+      }
+    }, 10);
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (!draggedElement || !placeholder) return;
+
+    const container = e.currentTarget;
+    const afterElement = getDragAfterElement(container, e.clientY);
+    container.querySelectorAll('.step-placeholder').forEach(p => p.remove());
+    
+    if (afterElement == null) {
+      container.appendChild(placeholder);
+    } else {
+      container.insertBefore(placeholder, afterElement);
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    if (!draggedElement || !draggedData || !placeholder) return;
+
+    const targetContainer = e.currentTarget;
+    const targetGroup = targetContainer.closest('.preparation-group-edit');
+    const targetIndex = Array.from(targetContainer.children).indexOf(placeholder);
+    
+    draggedElement.remove();
+    
+    if (targetIndex >= targetContainer.children.length - 1) {
+      targetContainer.appendChild(draggedElement);
+    } else {
+      const nextElement = targetContainer.children[targetIndex + 1];
+      targetContainer.insertBefore(draggedElement, nextElement);
+    }
+    
+    placeholder.remove();
+    updateStepNumbers(draggedData.sourceGroup);
+    if (targetGroup !== draggedData.sourceGroup) {
+      updateStepNumbers(targetGroup);
+    }
+    targetContainer.classList.remove('drag-over');
+    draggedElement.style.opacity = '1';
+  }
+
+  function handleDragOverGroup(e) {
+    e.preventDefault();
+    if (!draggedElement || !placeholder) return;
+    
+    // Find the steps-list within this group
+    const stepsContainer = e.currentTarget.querySelector('.steps-list');
+    if (stepsContainer) {
+      // Forward the event to the steps container
+      const afterElement = getDragAfterElement(stepsContainer, e.clientY);
+      stepsContainer.querySelectorAll('.step-placeholder').forEach(p => p.remove());
+      
+      if (afterElement == null) {
+        stepsContainer.appendChild(placeholder);
+      } else {
+        stepsContainer.insertBefore(placeholder, afterElement);
+      }
+      
+      stepsContainer.classList.add('drag-over');
+    }
+  }
+
+  function handleDropGroup(e) {
+    e.preventDefault();
+    if (!draggedElement || !draggedData || !placeholder) return;
+    
+    // Find the steps-list within this group
+    const stepsContainer = e.currentTarget.querySelector('.steps-list');
+    if (stepsContainer && stepsContainer.contains(placeholder)) {
+      // Forward to the regular drop handler
+      const fakeEvent = { 
+        preventDefault: () => {}, 
+        currentTarget: stepsContainer 
+      };
+      handleDrop(fakeEvent);
+    }
+  }
+
+  function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.step-edit-item:not(.dragging)')];
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  function updateStepNumbers(groupElement) {
+    if (!groupElement) return;
+    const steps = groupElement.querySelectorAll('.step-edit-item');
+    steps.forEach((step, index) => {
+      const numberElement = step.querySelector('.bg-orange-500, .bg-green-500');
+      if (numberElement) {
+        numberElement.textContent = index + 1;
+      }
+    });
+  }
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .steps-list.drag-over {
+      background-color: rgba(251, 146, 60, 0.1);
+      border-color: rgba(251, 146, 60, 0.3);
+    }
+    .dark .steps-list.drag-over {
+      background-color: rgba(251, 146, 60, 0.05);
+      border-color: rgba(251, 146, 60, 0.2);
+    }
+    .step-edit-item[draggable="true"] {
+      cursor: grab;
+    }
+    .step-edit-item[draggable="true"]:active {
+      cursor: grabbing;
+    }
+    .preparation-group-edit {
+      min-height: 120px;
+    }
+    .steps-list {
+      min-height: 80px;
+      padding: 8px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+  `;
+  document.head.appendChild(style);
+
+  initDragAndDrop();
+
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      if (mutation.type === 'childList') {
+        mutation.addedNodes.forEach(function(node) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node;
+            if (element.classList && element.classList.contains('step-edit-item')) {
+              updateStepEventListeners();
+            } else if (element.classList && element.classList.contains('preparation-group-edit')) {
+              // New group added, reinitialize all drag and drop
+              initDragAndDrop();
+            } else if (element.querySelectorAll) {
+              const stepItems = element.querySelectorAll('.step-edit-item');
+              const groupItems = element.querySelectorAll('.preparation-group-edit');
+              if (stepItems.length > 0 || groupItems.length > 0) {
+                initDragAndDrop();
+              }
+            }
+          }
+        });
+      }
+    });
+  });
+
+  const preparationContainer = document.getElementById('preparation-edit-container');
+  if (preparationContainer) {
+    observer.observe(preparationContainer, { 
+      childList: true, 
+      subtree: true 
+    });
+  }
+});
+</script>
 
  

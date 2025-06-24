@@ -5,8 +5,9 @@ export interface ExtractedRecipeData {
   subtitle?: string;
   description?: string;
   servings?: number;
-  preparationTime?: number; // in minutes
-  cookingTime?: number; // in minutes
+  preparationTime?: number; // in minutes (legacy, use timeEntries instead)
+  cookingTime?: number; // in minutes (legacy, use timeEntries instead)
+  timeEntries?: Array<{label: string, minutes: number}>; // New: flexible time entries
   difficulty?: 'leicht' | 'mittel' | 'schwer';
   ingredients: string[];
   instructions: string[];
@@ -76,23 +77,35 @@ export abstract class BaseRecipeExtractor {
    * Convert extracted data to our Recipe format
    */
   convertToRecipeFormat(data: ExtractedRecipeData): Partial<Recipe> {
-    const timeEntries = [];
+    let timeEntries = [];
     
-    if (data.preparationTime && data.preparationTime > 0) {
-      timeEntries.push({
+    // Prefer new timeEntries format if available
+    if (data.timeEntries && data.timeEntries.length > 0) {
+      timeEntries = data.timeEntries.map(entry => ({
         id: this.generateId(),
-        label: 'Vorbereitung',
-        minutes: data.preparationTime
-      });
+        label: entry.label,
+        minutes: entry.minutes
+      }));
+    } else {
+      // Fallback to legacy preparationTime/cookingTime format
+      if (data.preparationTime && data.preparationTime > 0) {
+        timeEntries.push({
+          id: this.generateId(),
+          label: 'Vorbereitung',
+          minutes: data.preparationTime
+        });
+      }
+      
+      if (data.cookingTime && data.cookingTime > 0) {
+        timeEntries.push({
+          id: this.generateId(),
+          label: 'Kochzeit',
+          minutes: data.cookingTime
+        });
+      }
     }
     
-    if (data.cookingTime && data.cookingTime > 0) {
-      timeEntries.push({
-        id: this.generateId(),
-        label: 'Kochzeit',
-        minutes: data.cookingTime
-      });
-    }
+    // If no times were extracted, leave timeEntries empty - the frontend should handle this gracefully
     
     return {
       title: data.title,
@@ -103,17 +116,17 @@ export abstract class BaseRecipeExtractor {
       metadata: {
         servings: data.servings || 4,
         timeEntries: timeEntries,
-        difficulty: data.difficulty || 'mittel',
+        difficulty: data.difficulty,
         nutrition: data.nutrition
       },
       ingredientGroups: [{
         id: this.generateId(),
         title: undefined,
-        ingredients: data.ingredients.map(ingredient => this.parseIngredient(ingredient))
+        ingredients: data.ingredients.flatMap(ingredient => this.parseMultipleIngredients(ingredient))
       }],
       preparationGroups: [{
         id: this.generateId(),
-        title: 'Zubereitung',
+        title: undefined,
         steps: data.instructions.map((instruction, index) => ({
           id: this.generateId(),
           text: instruction,
@@ -187,6 +200,89 @@ export abstract class BaseRecipeExtractor {
     }
     
     return minutes || 30; // default to 30 minutes
+  }
+
+  /**
+   * Parse multiple ingredients from a string that may contain "und" connections
+   * Examples: "Salz und Pfeffer" -> [{ name: "Salz" }, { name: "Pfeffer" }]
+   */
+  protected parseMultipleIngredients(ingredientStr: string): any[] {
+    if (!ingredientStr) {
+      return [{
+        id: this.generateId(),
+        name: 'Unbekannte Zutat',
+        quantities: [{
+          amount: 1,
+          unit: 'Stück'
+        }]
+      }];
+    }
+
+    const cleaned = this.cleanText(ingredientStr);
+    console.log('Parsing multiple ingredients:', cleaned);
+    
+    // Check for "und" connections, but be careful about contexts where "und" is part of the ingredient name
+    const andPattern = /\s+und\s+/i;
+    
+    // Split by "und" but check if it's a valid split
+    if (andPattern.test(cleaned)) {
+      const parts = cleaned.split(andPattern);
+      
+      // Only split if we have exactly 2 parts
+      if (parts.length === 2) {
+        let part1 = parts[0].trim();
+        let part2 = parts[1].trim();
+        
+        // Check if there's a quantity at the beginning that applies to both ingredients
+        const quantityMatch = part1.match(/^(\d+(?:[,\.]\d+)?)\s+(.+)/);
+        let sharedQuantity = null;
+        
+        if (quantityMatch) {
+          const amount = parseFloat(quantityMatch[1].replace(',', '.'));
+          const remainder = quantityMatch[2].trim();
+          
+          // Check if the remainder contains "und" and looks like two simple ingredients
+          if (remainder.includes(' und ')) {
+            const [ing1, ing2] = remainder.split(' und ').map(s => s.trim());
+            if (ing1.length > 0 && ing2.length > 0 && 
+                !(/\d/.test(ing1)) && !(/\d/.test(ing2))) {
+              // Pattern like "2 Zwiebeln und Knoblauch" -> both get amount 2
+              console.log('Splitting ingredient with shared quantity:', amount, ing1, 'and', ing2);
+              
+              const ingredient1 = this.parseIngredient(`${amount} ${ing1}`);
+              const ingredient2 = this.parseIngredient(`${amount} ${ing2}`);
+              
+              return [ingredient1, ingredient2];
+            }
+          }
+          
+          // If no shared quantity pattern, continue with normal logic
+          part1 = remainder;
+        }
+        
+        // Check if both parts look like simple ingredient names (no complex patterns)
+        const isSimpleIngredient = (part: string) => {
+          // Simple ingredient should not start with numbers (unless we handled shared quantity above)
+          // and should be reasonable length
+          return !(/^\d+/.test(part)) && part.length > 0 && part.length < 50 &&
+                 // Avoid splitting things like "Fleisch- und Gemüsebrühe" which are compound ingredient names
+                 !part.includes('-') && !part.includes('brühe');
+        };
+        
+        if (isSimpleIngredient(part1) && isSimpleIngredient(part2)) {
+          console.log('Splitting ingredient into:', part1, 'and', part2);
+          
+          // Parse each part separately
+          const ingredient1 = this.parseIngredient(part1);
+          const ingredient2 = this.parseIngredient(part2);
+          
+          return [ingredient1, ingredient2];
+        }
+      }
+    }
+    
+    // If no valid "und" split, parse as single ingredient
+    return [this.parseIngredient(cleaned)];
   }
 
   /**
@@ -304,15 +400,26 @@ export abstract class BaseRecipeExtractor {
       // Fractional amounts
       { pattern: /^(\d+(?:[,\.]\d+)?)\s*\/\s*(\d+)\s*([A-Za-zäöüÄÖÜß]+)\s+(.+)/i, fraction: true },
       
-      // Text-based quantities (without numbers)
-      { pattern: /^(etwas)\s+(.+)/i, amount: 1, unit: 'etwas' },
-      { pattern: /^(wenig)\s+(.+)/i, amount: 1, unit: 'wenig' },
-      { pattern: /^(viel)\s+(.+)/i, amount: 1, unit: 'viel' },
-      { pattern: /^(ein wenig)\s+(.+)/i, amount: 1, unit: 'ein wenig' },
-      { pattern: /^(ein bisschen)\s+(.+)/i, amount: 1, unit: 'ein bisschen' },
-      { pattern: /^(nach Geschmack)\s+(.+)/i, amount: 1, unit: 'n. Geschmack' },
-      { pattern: /^(nach Belieben)\s+(.+)/i, amount: 1, unit: 'n. Belieben' },
-      { pattern: /^(n\.\s*B\.)\s+(.+)/i, amount: 1, unit: 'n. Belieben' },
+      // Text-based quantities (without numbers) - these should have no quantity
+      { pattern: /^(etwas)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(wenig)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(viel)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(ein wenig)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(ein bisschen)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(nach Geschmack)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(nach Belieben)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(n\.\s*B\.)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(einige)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(etwa)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(ca\.?)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(ungefähr)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(etwas mehr)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(etwas weniger)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(reichlich)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(knapp)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(großzügig)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(sparsam)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
+      { pattern: /^(ordentlich)\s+(.+)/i, amount: 0, unit: '', indefinite: true },
     ];
 
     // Add special patterns first, then regular unit patterns
@@ -348,6 +455,7 @@ export abstract class BaseRecipeExtractor {
       const description = 'description' in patternObj ? patternObj.description : false;
       const hasDescriptive = 'hasDescriptive' in patternObj ? patternObj.hasDescriptive : false;
       const compound = 'compound' in patternObj ? patternObj.compound : false;
+      const indefinite = 'indefinite' in patternObj ? patternObj.indefinite : false;
       
       const match = cleaned.match(pattern);
       if (match) {
@@ -470,6 +578,11 @@ export abstract class BaseRecipeExtractor {
             console.log('Parsed ingredient result with description:', result);
             return result;
           }
+        } else if (indefinite) {
+          // Indefinite amount (like "etwas", "ein bisschen") - no quantity
+          amount = 0;
+          extractedUnit = '';
+          name = match[2] || '';
         } else if (fixedAmount !== undefined) {
           // Fixed amount (like ½)
           amount = fixedAmount;
@@ -516,9 +629,20 @@ export abstract class BaseRecipeExtractor {
           name = 'Unbekannte Zutat';
         }
 
+        // Extract parentheses content for description
+        let finalName = name.trim();
+        let ingredientDescription = undefined;
+        
+        const parenthesesMatch = finalName.match(/^([^(]+)\s*\(([^)]+)\)(.*)$/);
+        if (parenthesesMatch) {
+          finalName = (parenthesesMatch[1] + (parenthesesMatch[3] || '')).trim();
+          ingredientDescription = parenthesesMatch[2].trim();
+        }
+
         const result = {
           id: this.generateId(),
-          name: name.trim(),
+          name: finalName,
+          description: ingredientDescription,
           quantities: [{
             amount: amount,
             unit: extractedUnit
@@ -530,14 +654,26 @@ export abstract class BaseRecipeExtractor {
       }
     }
 
-    // No amount/unit found, treat as plain ingredient
-    console.log('No pattern matched, using as plain ingredient');
+    // No amount/unit found, treat as plain ingredient without quantity
+    console.log('No pattern matched, using as plain ingredient without quantity');
+    
+    // Extract parentheses content for description
+    let name = cleaned;
+    let ingredientDescription = undefined;
+    
+    const parenthesesMatch = cleaned.match(/^([^(]+)\s*\(([^)]+)\)(.*)$/);
+    if (parenthesesMatch) {
+      name = (parenthesesMatch[1] + (parenthesesMatch[3] || '')).trim();
+      ingredientDescription = parenthesesMatch[2].trim();
+    }
+    
     return {
       id: this.generateId(),
-      name: cleaned,
+      name: name,
+      description: ingredientDescription,
       quantities: [{
-        amount: 1,
-        unit: 'Stück'
+        amount: 0,
+        unit: ''
       }]
     };
   }
@@ -680,6 +816,7 @@ export abstract class BaseRecipeExtractor {
     const normalized = category.toLowerCase().trim();
     
     const categoryMap: { [key: string]: string } = {
+      // English terms
       'appetizer': 'Vorspeise',
       'starter': 'Vorspeise',
       'main course': 'Hauptgericht',
@@ -695,9 +832,61 @@ export abstract class BaseRecipeExtractor {
       'breakfast': 'Frühstück',
       'snack': 'Snack',
       'bread': 'Brot & Gebäck',
-      'pastry': 'Brot & Gebäck'
+      'pastry': 'Brot & Gebäck',
+      
+      // German variations and common terms
+      'hauptspeise': 'Hauptgericht',
+      'hauptgang': 'Hauptgericht',
+      'main': 'Hauptgericht',
+      'nachspeise': 'Dessert',
+      'nachtisch': 'Dessert',
+      'süßspeise': 'Dessert',
+      'kuchen': 'Dessert',
+      'torte': 'Dessert',
+      'eintopf': 'Suppe',
+      'brühe': 'Suppe',
+      'rohkost': 'Salat',
+      'gemüse': 'Beilage',
+      'side': 'Beilage',
+      'saft': 'Getränk',
+      'cocktail': 'Getränk',
+      'smoothie': 'Getränk',
+      'häppchen': 'Snack',
+      'fingerfood': 'Snack',
+      'brot': 'Brot & Gebäck',
+      'brötchen': 'Brot & Gebäck',
+      'gebäck': 'Brot & Gebäck',
+      'backen': 'Brot & Gebäck',
+      'backwerk': 'Brot & Gebäck',
+      
+      // Direct German category names (in case they come in different casing)
+      'vorspeise': 'Vorspeise',
+      'hauptgericht': 'Hauptgericht',
+      'suppe': 'Suppe',
+      'salat': 'Salat',
+      'beilage': 'Beilage',
+      'getränk': 'Getränk',
+      'frühstück': 'Frühstück',
+      'brot & gebäck': 'Brot & Gebäck'
     };
     
-    return categoryMap[normalized] || category;
+    // First try exact mapping
+    if (categoryMap[normalized]) {
+      return categoryMap[normalized];
+    }
+    
+    // If no exact match, check if it's already a valid German category (with proper casing)
+    const validCategories = [
+      'Vorspeise', 'Hauptgericht', 'Dessert', 'Suppe', 'Salat', 
+      'Beilage', 'Getränk', 'Frühstück', 'Snack', 'Brot & Gebäck'
+    ];
+    
+    const exactMatch = validCategories.find(cat => cat.toLowerCase() === normalized);
+    if (exactMatch) {
+      return exactMatch;
+    }
+    
+    // Return original if no mapping found
+    return category;
   }
 } 

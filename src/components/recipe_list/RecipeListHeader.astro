@@ -129,7 +129,7 @@ const { recipeCount } = Astro.props;
             
             <div id="extractor-details" class="text-sm text-gray-600 dark:text-gray-300">
               <div class="font-medium mb-2">Extraktor-Funktionen:</div>
-              <div class="grid grid-cols-3 gap-2 text-xs">
+              <div class="grid grid-cols-2 gap-2 text-xs">
                 <div class="flex items-center space-x-2">
                   <span id="ingredient-groups-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
                   <span>Zutatengruppen</span>
@@ -161,6 +161,10 @@ const { recipeCount } = Astro.props;
                 <div class="flex items-center space-x-2">
                   <span id="difficulty-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
                   <span>Schwierigkeit</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span id="time-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                  <span>Zeit-Extraktion</span>
                 </div>
               </div>
               <div id="extractor-description" class="mt-2 text-xs text-gray-500 dark:text-gray-400 italic"></div>
@@ -350,6 +354,7 @@ const { recipeCount } = Astro.props;
         updateCapabilityIndicator('keywords-support', data.capabilities.supportsKeywordExtraction);
         updateCapabilityIndicator('category-support', data.capabilities.supportsCategoryExtraction);
         updateCapabilityIndicator('difficulty-support', data.capabilities.supportsDifficultyExtraction);
+        updateCapabilityIndicator('time-support', data.capabilities.supportsTimeExtraction);
         
         // Update description
         const descriptionElement = document.getElementById('extractor-description');
@@ -382,6 +387,7 @@ const { recipeCount } = Astro.props;
         updateCapabilityIndicator('keywords-support', true);
         updateCapabilityIndicator('category-support', true);
         updateCapabilityIndicator('difficulty-support', false);
+        updateCapabilityIndicator('time-support', false);
         
         const descriptionElement = document.getElementById('extractor-description');
         if (descriptionElement) {
@@ -395,14 +401,18 @@ const { recipeCount } = Astro.props;
     }
   }
   
-  function updateCapabilityIndicator(elementId: string, isSupported: boolean) {
+  function updateCapabilityIndicator(elementId: string, isSupported: boolean | 'experimental') {
     const element = document.getElementById(elementId);
     if (element) {
-      element.className = `w-3 h-3 rounded-full ${
-        isSupported 
-          ? 'bg-green-500' 
-          : 'bg-gray-400'
-      }`;
+      if (isSupported === 'experimental') {
+        element.className = 'w-3 h-3 rounded-full bg-yellow-500';
+      } else {
+        element.className = `w-3 h-3 rounded-full ${
+          isSupported 
+            ? 'bg-green-500' 
+            : 'bg-gray-400'
+        }`;
+      }
     }
   }
 
@@ -429,18 +439,30 @@ const { recipeCount } = Astro.props;
         
         if (result.imported === 1 && result.recipeId) {
           // Single recipe imported - redirect to recipe page
-          alert(`Erfolgreich Rezept importiert${imageInfo}!`);
+          if (window.showSuccess) {
+            await window.showSuccess(`Erfolgreich Rezept importiert${imageInfo}!`);
+          }
           window.location.href = `/rezept/${result.recipeId}`;
         } else {
           // Multiple recipes imported - stay on recipe list
-          alert(`Erfolgreich ${result.imported} Rezept(e) importiert${imageInfo}!`);
+          if (window.showSuccess) {
+            await window.showSuccess(`Erfolgreich ${result.imported} Rezept(e) importiert${imageInfo}!`);
+          }
           window.location.reload();
         }
       } else {
-        alert(`Import fehlgeschlagen: ${result.error}`);
+        if (window.showError) {
+          window.showError(`Import fehlgeschlagen: ${result.error}`);
+        } else {
+          alert(`Import fehlgeschlagen: ${result.error}`);
+        }
       }
     } catch (error) {
-      alert(`Import fehlgeschlagen: ${error}`);
+      if (window.showError) {
+        window.showError(`Import fehlgeschlagen: ${error}`);
+      } else {
+        alert(`Import fehlgeschlagen: ${error}`);
+      }
     }
 
     importModal?.classList.add('hidden');
@@ -470,13 +492,23 @@ const { recipeCount } = Astro.props;
 
       if (response.ok) {
         // URL import always imports a single recipe - redirect to recipe page
-        alert(`Erfolgreich Rezept "${result.recipe.title}" importiert mit ${result.extractorUsed}!`);
+        if (window.showSuccess) {
+          await window.showSuccess(`Erfolgreich Rezept "${result.recipe.title}" importiert mit ${result.extractorUsed}!`);
+        }
         window.location.href = `/rezept/${result.recipeId}`;
       } else {
-        alert(`Import fehlgeschlagen: ${result.error}`);
+        if (window.showError) {
+          window.showError(`Import fehlgeschlagen: ${result.error}`);
+        } else {
+          alert(`Import fehlgeschlagen: ${result.error}`);
+        }
       }
     } catch (error) {
-      alert(`Import fehlgeschlagen: ${error}`);
+      if (window.showError) {
+        window.showError(`Import fehlgeschlagen: ${error}`);
+      } else {
+        alert(`Import fehlgeschlagen: ${error}`);
+      }
     }
 
     // Reset loading state
