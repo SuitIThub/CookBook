@@ -34,7 +34,9 @@ try {
     <!-- Header Section -->
     <div class="flex items-center justify-between mb-8">
       <RecipeHeader recipe={recipe} />
-      <CastManager />
+      <div id="cast-container">
+        <CastManager />
+      </div>
     </div>
 
     <!-- View Mode Content -->
@@ -122,6 +124,34 @@ try {
   </div>
 
   <script define:vars={{ recipe }}>
+    // Add Cast initialization at the top
+    console.log('Recipe page script starting...');
+
+    // Wait for CastManager to be initialized
+    const waitForCastManager = setInterval(() => {
+      if (window.castManager) {
+        console.log('CastManager found, clearing interval');
+        clearInterval(waitForCastManager);
+        
+        // Add recipe casting functionality
+        const castContainer = document.getElementById('cast-container');
+        if (castContainer) {
+          castContainer.addEventListener('click', async () => {
+            if (window.castManager && window.castManager.castRecipe) {
+              console.log('Attempting to cast recipe:', recipe.title);
+              try {
+                await window.castManager.castRecipe(recipe);
+              } catch (error) {
+                console.error('Error casting recipe:', error);
+              }
+            } else {
+              console.log('CastManager or castRecipe not available');
+            }
+          });
+        }
+      }
+    }, 1000);
+
     // Timer functionality
     document.querySelectorAll('.timer-trigger').forEach(button => {
       button.addEventListener('click', (e) => {
