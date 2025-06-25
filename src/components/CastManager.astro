@@ -22,6 +22,9 @@
 </div>
 
 <script>
+console.log('CastManager Script Starting...');
+
+// Interfaces
 interface Recipe {
     title: string;
     subtitle?: string;
@@ -72,6 +75,7 @@ interface IntermediateIngredient {
     description?: string;
 }
 
+// Global type declarations
 declare global {
     interface Window {
         castManager: CastManager;
@@ -100,112 +104,47 @@ declare global {
     }
 }
 
+// Immediately load Cast SDK
+console.log('Loading Cast SDK script...');
+const script = document.createElement('script');
+script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+script.async = true;
+document.head.appendChild(script);
+console.log('Cast SDK script added to document head');
+
 class CastManager {
     private remotePlayer: cast.framework.RemotePlayer | null;
     private remotePlayerController: cast.framework.RemotePlayerController | null;
     private currentSession: any | null;
     private static readonly RECEIVER_APP_ID = '3D0A6542';
     private initialized: boolean = false;
-    private retryCount: number = 0;
-    private maxRetries: number = 3;
 
     constructor() {
         console.log('CastManager: Constructor called');
         this.remotePlayer = null;
         this.remotePlayerController = null;
         this.currentSession = null;
-        this.initializeCastApi();
-    }
-
-    private isChromiumBased(): boolean {
-        // Check for Chromium-based browsers
-        return !!(window.chrome || navigator.userAgent.includes('Chrome') || 
-                 navigator.userAgent.includes('Chromium') || 
-                 navigator.userAgent.includes('Vivaldi'));
-    }
-
-    private async waitForCastApi(timeout: number = 1000): Promise<boolean> {
-        return new Promise((resolve) => {
-            const checkCastApi = () => {
-                if (window.chrome && window.chrome.cast) {
-                    resolve(true);
-                } else if (this.retryCount < this.maxRetries) {
-                    this.retryCount++;
-                    setTimeout(checkCastApi, timeout);
-                } else {
-                    resolve(false);
-                }
-            };
-            checkCastApi();
-        });
-    }
-
-    initializeCastApi() {
-        console.log('CastManager: Starting initialization');
-        const castButton = document.getElementById('castbutton');
         
-        if (!this.isChromiumBased()) {
-            console.log('CastManager: Not a Chromium-based browser, hiding cast button');
-            if (castButton) castButton.style.display = 'none';
-            return;
-        }
-
-        // Keep original button visible until we confirm Cast is available
-        if (castButton) {
-            castButton.style.display = 'block';
-            console.log('CastManager: Original button made visible');
-        }
-
-        // Add script error handler before initializing
-        const loadCastSdk = async () => {
-            console.log('CastManager: Loading Cast SDK');
-            
-            const script = document.createElement('script');
-            script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
-            script.async = true;
-            
-            const scriptPromise = new Promise((resolve, reject) => {
-                script.onload = resolve;
-                script.onerror = reject;
-            });
-
-            document.head.appendChild(script);
-            console.log('CastManager: Cast SDK script added to head');
-
-            try {
-                await scriptPromise;
-                console.log('CastManager: Cast SDK script loaded');
-                const apiAvailable = await this.waitForCastApi();
-                if (apiAvailable) {
-                    this.initializeCastContext();
-                } else {
-                    console.error('CastManager: Cast API not available after retries');
-                }
-            } catch (error) {
-                console.error('CastManager: Error loading Cast SDK:', error);
-            }
-        };
-
-        // Initialize Cast API once the DOM is ready
-        if (document.readyState === 'loading') {
-            console.log('CastManager: Document still loading, waiting for DOMContentLoaded');
-            document.addEventListener('DOMContentLoaded', () => loadCastSdk());
-        } else {
-            console.log('CastManager: Document already loaded, initializing immediately');
-            loadCastSdk();
-        }
-        
+        // Set up the callback before anything else
         window['__onGCastApiAvailable'] = (isAvailable: boolean) => {
             console.log('CastManager: Cast API availability callback, isAvailable:', isAvailable);
             if (isAvailable && !this.initialized) {
                 this.initializeCastContext();
             }
         };
+
+        // Check if API is already available
+        if (window.chrome && window.chrome.cast) {
+            console.log('CastManager: Cast API already available, initializing...');
+            this.initializeCastContext();
+        } else {
+            console.log('CastManager: Waiting for Cast API to become available...');
+        }
     }
 
     private initializeCastContext() {
         try {
-            console.log('CastManager: Initializing Cast SDK');
+            console.log('CastManager: Initializing Cast context');
             const context = cast.framework.CastContext.getInstance();
             context.setOptions({
                 receiverApplicationId: CastManager.RECEIVER_APP_ID,
@@ -216,7 +155,6 @@ class CastManager {
             const castButton = document.getElementById('castbutton');
             const castButtonElement = document.createElement('google-cast-launcher');
             castButtonElement.id = 'castbutton';
-            castButtonElement.style.display = 'block';
             
             if (castButton && castButton.parentNode) {
                 console.log('CastManager: Replacing original button with Cast button');
@@ -227,7 +165,6 @@ class CastManager {
 
             this.remotePlayer = new cast.framework.RemotePlayer();
             this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
-            console.log('CastManager: Remote player initialized');
             
             this.remotePlayerController.addEventListener(
                 cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
@@ -252,15 +189,9 @@ class CastManager {
             console.log('CastManager: Cast SDK initialized successfully');
         } catch (error) {
             console.error('CastManager: Error initializing Cast SDK:', error);
-            const castButton = document.getElementById('castbutton');
-            if (castButton) {
-                castButton.style.display = 'block';
-                console.log('CastManager: Keeping original button visible due to error');
-            }
         }
     }
 
-    // Send control command to receiver
     async sendControl(action: 'previous' | 'next') {
         if (this.currentSession) {
             try {
@@ -274,7 +205,6 @@ class CastManager {
         }
     }
 
-    // Cast a recipe to the Cast device
     async castRecipe(recipe: Recipe) {
         const castSession = cast.framework.CastContext.getInstance().getCurrentSession();
         if (!castSession) {
@@ -295,7 +225,9 @@ class CastManager {
 }
 
 // Initialize the Cast Manager
+console.log('Creating CastManager instance...');
 window.castManager = new CastManager();
+console.log('CastManager instance created');
 </script>
 
 <style>
