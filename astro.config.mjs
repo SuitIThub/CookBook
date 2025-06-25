@@ -12,6 +12,20 @@ export default defineConfig({
     mode: 'standalone'
   }),
   vite: {
-    plugins: [ basicSsl() ]
+    plugins: [ basicSsl() ],
+    build: {
+      assetsInlineLimit: 0, // Ensure assets are properly cached
+    },
+    server: {
+      headers: {
+        // Enable service worker for development
+        'Service-Worker-Allowed': '/'
+      }
+    }
+  },
+  // Ensure proper caching of assets
+  build: {
+    inlineStylesheets: 'never',
+    assets: 'assets'
   }
 });

@@ -14,6 +14,7 @@ const staticAssets = [
   '/manifest.json',
   '/einkaufslisten',
   '/einkaufsliste',
+  '/offline',
   '/sw.js',
   // Add CSS files
   '/_astro/components.*.css',
@@ -165,13 +166,13 @@ async function handleNavigationRequest(request) {
     return cachedResponse;
   }
 
-  // If cache fails, try to return cached home page as fallback
-  const homePage = await caches.match('/');
-  if (homePage) {
-    return homePage;
+  // If cache fails, try to return offline page
+  const offlinePage = await caches.match('/offline');
+  if (offlinePage) {
+    return offlinePage;
   }
 
-  // If all fails, return simple offline page
+  // If offline page is not available, return simple offline response
   return new Response(
     `<!DOCTYPE html>
     <html lang="de">
