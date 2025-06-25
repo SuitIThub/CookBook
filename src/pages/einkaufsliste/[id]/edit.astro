@@ -408,11 +408,27 @@ if (!shoppingList) {
         
         // Attach remove handlers
         recipesContainer.querySelectorAll('.remove-recipe-edit-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => {
+          btn.addEventListener('click', async (e) => {
             const recipeId = btn.getAttribute('data-recipe-id');
             const recipe = recipes.find(r => r.id === recipeId);
             
-            if (confirm(`Möchten Sie das Rezept "${recipe?.title}" und alle zugehörigen Zutaten aus der Einkaufsliste entfernen?`)) {
+            let confirmed = false;
+            // Wait for modal functions to be available
+            let attempts = 0;
+            while (!window.showDeleteConfirm && attempts < 10) {
+              await new Promise(resolve => setTimeout(resolve, 200));
+              attempts++;
+            }
+
+            if (window.showDeleteConfirm) {
+              confirmed = await window.showDeleteConfirm(
+                `Möchten Sie das Rezept "${recipe?.title}" und alle zugehörigen Zutaten aus der Einkaufsliste entfernen?`
+              );
+            } else {
+              confirmed = confirm(`Möchten Sie das Rezept "${recipe?.title}" und alle zugehörigen Zutaten aus der Einkaufsliste entfernen?`);
+            }
+            
+            if (confirmed) {
               removeRecipeFromList(recipeId);
             }
           });
@@ -549,7 +565,7 @@ if (!shoppingList) {
       });
 
       // Delete item buttons
-      document.addEventListener('click', (e) => {
+      document.addEventListener('click', async (e) => {
         const target = e.target;
         const deleteBtn = target.closest('.delete-item-btn');
         
@@ -557,7 +573,21 @@ if (!shoppingList) {
           const itemRow = deleteBtn.closest('.item-edit-row');
           const itemName = itemRow?.querySelector('.item-name')?.value || 'diesem Artikel';
           
-          if (confirm(`Möchten Sie "${itemName}" wirklich löschen?`)) {
+          // Wait for modal functions to be available
+        let attempts = 0;
+        while (!window.showDeleteConfirm && attempts < 10) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          attempts++;
+        }
+
+        let confirmed = false;
+        if (window.showDeleteConfirm) {
+          confirmed = await window.showDeleteConfirm(`Möchten Sie "${itemName}" wirklich löschen?`);
+        } else {
+          confirmed = confirm(`Möchten Sie "${itemName}" wirklich löschen?`);
+        }
+        
+        if (confirmed) {
             itemRow?.remove();
             updateEmptyMessage();
             updateGroupingIndicators();
@@ -652,7 +682,25 @@ if (!shoppingList) {
 
       // Delete list
       deleteListBtn?.addEventListener('click', async () => {
-        if (confirm(`Möchten Sie die Einkaufsliste "${shoppingListData.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+        // Wait for modal functions to be available
+        let attempts = 0;
+        while (!window.showDeleteConfirm && attempts < 10) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          attempts++;
+        }
+
+        let confirmed = false;
+        if (window.showDeleteConfirm) {
+          confirmed = await window.showDeleteConfirm(
+            `Möchten Sie die Einkaufsliste "${shoppingListData.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+          );
+        } else {
+          confirmed = confirm(
+            `Möchten Sie die Einkaufsliste "${shoppingListData.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+          );
+        }
+        
+        if (confirmed) {
           try {
             deleteListBtn.disabled = true;
             deleteListBtn.textContent = 'Löscht...';
@@ -901,7 +949,7 @@ if (!shoppingList) {
       });
 
       addRecipeEditCloseButtons?.forEach(btn => {
-        btn.addEventListener('click', () => {
+                  btn.addEventListener('click', async () => {
           addRecipeEditModal?.classList.add('hidden');
           document.getElementById('recipe-search-edit').value = '';
           renderAvailableRecipesEdit(availableRecipes);

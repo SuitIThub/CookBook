@@ -330,15 +330,28 @@ const images = recipe.images || [];
       }
     });
 
-
-
     async function handleImageDelete(event: Event) {
       const target = event.target as HTMLButtonElement;
       const targetRecipeId = target.dataset.recipeId || recipeId;
       const imageId = target.dataset.imageId;
 
       if (!targetRecipeId || !imageId) return;
-      if (!confirm('Möchten Sie dieses Bild wirklich löschen?')) return;
+      
+      // Wait for modal functions to be available
+      let attempts = 0;
+      while (!window.showDeleteConfirm && attempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        attempts++;
+      }
+
+      let confirmed = false;
+      if (window.showDeleteConfirm) {
+        confirmed = await window.showDeleteConfirm('Möchten Sie dieses Bild wirklich löschen?');
+      } else {
+        confirmed = confirm('Möchten Sie dieses Bild wirklich löschen?');
+      }
+
+      if (!confirmed) return;
 
       try {
         const response = await fetch(`/api/recipe-images?recipeId=${targetRecipeId}&imageId=${imageId}`, {
@@ -346,7 +359,11 @@ const images = recipe.images || [];
         });
 
         if (response.ok) {
-          showNotification('Bild erfolgreich gelöscht!', 'success');
+          if (window.showSuccess) {
+            await window.showSuccess('Bild erfolgreich gelöscht!');
+          } else {
+            showNotification('Bild erfolgreich gelöscht!', 'success');
+          }
           
           // Remove image from DOM immediately for better UX
           target.closest('.relative')?.remove();
@@ -356,11 +373,19 @@ const images = recipe.images || [];
         } else {
           const error = await response.json();
           console.error('Delete error response:', error);
-          showNotification(error.error || 'Fehler beim Löschen des Bildes', 'error');
+          if (window.showError) {
+            await window.showError(error.error || 'Fehler beim Löschen des Bildes');
+          } else {
+            showNotification(error.error || 'Fehler beim Löschen des Bildes', 'error');
+          }
         }
       } catch (error) {
         console.error('Delete error:', error);
-        showNotification('Fehler beim Löschen des Bildes', 'error');
+        if (window.showError) {
+          await window.showError('Fehler beim Löschen des Bildes');
+        } else {
+          showNotification('Fehler beim Löschen des Bildes', 'error');
+        }
       }
     }
 

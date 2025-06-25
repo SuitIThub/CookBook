@@ -1023,7 +1023,21 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 
       // Remove recipe from shopping list
       async function removeRecipeFromShoppingList(recipeId) {
-        if (!confirm('Sollen die Zutaten dieses Rezepts aus der Einkaufsliste entfernt werden?')) {
+        // Wait for modal functions to be available
+        let attempts = 0;
+        while (!window.showDeleteConfirm && attempts < 10) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          attempts++;
+        }
+
+        let confirmed = false;
+        if (window.showDeleteConfirm) {
+          confirmed = await window.showDeleteConfirm('Sollen die Zutaten dieses Rezepts aus der Einkaufsliste entfernt werden?');
+        } else {
+          confirmed = confirm('Sollen die Zutaten dieses Rezepts aus der Einkaufsliste entfernt werden?');
+        }
+        
+        if (!confirmed) {
           return;
         }
         

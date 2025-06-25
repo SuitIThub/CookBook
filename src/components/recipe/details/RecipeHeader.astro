@@ -51,7 +51,7 @@ function getTotalTime(timeEntries: any[]): number {
           <span>Bearbeiten</span>
         </button>
         <!-- Export dropdown -->
-        <div class="relative flex-shrink-0">
+        <div id="export-container" class="relative flex-shrink-0">
           <button id="export-recipe-btn" class="flex items-center space-x-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap w-full">
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
@@ -84,6 +84,13 @@ function getTotalTime(timeEntries: any[]): number {
           </svg>
           <span>Zur Einkaufsliste</span>
         </button>
+        <!-- Save button (initially hidden) -->
+        <button id="save-btn" class="hidden items-center space-x-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Speichern</span>
+        </button>
       </div>
     </div>
 
@@ -109,7 +116,7 @@ function getTotalTime(timeEntries: any[]): number {
           <span>Bearbeiten</span>
         </button>
         <!-- Export dropdown mobile -->
-        <div class="relative flex-1">
+        <div id="export-container-mobile" class="relative flex-1">
           <button id="export-recipe-btn-mobile" class="flex items-center justify-center space-x-2 px-4 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-md text-sm font-medium transition-colors w-full">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
@@ -141,6 +148,13 @@ function getTotalTime(timeEntries: any[]): number {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
           </svg>
           <span>Zur Einkaufsliste</span>
+        </button>
+        <!-- Save button mobile (initially hidden) -->
+        <button id="save-btn-mobile" class="hidden items-center justify-center space-x-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Speichern</span>
         </button>
       </div>
     </div>
@@ -208,4 +222,63 @@ function getTotalTime(timeEntries: any[]): number {
       )}
     </div>
   </div>
-</div> 
+</div>
+
+<script>
+  // Define the event type
+  interface EditModeEvent extends Event {
+    detail: {
+      isEditMode: boolean;
+    };
+  }
+
+  // Function to update button visibility based on edit mode
+  function updateButtonVisibility(isEditMode: boolean) {
+    // Desktop buttons
+    const exportContainer = document.getElementById('export-container');
+    const addToShoppingBtn = document.getElementById('add-to-shopping');
+    const saveBtn = document.getElementById('save-btn');
+    
+    // Mobile buttons
+    const exportContainerMobile = document.getElementById('export-container-mobile');
+    const addToShoppingBtnMobile = document.getElementById('add-to-shopping-mobile');
+    const saveBtnMobile = document.getElementById('save-btn-mobile');
+    
+    if (isEditMode) {
+      // Hide export and shopping list buttons
+      exportContainer?.classList.add('hidden');
+      addToShoppingBtn?.classList.add('hidden');
+      exportContainerMobile?.classList.add('hidden');
+      addToShoppingBtnMobile?.classList.add('hidden');
+      
+      // Show save buttons
+      saveBtn?.classList.remove('hidden');
+      saveBtn?.classList.add('flex');
+      saveBtnMobile?.classList.remove('hidden');
+      saveBtnMobile?.classList.add('flex');
+    } else {
+      // Show export and shopping list buttons
+      exportContainer?.classList.remove('hidden');
+      addToShoppingBtn?.classList.remove('hidden');
+      exportContainerMobile?.classList.remove('hidden');
+      addToShoppingBtnMobile?.classList.remove('hidden');
+      
+      // Hide save buttons
+      saveBtn?.classList.add('hidden');
+      saveBtn?.classList.remove('flex');
+      saveBtnMobile?.classList.add('hidden');
+      saveBtnMobile?.classList.remove('flex');
+    }
+  }
+
+  // Listen for edit mode changes
+  document.addEventListener('editModeChanged', ((event: EditModeEvent) => {
+    const isEditMode = event.detail.isEditMode;
+    updateButtonVisibility(isEditMode);
+  }) as EventListener);
+
+  // Initial state check
+  const viewContent = document.getElementById('view-content');
+  const isInitiallyHidden = viewContent?.classList.contains('hidden') ?? false;
+  updateButtonVisibility(isInitiallyHidden);
+</script> 

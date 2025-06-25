@@ -1,21 +1,25 @@
-<!-- Save/Cancel/Delete Buttons -->
-<div class="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
-  <!-- Mobile layout: Delete button at top with large gap -->
-  <div class="flex flex-col sm:hidden space-y-6 -mx-6 px-6">
-    <!-- Delete button at top - full width with larger touch target -->
-    <button 
-      type="button" 
-      id="delete-recipe-btn"
-      class="px-6 py-4 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center space-x-2 w-full text-base font-medium shadow-sm touch-manipulation"
-    >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-      </svg>
-      <span>Rezept löschen</span>
-    </button>
-    
-    <!-- Large gap, then Cancel and Save buttons -->
+---
+interface Props {
+  recipeId: string;
+}
+
+const { recipeId } = Astro.props;
+---
+
+<div class="mt-8 mb-4">
+  <!-- Mobile layout -->
+  <div class="sm:hidden">
     <div class="flex flex-col space-y-3">
+      <button 
+        type="button" 
+        id="delete-recipe-btn"
+        class="px-6 py-4 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center space-x-2 w-full text-base font-medium shadow-sm touch-manipulation"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+        <span>Rezept löschen</span>
+      </button>
       <button 
         type="button" 
         id="cancel-edit-btn"
@@ -23,59 +27,44 @@
       >
         Abbrechen
       </button>
-      <button 
-        type="submit"
-        class="px-6 py-4 bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white rounded-lg transition-colors w-full text-base font-medium shadow-sm touch-manipulation"
-      >
-        Änderungen speichern
-      </button>
-      <!-- Additional save button in green style (like shopping list button) -->
-      <button 
-        type="submit"
-        class="px-6 py-4 bg-green-500 hover:bg-green-600 active:bg-green-700 text-white rounded-lg transition-colors flex items-center justify-center space-x-2 w-full text-base font-medium shadow-sm touch-manipulation"
-      >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-        </svg>
-        <span>Speichern</span>
-      </button>
     </div>
   </div>
 
-  <!-- Desktop layout: Keep original layout -->
-  <button 
-    type="button" 
-    id="delete-recipe-btn-desktop"
-    class="hidden sm:flex px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors items-center justify-center space-x-2 w-auto"
-  >
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-    </svg>
-    <span>Rezept löschen</span>
-  </button>
-  <div class="hidden sm:flex flex-row space-x-3">
+  <!-- Desktop layout -->
+  <div class="hidden sm:flex justify-between items-center max-w-4xl mx-auto">
+    <button 
+      type="button" 
+      id="delete-recipe-btn-desktop"
+      class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors flex items-center space-x-2"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+      </svg>
+      <span>Rezept löschen</span>
+    </button>
     <button 
       type="button" 
       id="cancel-edit-btn-desktop"
-      class="px-6 py-3 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors w-auto"
+      class="px-6 py-3 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
     >
       Abbrechen
     </button>
-    <button 
-      type="submit"
-      class="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors w-auto"
-    >
-      Änderungen speichern
-    </button>
-    <!-- Additional save button in green style (like shopping list button) for desktop -->
-    <button 
-      type="submit"
-      class="px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors flex items-center space-x-2 w-auto"
-    >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-      </svg>
-      <span>Speichern</span>
-    </button>
   </div>
-</div> 
+</div>
+
+<script>
+  // Get the form element
+  const form = document.querySelector('form');
+  
+  // Get the save buttons from the header
+  const saveBtn = document.getElementById('save-btn');
+  const saveBtnMobile = document.getElementById('save-btn-mobile');
+  
+  // Add click handlers to save buttons
+  [saveBtn, saveBtnMobile].forEach(btn => {
+    btn?.addEventListener('click', () => {
+      // Submit the form
+      form?.dispatchEvent(new Event('submit'));
+    });
+  });
+</script> 

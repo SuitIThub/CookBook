@@ -4,7 +4,6 @@ import HeaderEdit from './HeaderEdit.astro';
 import RecipeTagsEdit from './RecipeTagsEdit.astro';
 import IngredientsEdit from './IngredientsEdit.astro'; 
 import PreparationEdit from './PreparationEdit.astro';
-import EditFormActions from './EditFormActions.astro';
 import IngredientLinkingScript from './IngredientLinkingScript.astro';
 import IngredientSuggestionScript from './IngredientSuggestionScript.astro';
 import RecipeImageGallery from '../RecipeImageGallery.astro';
@@ -22,7 +21,6 @@ const { recipe } = Astro.props;
   <RecipeImageGallery recipe={recipe} mode="edit" />
   <IngredientsEdit recipe={recipe} />
   <PreparationEdit recipe={recipe} />
-  <EditFormActions />
 </form>
 
 <div>

@@ -222,6 +222,19 @@ const { title } = Astro.props;
           showConfirm: (message: string) => Promise<boolean>;
           showDeleteConfirm: (message: string) => Promise<boolean>;
           showWarnings: (warnings: string[], onContinue: () => void) => void;
+          [key: `modal_${string}`]: {
+            show: (options: {
+              title: string;
+              content: string;
+              buttons?: Array<{
+                text: string;
+                type?: 'primary' | 'secondary' | 'danger' | 'success';
+                action?: () => void;
+              }>;
+              icon?: string;
+            }) => void;
+            hide: () => void;
+          };
         }
       }
 
@@ -356,20 +369,26 @@ const { title } = Astro.props;
         function showModal(message: string, autoHide = 0): Promise<void> {
           console.log('Showing modal with message:', message); // Debug log
           return new Promise((resolve) => {
-            modal.innerHTML = `
-              <div class="p-4">
-                <p class="text-gray-800 dark:text-gray-200">${message}</p>
-              </div>
-            `;
-            modal.classList.remove('hidden');
+            const modalInstance = window[`modal_notification-modal`];
+            if (!modalInstance) {
+              console.error('Modal instance not found');
+              return;
+            }
+
+            modalInstance.show({
+              title: 'Hinweis',
+              content: message,
+              buttons: [{ text: 'OK', type: 'primary', action: () => {
+                modalInstance.hide();
+                resolve();
+              }}]
+            });
 
             if (autoHide > 0) {
               setTimeout(() => {
-                modal.classList.add('hidden');
+                modalInstance.hide();
                 resolve();
               }, autoHide);
-            } else {
-              resolve();
             }
           });
         }
@@ -491,76 +510,71 @@ const { title } = Astro.props;
 
         function showConfirm(message: string, onExport?: () => void): Promise<boolean> {
           return new Promise((resolve) => {
-            modal.innerHTML = `
-              <div class="p-4">
-                <p class="text-gray-800 dark:text-gray-200 mb-4">${message}</p>
-                <div class="flex justify-end space-x-2">
-                  <button class="btn btn-secondary" id="cancel-btn">Abbrechen</button>
-                  <button class="btn btn-primary" id="confirm-btn">Bestätigen</button>
-                </div>
-              </div>
-            `;
-            modal.classList.remove('hidden');
-
-            const cancelBtn = modal.querySelector('#cancel-btn');
-            const confirmBtn = modal.querySelector('#confirm-btn');
-
-            function cleanup() {
-              modal.classList.add('hidden');
-              cancelBtn?.removeEventListener('click', handleCancel);
-              confirmBtn?.removeEventListener('click', handleConfirm);
+            const modalInstance = window[`modal_notification-modal`];
+            if (!modalInstance) {
+              console.error('Modal instance not found');
+              return resolve(false);
             }
 
-            function handleCancel() {
-              cleanup();
-              resolve(false);
-            }
-
-            function handleConfirm() {
-              cleanup();
-              if (onExport) onExport();
-              resolve(true);
-            }
-
-            cancelBtn?.addEventListener('click', handleCancel);
-            confirmBtn?.addEventListener('click', handleConfirm);
+            modalInstance.show({
+              title: 'Bestätigung',
+              content: message,
+              buttons: [
+                { 
+                  text: 'Abbrechen', 
+                  type: 'secondary', 
+                  action: () => {
+                    modalInstance.hide();
+                    resolve(false);
+                  }
+                },
+                { 
+                  text: 'Bestätigen', 
+                  type: 'primary', 
+                  action: () => {
+                    modalInstance.hide();
+                    if (onExport) onExport();
+                    resolve(true);
+                  }
+                }
+              ]
+            });
           });
         }
 
         function showDeleteConfirm(message: string): Promise<boolean> {
           return new Promise((resolve) => {
-            modal.innerHTML = `
-              <div class="p-4">
-                <p class="text-gray-800 dark:text-gray-200 mb-4">${message}</p>
-                <div class="flex justify-end space-x-2">
-                  <button class="btn btn-secondary" id="cancel-btn">Abbrechen</button>
-                  <button class="btn btn-danger" id="delete-btn">Löschen</button>
-                </div>
-              </div>
-            `;
-            modal.classList.remove('hidden');
-
-            const cancelBtn = modal.querySelector('#cancel-btn');
-            const deleteBtn = modal.querySelector('#delete-btn');
-
-            function cleanup() {
-              modal.classList.add('hidden');
-              cancelBtn?.removeEventListener('click', handleCancel);
-              deleteBtn?.removeEventListener('click', handleDelete);
+            const modalInstance = window[`modal_notification-modal`];
+            if (!modalInstance) {
+              console.error('Modal instance not found');
+              return resolve(false);
             }
 
-            function handleCancel() {
-              cleanup();
-              resolve(false);
-            }
-
-            function handleDelete() {
-              cleanup();
-              resolve(true);
-            }
-
-            cancelBtn?.addEventListener('click', handleCancel);
-            deleteBtn?.addEventListener('click', handleDelete);
+            modalInstance.show({
+              title: 'Löschen bestätigen',
+              content: message,
+              icon: `<svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>`,
+              buttons: [
+                { 
+                  text: 'Abbrechen', 
+                  type: 'secondary', 
+                  action: () => {
+                    modalInstance.hide();
+                    resolve(false);
+                  }
+                },
+                { 
+                  text: 'Löschen', 
+                  type: 'danger', 
+                  action: () => {
+                    modalInstance.hide();
+                    resolve(true);
+                  }
+                }
+              ]
+            });
           });
         }
 

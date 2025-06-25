@@ -11,6 +11,7 @@ import IngredientsList from '../../components/recipe/details/IngredientsList.ast
 import PreparationSteps from '../../components/recipe/details/PreparationSteps.astro';
 import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
 import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro';
+import EditFormActions from '../../components/recipe/edit/EditFormActions.astro';
 
 const { id } = Astro.params;
 
@@ -53,6 +54,9 @@ try {
     <!-- Edit Mode Content (initially hidden) -->
     <div id="edit-content" class="hidden">
       <EditRecipeForm recipe={recipe} />
+      <div class="max-w-4xl mx-auto">
+        <EditFormActions recipeId={recipe.id} />
+      </div>
     </div>
   </div>
 
@@ -275,6 +279,13 @@ try {
         updateEditButton(editBtn, false);
         updateEditButton(editBtnMobile, false);
       }
+
+      // Dispatch edit mode change event
+      document.dispatchEvent(new CustomEvent('editModeChanged', {
+        detail: {
+          isEditMode
+        }
+      }));
     }
 
     // Make toggleEditMode globally available
@@ -328,15 +339,10 @@ try {
       
       if (window.showDeleteConfirm) {
         console.log('Using modal for delete confirmation');
-        action = await window.showDeleteConfirm(
-          `Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`,
-          'Rezept löschen',
-          () => {
-            // Export function - export as RCB (with images)
-            const recipeId = window.location.pathname.split('/').pop();
-            window.location.href = `/api/recipe-export?id=${recipeId}&format=rcb`;
-          }
+        const confirmed = await window.showDeleteConfirm(
+          `Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`
         );
+        action = confirmed ? 'delete' : 'cancel';
       } else {
         console.warn('Modal functions still not available after waiting, using fallback confirm');
         const confirmed = confirm(`Sind Sie sicher, dass Sie "${recipeTitle}" löschen möchten?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`);
