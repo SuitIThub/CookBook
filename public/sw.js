@@ -14,6 +14,15 @@ const staticAssets = [
   '/einkaufslisten',
 ];
 
+// Notify all clients
+function notifyClients(message) {
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage(message);
+    });
+  });
+}
+
 // Open IndexedDB
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -73,6 +82,8 @@ self.addEventListener('install', (event) => {
       openDB()
     ])
   );
+  // Activate immediately
+  self.skipWaiting();
 });
 
 // Fetch event handler
@@ -187,13 +198,15 @@ self.addEventListener('activate', (event) => {
       })
     ])
   );
+  // Take control immediately
+  event.waitUntil(clients.claim());
 });
 
 // Listen for messages from the client
-self.addEventListener('message', (event) => {
+self.addEventListener('message', async (event) => {
   if (event.data.action === 'CACHE_RECIPE') {
-    event.waitUntil(
-      Promise.all([
+    try {
+      await Promise.all([
         storeData(OFFLINE_STORE_RECIPES, event.data.recipe),
         // Cache recipe images
         ...(event.data.recipe.images || []).map(async (image) => {
@@ -205,13 +218,37 @@ self.addEventListener('message', (event) => {
             type: blob.type
           });
         })
-      ])
-    );
+      ]);
+      
+      // Notify clients that caching is complete
+      notifyClients({
+        type: 'CACHE_COMPLETE',
+        message: `Rezept "${event.data.recipe.title}" wurde für Offline-Nutzung gespeichert`
+      });
+    } catch (error) {
+      console.error('Error caching recipe:', error);
+      notifyClients({
+        type: 'CACHE_ERROR',
+        message: 'Fehler beim Speichern des Rezepts für Offline-Nutzung'
+      });
+    }
   }
   
   if (event.data.action === 'CACHE_SHOPPING_LIST') {
-    event.waitUntil(
-      storeData(OFFLINE_STORE_SHOPPING_LISTS, event.data.shoppingList)
-    );
+    try {
+      await storeData(OFFLINE_STORE_SHOPPING_LISTS, event.data.shoppingList);
+      
+      // Notify clients that caching is complete
+      notifyClients({
+        type: 'CACHE_COMPLETE',
+        message: `Einkaufsliste "${event.data.shoppingList.title}" wurde für Offline-Nutzung gespeichert`
+      });
+    } catch (error) {
+      console.error('Error caching shopping list:', error);
+      notifyClients({
+        type: 'CACHE_ERROR',
+        message: 'Fehler beim Speichern der Einkaufsliste für Offline-Nutzung'
+      });
+    }
   }
 }); 

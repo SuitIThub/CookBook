@@ -79,6 +79,46 @@ const { title } = Astro.props;
         color: unset !important;
       }
     </style>
+
+    <script>
+      // Service Worker Registration
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', async () => {
+          try {
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            console.log('Service Worker registered with scope:', registration.scope);
+
+            // Listen for service worker state changes
+            registration.addEventListener('statechange', (event) => {
+              console.log('Service Worker state changed:', (event.target as ServiceWorker).state);
+            });
+
+            // Listen for service worker updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  console.log('New Service Worker state:', newWorker.state);
+                });
+              }
+            });
+
+            // Handle service worker communication
+            navigator.serviceWorker.addEventListener('message', (event) => {
+              console.log('Message from Service Worker:', event.data);
+              
+              // Show notification when content is cached
+              if (event.data.type === 'CACHE_COMPLETE') {
+                window.showInfo?.(event.data.message || 'Inhalt wurde für Offline-Nutzung gespeichert');
+              }
+            });
+
+          } catch (error) {
+            console.error('Service Worker registration failed:', error);
+          }
+        });
+      }
+    </script>
   </head>
   <body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
     <header class="nav-header">
