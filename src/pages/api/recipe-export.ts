@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../lib/database';
+import type { Recipe } from '../../types/recipe';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -8,8 +9,38 @@ export const GET: APIRoute = async ({ url }) => {
     const searchParams = new URL(url).searchParams;
     const recipeId = searchParams.get('id');
     const format = searchParams.get('format') || 'json';
+    const ids = searchParams.get('ids')?.split(',');
 
-    if (recipeId) {
+    if (ids && ids.length > 0) {
+      // Export selected recipes
+      const recipes = ids.map(id => db.getRecipe(id)).filter((recipe): recipe is Recipe => recipe !== null);
+      
+      if (recipes.length === 0) {
+        return new Response(JSON.stringify({ error: 'No recipes found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (format === 'json') {
+        // Export as JSON without any image data
+        const exportData = recipes.map(recipe => {
+          const { images, imageUrl, ...cleanRecipe } = recipe;
+          return cleanRecipe;
+        });
+        
+        return new Response(JSON.stringify(exportData, null, 2), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Disposition': `attachment; filename="selected_recipes.json"`
+          }
+        });
+      } else {
+        // Export as custom format with images
+        return await exportRecipeWithImages(recipes);
+      }
+    } else if (recipeId) {
       // Export single recipe
       const recipe = db.getRecipe(recipeId);
       if (!recipe) {

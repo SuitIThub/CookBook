@@ -9,7 +9,16 @@ interface Props {
 const { recipe } = Astro.props;
 ---
 
-<div class="recipe-card">
+<div class="recipe-card group relative" data-recipe-id={recipe.id}>
+  <!-- Selection Checkbox -->
+  <div class="selection-indicator absolute top-2 left-2 z-10 opacity-0 md:group-hover:opacity-100 transition-opacity">
+    <input 
+      type="checkbox" 
+      class="recipe-select-checkbox w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+      data-recipe-id={recipe.id}
+    >
+  </div>
+
   <!-- Recipe Image Carousel -->
   <RecipeImageCarousel images={recipe.images || []} />
   
@@ -17,7 +26,7 @@ const { recipe } = Astro.props;
   <div class="card-content">
     <div class="mb-3">
       <h3 class="heading-tertiary mb-1">
-        <a href={`/rezept/${recipe.id}`} class="hover:text-orange-600 dark:hover:text-orange-400 transition-colors">
+        <a href={`/rezept/${recipe.id}`} class="recipe-link hover:text-orange-600 dark:hover:text-orange-400 transition-colors">
           {recipe.title}
         </a>
       </h3>
@@ -61,7 +70,7 @@ const { recipe } = Astro.props;
     
     <!-- Action Buttons -->
     <div class="flex space-x-2">
-      <a href={`/rezept/${recipe.id}`} class="btn btn-primary flex-1 text-center">
+      <a href={`/rezept/${recipe.id}`} class="recipe-link btn btn-primary flex-1 text-center">
         Anzeigen
       </a>
       <!-- Export dropdown -->
@@ -95,4 +104,26 @@ const { recipe } = Astro.props;
       </button>
     </div>
   </div>
-</div> 
+</div>
+
+<style>
+  .recipe-card.selected {
+    @apply ring-2 ring-orange-500;
+  }
+  
+  .recipe-card.selected .selection-indicator {
+    @apply opacity-100;
+  }
+
+  .recipe-card.selection-mode {
+    @apply cursor-pointer;
+  }
+
+  .recipe-card.selection-mode .recipe-link {
+    @apply pointer-events-none;
+  }
+
+  .recipe-card.selection-mode .selection-indicator {
+    @apply opacity-100;
+  }
+</style> 

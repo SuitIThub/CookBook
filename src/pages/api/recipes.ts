@@ -49,8 +49,7 @@ export const POST: APIRoute = async ({ request, url }) => {
         description: '',
         metadata: {
           servings: 4,
-          preparationTime: 0,
-          cookingTime: 0,
+          timeEntries: [],
           difficulty: 'leicht' as const
         },
         ingredientGroups: [
@@ -129,19 +128,68 @@ export const PUT: APIRoute = async ({ request, url }) => {
   }
 };
 
-export const DELETE: APIRoute = async ({ url }) => {
+export const DELETE: APIRoute = async ({ request, url }) => {
   try {
     const searchParams = new URL(url).searchParams;
     const id = searchParams.get('id');
     
+    // Handle bulk delete
     if (!id) {
-      return new Response(JSON.stringify({ error: 'Recipe ID required' }), {
-        status: 400,
+      const { ids } = await request.json();
+      
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return new Response(JSON.stringify({ error: 'Recipe IDs required' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      const results = {
+        success: true,
+        deletedCount: 0,
+        deletedImages: 0,
+        errors: [] as string[]
+      };
+      
+      for (const recipeId of ids) {
+        try {
+          // Get recipe data before deletion to access images for cleanup
+          const recipe = db.getRecipe(recipeId);
+          if (!recipe) {
+            results.errors.push(`Recipe ${recipeId} not found`);
+            continue;
+          }
+          
+          // Delete associated image files from filesystem
+          await cleanupRecipeImages(recipe.images || []);
+          
+          // Delete recipe from database
+          const deleted = db.deleteRecipe(recipeId);
+          
+          if (!deleted) {
+            results.errors.push(`Failed to delete recipe ${recipeId} from database`);
+            continue;
+          }
+          
+          results.deletedCount++;
+          results.deletedImages += recipe.images?.length || 0;
+          
+          console.log(`Successfully deleted recipe "${recipe.title}" and cleaned up ${recipe.images?.length || 0} associated image files`);
+        } catch (error) {
+          console.error(`Error deleting recipe ${recipeId}:`, error);
+          results.errors.push(`Failed to delete recipe ${recipeId}`);
+        }
+      }
+      
+      results.success = results.deletedCount > 0;
+      
+      return new Response(JSON.stringify(results), {
+        status: results.success ? 200 : 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
-
-    // Get recipe data before deletion to access images for cleanup
+    
+    // Handle single delete (existing code)
     const recipe = db.getRecipe(id);
     if (!recipe) {
       return new Response(JSON.stringify({ error: 'Recipe not found' }), {

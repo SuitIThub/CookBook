@@ -17,14 +17,35 @@ const { listCount } = Astro.props;
     </p>
   </div>
   
-  <div class="flex space-x-3">
-    <!-- Create New Shopping List Button -->
-    <button id="create-shopping-list-btn" class="btn btn-success flex items-center space-x-2">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-      </svg>
-      <span>Neue Liste</span>
-    </button>
+  <div class="flex flex-col sm:flex-row gap-3">
+    <!-- Selection Mode Buttons -->
+    <div id="selection-buttons" class="hidden sm:flex-row flex-col w-full sm:w-auto gap-3">
+      <button id="delete-selected-btn" class="btn btn-danger flex items-center space-x-2 w-full sm:w-auto justify-center" disabled>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+        <span>Ausgewählte löschen</span>
+      </button>
+      <button id="cancel-selection-btn" class="btn btn-secondary w-full sm:w-auto justify-center">
+        Abbrechen
+      </button>
+    </div>
+
+    <!-- Normal Mode Buttons -->
+    <div id="normal-buttons" class="flex flex-col sm:flex-row gap-3">
+      <button id="select-lists-btn" class="btn btn-secondary flex items-center space-x-2 w-full sm:w-auto justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        <span>Auswählen</span>
+      </button>
+      <button id="create-shopping-list-btn" class="btn btn-success flex items-center space-x-2 w-full sm:w-auto justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+        </svg>
+        <span>Neue Liste</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -77,6 +98,93 @@ document.addEventListener('DOMContentLoaded', () => {
   const modal = document.getElementById('create-shopping-list-modal');
   const form = document.getElementById('create-shopping-list-form') as HTMLFormElement;
   const closeButtons = modal?.querySelectorAll('.modal-close');
+
+  // Selection mode elements
+  const selectButton = document.getElementById('select-lists-btn');
+  const cancelButton = document.getElementById('cancel-selection-btn');
+  const deleteSelectedButton = document.getElementById('delete-selected-btn') as HTMLButtonElement;
+  const normalButtons = document.getElementById('normal-buttons');
+  const selectionButtons = document.getElementById('selection-buttons');
+  
+  let isSelectionMode = false;
+  let selectedLists = new Set();
+
+  // Toggle selection mode
+  function toggleSelectionMode(enable: boolean) {
+    isSelectionMode = enable;
+    document.body.classList.toggle('selection-mode', enable);
+    normalButtons?.classList.toggle('hidden', enable);
+    selectionButtons?.classList.toggle('hidden', !enable);
+    
+    // Reset selection when disabling
+    if (!enable) {
+      selectedLists.clear();
+      document.querySelectorAll('.shopping-list-checkbox').forEach((checkbox) => {
+        (checkbox as HTMLInputElement).checked = false;
+      });
+      document.querySelectorAll('.shopping-list-card').forEach(card => {
+        card.classList.remove('selected');
+      });
+      updateDeleteButton();
+    }
+  }
+
+  // Update delete button state
+  function updateDeleteButton() {
+    if (deleteSelectedButton) {
+      deleteSelectedButton.disabled = selectedLists.size === 0;
+    }
+  }
+
+  // Handle selection mode toggle
+  selectButton?.addEventListener('click', () => toggleSelectionMode(true));
+  cancelButton?.addEventListener('click', () => toggleSelectionMode(false));
+
+  // Handle bulk delete
+  deleteSelectedButton?.addEventListener('click', async () => {
+    if (selectedLists.size === 0) return;
+
+    const confirmed = await window.showDeleteConfirm(
+      `Möchten Sie ${selectedLists.size} ausgewählte ${selectedLists.size === 1 ? 'Liste' : 'Listen'} wirklich löschen?`
+    );
+
+    if (confirmed) {
+      const deletePromises = Array.from(selectedLists).map(async (listId) => {
+        try {
+          const response = await fetch(`/api/shopping-lists?id=${listId}`, {
+            method: 'DELETE'
+          });
+          return response.ok;
+        } catch (error) {
+          console.error('Error deleting shopping list:', error);
+          return false;
+        }
+      });
+
+      const results = await Promise.all(deletePromises);
+      const successCount = results.filter(result => result).length;
+      const failCount = selectedLists.size - successCount;
+
+      if (failCount === 0) {
+        window.showInfo(`${successCount} ${successCount === 1 ? 'Liste wurde' : 'Listen wurden'} erfolgreich gelöscht`);
+      } else {
+        window.showWarning(`${failCount} ${failCount === 1 ? 'Liste konnte' : 'Listen konnten'} nicht gelöscht werden`);
+      }
+
+      toggleSelectionMode(false);
+    }
+  });
+
+  // Handle list selection events
+  document.addEventListener('shoppingListSelected', ((event: CustomEvent) => {
+    const { listId, selected } = event.detail;
+    if (selected) {
+      selectedLists.add(listId);
+    } else {
+      selectedLists.delete(listId);
+    }
+    updateDeleteButton();
+  }) as EventListener);
 
   // Open modal
   createBtn?.addEventListener('click', () => {
@@ -137,4 +245,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
-</script> 
+</script>
+
+<style>
+  /* Selection mode styles */
+  :global(body.selection-mode) :global(.shopping-list-checkbox) {
+    display: block !important;
+  }
+
+  :global(body.selection-mode) :global(.shopping-list-card.selected) {
+    @apply ring-2 ring-primary-500;
+  }
+
+  @media (max-width: 640px) {
+    :global(body.selection-mode) :global(.card-actions) {
+      display: none;
+    }
+  }
+</style> 

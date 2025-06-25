@@ -17,14 +17,87 @@ declare global {
 }
 ---
 
+<style>
+  .flex-between {
+    @apply flex flex-col md:flex-row md:justify-between gap-4 md:gap-0;
+  }
+</style>
+
 <div class="flex-between">
   <div>
     <h1 class="heading-primary">Meine Rezepte</h1>
-    <p class="text-muted mt-1">{recipeCount} Rezepte gefunden</p>
+    <p class="text-muted mt-1">
+      <span id="recipe-count">{recipeCount}</span> Rezepte gefunden
+      <span id="selected-count" class="hidden">
+        (<span class="text-orange-600 dark:text-orange-400">0 ausgewählt</span>)
+      </span>
+    </p>
   </div>
-  <div class="flex space-x-3">
+  
+  <!-- Bulk Actions -->
+  <div id="bulk-actions" class="hidden flex flex-wrap gap-2">
+    <button id="cancel-selection" class="btn btn-secondary flex items-center space-x-2 flex-1 md:flex-none justify-center">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+      <span>Auswahl beenden</span>
+    </button>
+
+    <button id="bulk-delete" class="btn btn-danger flex items-center space-x-2 flex-1 md:flex-none justify-center">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+      <span>Löschen</span>
+    </button>
+    
+    <div class="relative flex-1 md:flex-none">
+      <button id="bulk-export-btn" class="btn btn-secondary flex items-center space-x-2 w-full justify-center">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <span>Exportieren</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="bulk-export-menu" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 hidden z-10">
+        <div class="py-1">
+          <button id="bulk-export-json" class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            JSON (ohne Bilder)
+          </button>
+          <button id="bulk-export-rcb" class="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+            </svg>
+            Vollständig (mit Bildern)
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <button id="bulk-shopping-list" class="btn btn-secondary flex items-center space-x-2 flex-1 md:flex-none justify-center">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+      </svg>
+      <span>Zur Einkaufsliste</span>
+    </button>
+  </div>
+
+  <!-- Regular Actions -->
+  <div id="regular-actions" class="flex flex-wrap gap-2">
+    <!-- Selection Mode Button (Mobile) -->
+    <button id="selection-mode-btn" class="btn btn-secondary flex items-center space-x-2 md:hidden flex-1 justify-center">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </svg>
+      <span>Auswählen</span>
+    </button>
+
     <!-- Import Button -->
-    <button id="import-btn" class="btn btn-secondary flex items-center space-x-2">
+    <button id="import-btn" class="btn btn-secondary flex items-center space-x-2 flex-1 md:flex-none justify-center">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
       </svg>
@@ -32,8 +105,8 @@ declare global {
     </button>
     
     <!-- Export Dropdown -->
-    <div class="relative export-dropdown">
-      <button id="export-btn" class="btn btn-secondary flex items-center space-x-2">
+    <div class="relative flex-1 md:flex-none">
+      <button id="export-btn" class="btn btn-secondary flex items-center space-x-2 w-full justify-center">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
         </svg>
@@ -60,13 +133,13 @@ declare global {
       </div>
     </div>
     
-    <button class="btn btn-secondary flex items-center space-x-2">
+    <button class="btn btn-secondary flex items-center space-x-2 flex-1 md:flex-none justify-center">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>
       <span>Suchen</span>
     </button>
-    <button class="btn btn-secondary flex items-center space-x-2">
+    <button class="btn btn-secondary flex items-center space-x-2 flex-1 md:flex-none justify-center">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"/>
       </svg>
@@ -214,33 +287,326 @@ declare global {
   </div>
 </div>
 
+<!-- Shopping List Modal -->
+<div id="shopping-list-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-medium text-gray-900 dark:text-white">Zur Einkaufsliste hinzufügen</h3>
+      <button id="close-shopping-list-modal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="space-y-4">
+      <!-- Create New List Button -->
+      <button id="create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        <span>Neue Einkaufsliste erstellen</span>
+      </button>
+
+      <!-- Existing Lists -->
+      <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Oder zu bestehender Liste hinzufügen:</h4>
+        <div id="existing-lists" class="space-y-2 max-h-60 overflow-y-auto">
+          <!-- Lists will be inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-  // Export functionality
-  const exportBtn = document.getElementById('export-btn');
-  const exportMenu = document.getElementById('export-menu');
-  const exportJsonBtn = document.getElementById('export-json');
-  const exportRcbBtn = document.getElementById('export-rcb');
+  // Selection state
+  let selectedRecipes = new Set();
+  let isSelectionMode = false;
+  
+  // UI Elements
+  const bulkActions = document.getElementById('bulk-actions');
+  const regularActions = document.getElementById('regular-actions');
+  const selectedCount = document.getElementById('selected-count');
+  const selectedCountText = selectedCount?.querySelector('span');
+  const cancelSelectionBtn = document.getElementById('cancel-selection');
+  const selectionModeBtn = document.getElementById('selection-mode-btn');
+  
+  // Bulk action buttons
+  const bulkDeleteBtn = document.getElementById('bulk-delete');
+  const bulkExportBtn = document.getElementById('bulk-export-btn');
+  const bulkExportMenu = document.getElementById('bulk-export-menu');
+  const bulkExportJsonBtn = document.getElementById('bulk-export-json');
+  const bulkExportRcbBtn = document.getElementById('bulk-export-rcb');
+  const bulkShoppingListBtn = document.getElementById('bulk-shopping-list');
+  
+  // Toggle selection mode
+  selectionModeBtn?.addEventListener('click', () => {
+    isSelectionMode = true;
+    document.querySelectorAll('.recipe-card').forEach(card => {
+      card.classList.add('selection-mode');
+    });
+    updateUI();
+  });
 
-  // Toggle export dropdown
-  exportBtn?.addEventListener('click', (e) => {
+  // Handle recipe card clicks in selection mode
+  document.addEventListener('click', (e) => {
+    const recipeCard = (e.target as HTMLElement).closest('.recipe-card');
+    if (!recipeCard || !isSelectionMode) return;
+
+    const recipeId = recipeCard.getAttribute('data-recipe-id');
+    if (!recipeId) return;
+
+    const checkbox = recipeCard.querySelector<HTMLInputElement>('.recipe-select-checkbox');
+    if (!checkbox) return;
+
+    // Toggle checkbox
+    checkbox.checked = !checkbox.checked;
+
+    if (checkbox.checked) {
+      selectedRecipes.add(recipeId);
+      recipeCard.classList.add('selected');
+    } else {
+      selectedRecipes.delete(recipeId);
+      recipeCard.classList.remove('selected');
+    }
+
+    updateUI();
+  });
+
+  // Update UI based on selection state
+  function updateUI() {
+    const count = selectedRecipes.size;
+    
+    if (count > 0 || isSelectionMode) {
+      bulkActions?.classList.remove('hidden');
+      regularActions?.classList.add('hidden');
+      selectedCount?.classList.remove('hidden');
+      if (selectedCountText) {
+        selectedCountText.textContent = `${count} ausgewählt`;
+      }
+    } else {
+      bulkActions?.classList.add('hidden');
+      regularActions?.classList.remove('hidden');
+      selectedCount?.classList.add('hidden');
+    }
+  }
+
+  // Cancel selection
+  function cancelSelection() {
+    // Uncheck all checkboxes
+    document.querySelectorAll<HTMLInputElement>('.recipe-select-checkbox').forEach(checkbox => {
+      checkbox.checked = false;
+    });
+    
+    // Remove selected class from all recipe cards
+    document.querySelectorAll('.recipe-card').forEach(card => {
+      card.classList.remove('selected');
+      card.classList.remove('selection-mode');
+    });
+    
+    // Clear selection set and mode
+    selectedRecipes.clear();
+    isSelectionMode = false;
+    
+    // Update UI
+    updateUI();
+  }
+
+  // Cancel selection button click
+  cancelSelectionBtn?.addEventListener('click', cancelSelection);
+
+  // Handle checkbox changes (for desktop)
+  document.addEventListener('change', (e) => {
+    const checkbox = e.target as HTMLInputElement;
+    if (!checkbox.classList.contains('recipe-select-checkbox')) return;
+    
+    const recipeId = checkbox.dataset.recipeId;
+    if (!recipeId) return;
+    
+    const recipeCard = document.querySelector(`.recipe-card[data-recipe-id="${recipeId}"]`);
+    if (!recipeCard) return;
+    
+    if (checkbox.checked) {
+      selectedRecipes.add(recipeId);
+      recipeCard.classList.add('selected');
+      if (!isSelectionMode) {
+        isSelectionMode = true;
+        document.querySelectorAll('.recipe-card').forEach(card => {
+          card.classList.add('selection-mode');
+        });
+      }
+    } else {
+      selectedRecipes.delete(recipeId);
+      recipeCard.classList.remove('selected');
+    }
+    
+    updateUI();
+  });
+  
+  // Bulk delete
+  bulkDeleteBtn?.addEventListener('click', async () => {
+    if (selectedRecipes.size === 0) return;
+    
+    const confirmed = await window.showDeleteConfirm(
+      `Möchten Sie wirklich ${selectedRecipes.size} Rezept${selectedRecipes.size === 1 ? '' : 'e'} löschen?`
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      const response = await fetch('/api/recipes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedRecipes) })
+      });
+      
+      if (!response.ok) throw new Error('Fehler beim Löschen der Rezepte');
+      
+      window.location.reload();
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      window.showError('Die Rezepte konnten nicht gelöscht werden.');
+    }
+  });
+  
+  // Bulk export
+  bulkExportBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    exportMenu?.classList.toggle('hidden');
+    bulkExportMenu?.classList.toggle('hidden');
   });
-
-  // Close dropdown when clicking outside
+  
   document.addEventListener('click', () => {
-    exportMenu?.classList.add('hidden');
+    bulkExportMenu?.classList.add('hidden');
+  });
+  
+  bulkExportJsonBtn?.addEventListener('click', () => {
+    if (selectedRecipes.size === 0) return;
+    window.location.href = `/api/recipe-export?format=json&ids=${Array.from(selectedRecipes).join(',')}`;
+    bulkExportMenu?.classList.add('hidden');
+  });
+  
+  bulkExportRcbBtn?.addEventListener('click', () => {
+    if (selectedRecipes.size === 0) return;
+    window.location.href = `/api/recipe-export?format=rcb&ids=${Array.from(selectedRecipes).join(',')}`;
+    bulkExportMenu?.classList.add('hidden');
+  });
+  
+  // Shopping List Modal
+  const shoppingListModal = document.getElementById('shopping-list-modal');
+  const closeShoppingListModal = document.getElementById('close-shopping-list-modal');
+  const createNewList = document.getElementById('create-new-list');
+  const existingLists = document.getElementById('existing-lists');
+
+  // Show shopping list modal
+  bulkShoppingListBtn?.addEventListener('click', async () => {
+    if (selectedRecipes.size === 0) return;
+
+    try {
+      // Fetch existing shopping lists
+      const response = await fetch('/api/shopping-lists');
+      if (!response.ok) throw new Error('Fehler beim Laden der Einkaufslisten');
+      
+      const lists = await response.json();
+      
+      // Clear and populate existing lists
+      if (existingLists) {
+        existingLists.innerHTML = '';
+        
+        if (lists.length === 0) {
+          existingLists.innerHTML = `
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              Keine bestehenden Einkaufslisten gefunden
+            </p>
+          `;
+        } else {
+          lists.forEach((list: any) => {
+            const button = document.createElement('button');
+            button.className = 'w-full btn btn-secondary flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700';
+            button.innerHTML = `
+              <span class="flex items-center space-x-3">
+                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span class="text-left">
+                  <span class="block font-medium">${list.title}</span>
+                  <span class="block text-sm text-gray-500">${list.items?.length || 0} Zutaten</span>
+                </span>
+              </span>
+              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            `;
+            
+            button.addEventListener('click', () => addToExistingList(list.id));
+            existingLists.appendChild(button);
+          });
+        }
+      }
+      
+      // Show modal
+      shoppingListModal?.classList.remove('hidden');
+    } catch (error) {
+      console.error('Fehler beim Laden der Einkaufslisten:', error);
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'text-sm text-red-600 dark:text-red-400 text-center py-4';
+      errorMessage.textContent = 'Fehler beim Laden der Einkaufslisten';
+      if (existingLists) existingLists.innerHTML = errorMessage.outerHTML;
+    }
   });
 
-  // Export handlers
-  exportJsonBtn?.addEventListener('click', () => {
-    window.location.href = '/api/recipe-export?format=json';
-    exportMenu?.classList.add('hidden');
+  // Close modal
+  closeShoppingListModal?.addEventListener('click', () => {
+    shoppingListModal?.classList.add('hidden');
   });
 
-  exportRcbBtn?.addEventListener('click', () => {
-    window.location.href = '/api/recipe-export?format=rcb';
-    exportMenu?.classList.add('hidden');
+  // Create new list
+  createNewList?.addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/shopping-lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
+          recipeIds: Array.from(selectedRecipes)
+        })
+      });
+      
+      if (!response.ok) throw new Error('Fehler beim Erstellen der Einkaufsliste');
+      
+      const { id } = await response.json();
+      window.location.href = `/einkaufsliste/${id}`;
+    } catch (error) {
+      console.error('Fehler beim Erstellen der Einkaufsliste:', error);
+      alert('Die Einkaufsliste konnte nicht erstellt werden.');
+    }
+  });
+
+  // Add to existing list
+  async function addToExistingList(listId: string) {
+    try {
+      const response = await fetch(`/api/shopping-lists/${listId}/recipes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeIds: Array.from(selectedRecipes)
+        })
+      });
+      
+      if (!response.ok) throw new Error('Fehler beim Hinzufügen zur Einkaufsliste');
+      
+      window.location.href = `/einkaufsliste/${listId}`;
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen zur Einkaufsliste:', error);
+      alert('Die Rezepte konnten nicht zur Einkaufsliste hinzugefügt werden.');
+    }
+  }
+
+  // Close modal when clicking outside
+  shoppingListModal?.addEventListener('click', (e) => {
+    if (e.target === shoppingListModal) {
+      shoppingListModal.classList.add('hidden');
+    }
   });
 
   // Import functionality
@@ -638,4 +1004,32 @@ declare global {
       dropText.textContent = selectedFile.name;
     }
   }
+
+  // Export functionality
+  const exportBtn = document.getElementById('export-btn');
+  const exportMenu = document.getElementById('export-menu');
+  const exportJsonBtn = document.getElementById('export-json');
+  const exportRcbBtn = document.getElementById('export-rcb');
+
+  // Toggle export dropdown
+  exportBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exportMenu?.classList.toggle('hidden');
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', () => {
+    exportMenu?.classList.add('hidden');
+  });
+
+  // Export handlers
+  exportJsonBtn?.addEventListener('click', () => {
+    window.location.href = '/api/recipe-export?format=json';
+    exportMenu?.classList.add('hidden');
+  });
+
+  exportRcbBtn?.addEventListener('click', () => {
+    window.location.href = '/api/recipe-export?format=rcb';
+    exportMenu?.classList.add('hidden');
+  });
 </script>

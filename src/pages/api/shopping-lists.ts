@@ -57,7 +57,7 @@ export const GET: APIRoute = async ({ url }) => {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const data = await request.json();
-    const { title, description } = data;
+    const { title, description, recipeIds } = data;
     
     if (!title) {
       return new Response(JSON.stringify({ error: 'Title is required' }), {
@@ -66,7 +66,24 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
+    // Create shopping list
     const newShoppingList = db.createShoppingList(title, description);
+    
+    // Add recipes if provided
+    if (recipeIds && Array.isArray(recipeIds) && recipeIds.length > 0) {
+      for (const recipeId of recipeIds) {
+        db.addRecipeToShoppingList(newShoppingList.id, recipeId);
+      }
+      
+      // Get updated shopping list with recipes
+      const updatedList = db.getShoppingList(newShoppingList.id);
+      if (updatedList) {
+        return new Response(JSON.stringify(updatedList), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
     
     return new Response(JSON.stringify(newShoppingList), {
       status: 201,

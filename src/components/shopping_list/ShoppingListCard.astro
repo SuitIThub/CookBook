@@ -12,8 +12,14 @@ const totalItems = shoppingList.items.length;
 const completedItems = totalItems - uncheckedItems.length;
 ---
 
-<div class="card hover:shadow-lg transition-all duration-200">
-  <div class="card-content">
+<div class="shopping-list-card card hover:shadow-lg transition-all duration-200" data-list-id={shoppingList.id}>
+  <div class="card-content relative">
+    <!-- Selection Checkbox -->
+    <input 
+      type="checkbox" 
+      class="shopping-list-checkbox absolute left-3 top-3 hidden w-5 h-5 text-primary-500 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2"
+    />
+
     <div class="flex items-start justify-between mb-3">
       <div class="min-w-0 flex-1">
         <h2 class="heading-card text-lg font-semibold text-gray-900 dark:text-white mb-1 truncate">
