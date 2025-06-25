@@ -12,6 +12,13 @@ export default defineConfig({
     mode: 'standalone'
   }),
   vite: {
-    plugins: [ basicSsl() ]
+    plugins: [ basicSsl() ],
+    server: {
+      https: true,
+    }
+  },
+  server: {
+    port: 4321,
+    host: true
   }
 });

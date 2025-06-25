@@ -1,0 +1,158 @@
+<div class="cast-controls">
+    <google-cast-launcher id="castbutton"></google-cast-launcher>
+    <div class="navigation-controls" style="display: none;">
+        <button id="prevStep" class="nav-button">
+            <span class="sr-only">Previous Step</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
+        </button>
+        <button id="nextStep" class="nav-button">
+            <span class="sr-only">Next Step</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+            </svg>
+        </button>
+    </div>
+</div>
+
+<script>
+class CastManager {
+  constructor() {
+    this.initializeCastApi();
+    this.remotePlayer = null;
+    this.remotePlayerController = null;
+    this.currentSession = null;
+  }
+
+  initializeCastApi() {
+    window['__onGCastApiAvailable'] = (isAvailable) => {
+      if (isAvailable) {
+        // Initialize Cast SDK
+        cast.framework.CastContext.getInstance().setOptions({
+          receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+          autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+        });
+
+        this.remotePlayer = new cast.framework.RemotePlayer();
+        this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
+        
+        // Listen for connection changes
+        this.remotePlayerController.addEventListener(
+          cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
+          () => {
+            const navControls = document.querySelector('.navigation-controls');
+            if (this.remotePlayer.isConnected) {
+              navControls.style.display = 'flex';
+              this.currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
+            } else {
+              navControls.style.display = 'none';
+              this.currentSession = null;
+              console.log('Disconnected from Cast device');
+            }
+          }
+        );
+
+        // Add navigation controls event listeners
+        document.getElementById('prevStep').addEventListener('click', () => this.sendControl('previous'));
+        document.getElementById('nextStep').addEventListener('click', () => this.sendControl('next'));
+      }
+    };
+  }
+
+  // Send control command to receiver
+  async sendControl(action) {
+    if (this.currentSession) {
+      try {
+        await this.currentSession.sendMessage('urn:x-cast:com.cookbook.recipes', {
+          type: 'control',
+          action: action
+        });
+      } catch (error) {
+        console.error('Error sending control command:', error);
+      }
+    }
+  }
+
+  // Cast a recipe to the Cast device
+  async castRecipe(recipe) {
+    const castSession = cast.framework.CastContext.getInstance().getCurrentSession();
+    if (!castSession) {
+      console.log('No cast session available');
+      return;
+    }
+
+    try {
+      await castSession.sendMessage('urn:x-cast:com.cookbook.recipes', {
+        type: 'recipe',
+        recipe: recipe
+      });
+      console.log('Recipe cast successfully');
+    } catch (error) {
+      console.error('Error casting recipe:', error);
+    }
+  }
+}
+
+// Initialize the Cast Manager
+window.castManager = new CastManager();
+</script>
+
+<style>
+.cast-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+google-cast-launcher {
+    --connected-color: #f97316;
+    --disconnected-color: #666666;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+}
+
+.navigation-controls {
+    display: none;
+    gap: 0.5rem;
+    margin-left: 0.5rem;
+}
+
+.nav-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 0.375rem;
+    background-color: #f97316;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.nav-button:hover {
+    background-color: #ea580c;
+}
+
+.nav-button:disabled {
+    background-color: #d1d5db;
+    cursor: not-allowed;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+</style> 

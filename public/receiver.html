@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CookBook Receiver</title>
+    <script type="text/javascript" src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 2rem;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+
+        .recipe {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .recipe-title {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .step-view {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .step-number {
+            font-size: 1.5rem;
+            color: #f97316;
+            margin-bottom: 1rem;
+        }
+
+        .step-content {
+            font-size: 2rem;
+            line-height: 1.5;
+        }
+
+        .ingredients {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+        }
+
+        .ingredients-title {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #f97316;
+        }
+
+        .ingredient-list {
+            columns: 2;
+            font-size: 1.2rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="recipe">
+        <h1 class="recipe-title"></h1>
+        
+        <div class="step-view">
+            <div class="step-number"></div>
+            <div class="step-content"></div>
+        </div>
+
+        <div class="ingredients">
+            <div class="ingredients-title">Ingredients Needed:</div>
+            <div class="ingredient-list"></div>
+        </div>
+    </div>
+
+    <script>
+        const context = cast.framework.CastReceiverContext.getInstance();
+        let currentStepIndex = 0;
+
+        // Handle custom messages
+        context.addCustomMessageListener('urn:x-cast:com.cookbook.recipes', event => {
+            if (event.data.type === 'recipe') {
+                displayRecipe(event.data.recipe);
+            } else if (event.data.type === 'control') {
+                handleControl(event.data.action);
+            }
+        });
+
+        function displayRecipe(recipe) {
+            document.querySelector('.recipe-title').textContent = recipe.title;
+            
+            // Display ingredients
+            const ingredientList = document.querySelector('.ingredient-list');
+            ingredientList.innerHTML = recipe.ingredients
+                .map(ingredient => `<div>${ingredient}</div>`)
+                .join('');
+
+            // Display first step
+            displayStep(0, recipe.steps);
+        }
+
+        function displayStep(index, steps) {
+            currentStepIndex = index;
+            const stepNumber = document.querySelector('.step-number');
+            const stepContent = document.querySelector('.step-content');
+
+            stepNumber.textContent = `Step ${index + 1} of ${steps.length}`;
+            stepContent.textContent = steps[index];
+        }
+
+        function handleControl(action) {
+            const steps = context.getData().recipe.steps;
+            
+            if (action === 'next' && currentStepIndex < steps.length - 1) {
+                displayStep(currentStepIndex + 1, steps);
+            } else if (action === 'previous' && currentStepIndex > 0) {
+                displayStep(currentStepIndex - 1, steps);
+            }
+        }
+
+        // Start the receiver
+        context.start();
+    </script>
+</body>
+</html> 
