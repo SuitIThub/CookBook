@@ -105,57 +105,82 @@ class CastManager {
     private remotePlayerController: cast.framework.RemotePlayerController | null;
     private currentSession: any | null;
     private static readonly RECEIVER_APP_ID = '3D0A6542'; // Default custom receiver ID
+    private initialized: boolean = false;
 
     constructor() {
-        this.initializeCastApi();
+        console.log('CastManager: Constructor called');
         this.remotePlayer = null;
         this.remotePlayerController = null;
         this.currentSession = null;
+        this.initializeCastApi();
     }
 
     initializeCastApi() {
+        console.log('CastManager: Starting initialization');
         const castButton = document.getElementById('castbutton');
         
+        // Keep original button visible until we confirm Cast is available
+        if (castButton) {
+            castButton.style.display = 'block';
+            console.log('CastManager: Original button made visible');
+        }
+
         // Add script error handler before initializing
         const loadCastSdk = () => {
+            console.log('CastManager: Loading Cast SDK');
             if (!window.chrome || !window.chrome.cast) {
+                console.log('CastManager: Chrome Cast not available, adding script');
                 const script = document.createElement('script');
                 script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
                 script.async = true;
                 script.onerror = (error) => {
-                    console.error('Error loading Cast SDK script:', error);
-                    if (castButton) castButton.style.display = 'none';
+                    console.error('CastManager: Error loading Cast SDK script:', error);
                 };
                 document.head.appendChild(script);
+                console.log('CastManager: Cast SDK script added to head');
+            } else {
+                console.log('CastManager: Chrome Cast already available');
             }
         };
 
         // Initialize Cast API once the DOM is ready
         if (document.readyState === 'loading') {
+            console.log('CastManager: Document still loading, waiting for DOMContentLoaded');
             document.addEventListener('DOMContentLoaded', loadCastSdk);
         } else {
+            console.log('CastManager: Document already loaded, initializing immediately');
             loadCastSdk();
         }
         
         window['__onGCastApiAvailable'] = (isAvailable: boolean) => {
-            if (isAvailable) {
+            console.log('CastManager: Cast API availability callback, isAvailable:', isAvailable);
+            if (isAvailable && !this.initialized) {
                 try {
+                    console.log('CastManager: Initializing Cast SDK');
                     // Initialize Cast SDK with custom receiver
                     const context = cast.framework.CastContext.getInstance();
                     context.setOptions({
                         receiverApplicationId: CastManager.RECEIVER_APP_ID,
                         autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
                     });
+                    console.log('CastManager: Cast context options set');
 
-                    // Replace placeholder with actual Cast button
+                    // Create and configure the Cast button
                     const castButtonElement = document.createElement('google-cast-launcher');
                     castButtonElement.id = 'castbutton';
+                    castButtonElement.style.display = 'block';
+                    
+                    // Only replace if both elements exist
                     if (castButton && castButton.parentNode) {
+                        console.log('CastManager: Replacing original button with Cast button');
                         castButton.parentNode.replaceChild(castButtonElement, castButton);
+                    } else {
+                        console.error('CastManager: Could not find original button or its parent');
                     }
 
                     this.remotePlayer = new cast.framework.RemotePlayer();
                     this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
+                    console.log('CastManager: Remote player initialized');
                     
                     // Listen for connection changes
                     this.remotePlayerController.addEventListener(
@@ -165,11 +190,11 @@ class CastManager {
                             if (this.remotePlayer && this.remotePlayer.isConnected) {
                                 if (navControls) navControls.style.display = 'flex';
                                 this.currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
-                                console.log('Connected to Cast device');
+                                console.log('CastManager: Connected to Cast device');
                             } else {
                                 if (navControls) navControls.style.display = 'none';
                                 this.currentSession = null;
-                                console.log('Disconnected from Cast device');
+                                console.log('CastManager: Disconnected from Cast device');
                             }
                         }
                     );
@@ -178,17 +203,26 @@ class CastManager {
                     document.getElementById('prevStep')?.addEventListener('click', () => this.sendControl('previous'));
                     document.getElementById('nextStep')?.addEventListener('click', () => this.sendControl('next'));
 
-                    console.log('Cast SDK initialized successfully');
+                    this.initialized = true;
+                    console.log('CastManager: Cast SDK initialized successfully');
                 } catch (error) {
-                    console.error('Error initializing Cast SDK:', error);
-                    // Don't hide the button on initialization error, try to keep it visible
-                    console.log('Cast initialization error, but keeping button visible');
+                    console.error('CastManager: Error initializing Cast SDK:', error);
+                    // Keep original button visible on error
+                    if (castButton) {
+                        castButton.style.display = 'block';
+                        console.log('CastManager: Keeping original button visible due to error');
+                    }
                 }
-            } else {
-                console.error('Cast API not available');
-                // Don't hide the button immediately, check if we're in a compatible environment
-                if (!window.chrome || !window.chrome.cast) {
-                    console.log('Chrome Cast API not supported in this browser');
+            } else if (!isAvailable) {
+                console.log('CastManager: Cast API not available');
+                // Keep original button if we're in Chrome but Cast isn't available
+                if (window.chrome) {
+                    if (castButton) {
+                        castButton.style.display = 'block';
+                        console.log('CastManager: Keeping original button visible in Chrome');
+                    }
+                } else {
+                    console.log('CastManager: Not in Chrome, hiding button');
                     if (castButton) castButton.style.display = 'none';
                 }
             }

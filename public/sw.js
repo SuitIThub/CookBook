@@ -12,40 +12,89 @@ const urlsToCache = [
   '/icons/icon-512x512.svg'
 ];
 
+// Helper function to handle network requests with timeout
+const timeoutFetch = (request, timeout = 5000) => {
+  return Promise.race([
+    fetch(request),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout')), timeout)
+    )
+  ]);
+};
+
 // Install service worker and cache resources
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        return cache.addAll(urlsToCache);
+        return cache.addAll(urlsToCache)
+          .catch(error => {
+            console.error('Failed to cache initial resources:', error);
+            // Continue installation even if caching fails
+            return Promise.resolve();
+          });
       })
   );
+  // Activate immediately
+  self.skipWaiting();
 });
 
 // Fetch event - different strategies for different types of requests
 self.addEventListener('fetch', (event) => {
+  // Ignore non-GET requests
+  if (event.request.method !== 'GET') return;
+
+  // Skip chrome-extension requests
+  if (event.request.url.startsWith('chrome-extension://')) return;
+
+  // Handle cast SDK requests differently
+  if (event.request.url.includes('gstatic.com/cv/js/sender')) {
+    event.respondWith(
+      timeoutFetch(event.request)
+        .catch(() => {
+          console.error('Failed to fetch Cast SDK');
+          return new Response('', {
+            status: 500,
+            statusText: 'Failed to load Cast SDK'
+          });
+        })
+    );
+    return;
+  }
+
   const url = new URL(event.request.url);
   
-  // For SVG icons, use cache-first strategy
-  if (url.pathname.endsWith('.svg')) {
+  // For SVG icons and static assets, use cache-first strategy
+  if (url.pathname.endsWith('.svg') || url.pathname.endsWith('.json')) {
     event.respondWith(
       caches.match(event.request)
         .then((response) => {
           if (response) {
             return response;
           }
-          return fetch(event.request)
+          return timeoutFetch(event.request)
             .then((response) => {
+              if (!response || response.status !== 200) {
+                throw new Error('Failed to fetch');
+              }
               // Clone the response before using it
               const responseToCache = response.clone();
               
               // Cache the fetched response
               caches.open(CACHE_NAME)
                 .then((cache) => {
-                  cache.put(event.request, responseToCache);
-                });
+                  cache.put(event.request, responseToCache)
+                    .catch(error => console.error('Failed to cache:', error));
+                })
+                .catch(error => console.error('Failed to open cache:', error));
               
               return response;
+            })
+            .catch(error => {
+              console.error('Fetch failed:', error);
+              // Return a fallback response or rethrow
+              return caches.match('/favicon.svg')
+                .then(fallback => fallback || Promise.reject(error));
             });
         })
     );
@@ -57,30 +106,43 @@ self.addEventListener('fetch', (event) => {
       url.pathname.startsWith('/api/')) {
     
     event.respondWith(
-      fetch(event.request)
+      timeoutFetch(event.request)
         .then((response) => {
           // If network request succeeds, clone and cache the response for offline access
           if (response.ok) {
             const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                cache.put(event.request, responseToCache)
+                  .catch(error => console.error('Failed to cache:', error));
+              })
+              .catch(error => console.error('Failed to open cache:', error));
           }
           return response;
         })
         .catch(() => {
           // If network fails, try to serve from cache
-          return caches.match(event.request);
+          return caches.match(event.request)
+            .then(response => response || Promise.reject('No cached version available'));
         })
     );
   } 
-  // For all other static assets, use cache-first strategy
+  // For all other requests, use cache-first strategy
   else {
     event.respondWith(
       caches.match(event.request)
         .then((response) => {
-          // Return cached version or fetch from network
-          return response || fetch(event.request);
+          if (response) {
+            return response;
+          }
+          return timeoutFetch(event.request)
+            .catch(error => {
+              console.error('Fetch failed:', error);
+              return new Response('', {
+                status: 500,
+                statusText: 'Failed to fetch resource'
+              });
+            });
         })
     );
   }
@@ -89,14 +151,19 @@ self.addEventListener('fetch', (event) => {
 // Activate service worker and clean up old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys()
+      .then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) {
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      })
+      .then(() => {
+        // Take control of all clients immediately
+        return clients.claim();
+      })
   );
 }); 
