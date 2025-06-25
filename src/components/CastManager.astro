@@ -1,5 +1,10 @@
 <div class="cast-controls">
-    <google-cast-launcher id="castbutton"></google-cast-launcher>
+    <button id="castbutton" class="cast-button">
+        <!-- Cast icon SVG -->
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+        </svg>
+    </button>
     <div class="navigation-controls" style="display: none;">
         <button id="prevStep" class="nav-button">
             <span class="sr-only">Previous Step</span>
@@ -18,80 +23,91 @@
 
 <script>
 class CastManager {
-  constructor() {
-    this.initializeCastApi();
-    this.remotePlayer = null;
-    this.remotePlayerController = null;
-    this.currentSession = null;
-  }
+    constructor() {
+        this.initializeCastApi();
+        this.remotePlayer = null;
+        this.remotePlayerController = null;
+        this.currentSession = null;
+    }
 
-  initializeCastApi() {
-    window['__onGCastApiAvailable'] = (isAvailable) => {
-      if (isAvailable) {
-        // Initialize Cast SDK
-        cast.framework.CastContext.getInstance().setOptions({
-          receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
-          autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-        });
-
-        this.remotePlayer = new cast.framework.RemotePlayer();
-        this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
+    initializeCastApi() {
+        // Create a placeholder button until the Cast SDK is loaded
+        const castButton = document.getElementById('castbutton');
         
-        // Listen for connection changes
-        this.remotePlayerController.addEventListener(
-          cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
-          () => {
-            const navControls = document.querySelector('.navigation-controls');
-            if (this.remotePlayer.isConnected) {
-              navControls.style.display = 'flex';
-              this.currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
+        window['__onGCastApiAvailable'] = (isAvailable) => {
+            if (isAvailable) {
+                // Initialize Cast SDK
+                cast.framework.CastContext.getInstance().setOptions({
+                    receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                    autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+                });
+
+                // Replace placeholder with actual Cast button
+                const castButtonElement = document.createElement('google-cast-launcher');
+                castButtonElement.id = 'castbutton';
+                castButton.parentNode.replaceChild(castButtonElement, castButton);
+
+                this.remotePlayer = new cast.framework.RemotePlayer();
+                this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
+                
+                // Listen for connection changes
+                this.remotePlayerController.addEventListener(
+                    cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
+                    () => {
+                        const navControls = document.querySelector('.navigation-controls');
+                        if (this.remotePlayer.isConnected) {
+                            navControls.style.display = 'flex';
+                            this.currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
+                        } else {
+                            navControls.style.display = 'none';
+                            this.currentSession = null;
+                            console.log('Disconnected from Cast device');
+                        }
+                    }
+                );
+
+                // Add navigation controls event listeners
+                document.getElementById('prevStep')?.addEventListener('click', () => this.sendControl('previous'));
+                document.getElementById('nextStep')?.addEventListener('click', () => this.sendControl('next'));
             } else {
-              navControls.style.display = 'none';
-              this.currentSession = null;
-              console.log('Disconnected from Cast device');
+                console.error('Cast API not available');
+                castButton.style.display = 'none';
             }
-          }
-        );
-
-        // Add navigation controls event listeners
-        document.getElementById('prevStep').addEventListener('click', () => this.sendControl('previous'));
-        document.getElementById('nextStep').addEventListener('click', () => this.sendControl('next'));
-      }
-    };
-  }
-
-  // Send control command to receiver
-  async sendControl(action) {
-    if (this.currentSession) {
-      try {
-        await this.currentSession.sendMessage('urn:x-cast:com.cookbook.recipes', {
-          type: 'control',
-          action: action
-        });
-      } catch (error) {
-        console.error('Error sending control command:', error);
-      }
-    }
-  }
-
-  // Cast a recipe to the Cast device
-  async castRecipe(recipe) {
-    const castSession = cast.framework.CastContext.getInstance().getCurrentSession();
-    if (!castSession) {
-      console.log('No cast session available');
-      return;
+        };
     }
 
-    try {
-      await castSession.sendMessage('urn:x-cast:com.cookbook.recipes', {
-        type: 'recipe',
-        recipe: recipe
-      });
-      console.log('Recipe cast successfully');
-    } catch (error) {
-      console.error('Error casting recipe:', error);
+    // Send control command to receiver
+    async sendControl(action) {
+        if (this.currentSession) {
+            try {
+                await this.currentSession.sendMessage('urn:x-cast:com.cookbook.recipes', {
+                    type: 'control',
+                    action: action
+                });
+            } catch (error) {
+                console.error('Error sending control command:', error);
+            }
+        }
     }
-  }
+
+    // Cast a recipe to the Cast device
+    async castRecipe(recipe) {
+        const castSession = cast.framework.CastContext.getInstance().getCurrentSession();
+        if (!castSession) {
+            console.log('No cast session available');
+            return;
+        }
+
+        try {
+            await castSession.sendMessage('urn:x-cast:com.cookbook.recipes', {
+                type: 'recipe',
+                recipe: recipe
+            });
+            console.log('Recipe cast successfully');
+        } catch (error) {
+            console.error('Error casting recipe:', error);
+        }
+    }
 }
 
 // Initialize the Cast Manager
@@ -103,6 +119,21 @@ window.castManager = new CastManager();
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.cast-button {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #666666;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.cast-button:hover {
+    color: #f97316;
 }
 
 google-cast-launcher {
