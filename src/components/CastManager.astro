@@ -183,12 +183,29 @@ class CastManager {
                 const castButtonElement = document.createElement('google-cast-launcher');
                 castButtonElement.id = 'castbutton';
                 castButtonElement.className = 'cast-button';
+                castButtonElement.style.display = 'inline-flex';
+                castButtonElement.style.visibility = 'visible';
+                castButtonElement.style.opacity = '1';
                 
                 // Replace the existing button
                 existingButton.replaceWith(castButtonElement);
                 
+                // Force a reflow to ensure the button is visible
+                castButtonElement.offsetHeight;
+                
                 console.log('CastManager: Cast button added to container');
                 updateDebugInfo('Cast button created');
+
+                // Add a small delay and check if the button is visible
+                setTimeout(() => {
+                    const addedButton = document.getElementById('castbutton');
+                    if (addedButton) {
+                        const styles = window.getComputedStyle(addedButton);
+                        console.log('CastManager: Button visibility:', styles.visibility);
+                        console.log('CastManager: Button display:', styles.display);
+                        console.log('CastManager: Button opacity:', styles.opacity);
+                    }
+                }, 1000);
             } else {
                 console.error('CastManager: Could not find button container or existing button');
                 updateDebugInfo('Error: Container or button not found');
@@ -270,27 +287,29 @@ console.log('CastManager instance created');
     gap: 0.5rem;
     z-index: 100;
     position: relative;
-    min-height: 24px;
-    min-width: 24px;
-    padding: 4px;
+    min-height: 40px;
+    min-width: 40px;
+    padding: 8px;
 }
 
 .cast-button-wrapper {
-    width: 24px;
-    height: 24px;
+    width: 40px;
+    height: 40px;
     position: relative;
     z-index: 101;
-    min-height: 24px;
-    min-width: 24px;
+    min-height: 40px;
+    min-width: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
 }
 
 .cast-button {
-    width: 24px !important;
-    height: 24px !important;
-    padding: 0 !important;
+    width: 32px !important;
+    height: 32px !important;
+    padding: 4px !important;
     border: none !important;
     background: none !important;
     color: #666666 !important;
@@ -300,8 +319,8 @@ console.log('CastManager instance created');
     justify-content: center !important;
     position: relative !important;
     z-index: 102 !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
 }
 
 .cast-button:hover {
@@ -312,9 +331,9 @@ google-cast-launcher {
     --connected-color: #f97316 !important;
     --disconnected-color: #666666 !important;
     cursor: pointer !important;
-    width: 24px !important;
-    height: 24px !important;
-    padding: 0 !important;
+    width: 32px !important;
+    height: 32px !important;
+    padding: 4px !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -322,8 +341,8 @@ google-cast-launcher {
     visibility: visible !important;
     position: relative !important;
     z-index: 102 !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
     border: none !important;
     outline: none !important;
     background: transparent !important;
@@ -341,10 +360,10 @@ google-cast-launcher {
     white-space: nowrap;
     margin-top: 4px;
     padding: 2px 4px;
-    background-color: #fff;
+    background-color: rgba(255, 255, 255, 0.9);
     border: 1px solid #f97316;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 12px;
     color: #666666;
     z-index: 103;
 }
