@@ -116,6 +116,27 @@ class CastManager {
     initializeCastApi() {
         const castButton = document.getElementById('castbutton');
         
+        // Add script error handler before initializing
+        const loadCastSdk = () => {
+            if (!window.chrome || !window.chrome.cast) {
+                const script = document.createElement('script');
+                script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+                script.async = true;
+                script.onerror = (error) => {
+                    console.error('Error loading Cast SDK script:', error);
+                    if (castButton) castButton.style.display = 'none';
+                };
+                document.head.appendChild(script);
+            }
+        };
+
+        // Initialize Cast API once the DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadCastSdk);
+        } else {
+            loadCastSdk();
+        }
+        
         window['__onGCastApiAvailable'] = (isAvailable: boolean) => {
             if (isAvailable) {
                 try {
@@ -160,22 +181,18 @@ class CastManager {
                     console.log('Cast SDK initialized successfully');
                 } catch (error) {
                     console.error('Error initializing Cast SDK:', error);
-                    if (castButton) castButton.style.display = 'none';
+                    // Don't hide the button on initialization error, try to keep it visible
+                    console.log('Cast initialization error, but keeping button visible');
                 }
             } else {
                 console.error('Cast API not available');
-                if (castButton) castButton.style.display = 'none';
+                // Don't hide the button immediately, check if we're in a compatible environment
+                if (!window.chrome || !window.chrome.cast) {
+                    console.log('Chrome Cast API not supported in this browser');
+                    if (castButton) castButton.style.display = 'none';
+                }
             }
         };
-
-        // Add script error handler
-        const castScript = document.querySelector('script[src*="cast_sender.js"]');
-        if (castScript) {
-            castScript.addEventListener('error', (error) => {
-                console.error('Error loading Cast SDK script:', error);
-                if (castButton) castButton.style.display = 'none';
-            });
-        }
     }
 
     // Send control command to receiver
@@ -221,6 +238,7 @@ window.castManager = new CastManager();
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    z-index: 100;
 }
 
 .cast-button {
@@ -232,6 +250,9 @@ window.castManager = new CastManager();
     color: #666666;
     cursor: pointer;
     transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .cast-button:hover {
@@ -245,6 +266,9 @@ google-cast-launcher {
     width: 24px;
     height: 24px;
     padding: 0;
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }
 
 .navigation-controls {
