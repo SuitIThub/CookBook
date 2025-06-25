@@ -22,7 +22,90 @@
 </div>
 
 <script>
+interface Recipe {
+    title: string;
+    subtitle?: string;
+    ingredientGroups: IngredientGroup[];
+    preparationGroups: PreparationGroup[];
+}
+
+interface IngredientGroup {
+    id: string;
+    title?: string;
+    ingredients: Ingredient[];
+}
+
+interface Ingredient {
+    id: string;
+    name: string;
+    description?: string;
+    quantities: Quantity[];
+}
+
+interface Quantity {
+    amount: number;
+    unit: string;
+}
+
+interface PreparationGroup {
+    id: string;
+    title?: string;
+    steps: PreparationStep[];
+}
+
+interface PreparationStep {
+    id: string;
+    text: string;
+    linkedIngredients: LinkedIngredient[];
+    intermediateIngredients: IntermediateIngredient[];
+}
+
+interface LinkedIngredient {
+    ingredientId: string;
+    selectedQuantityIndex: number;
+    isIntermediate?: boolean;
+}
+
+interface IntermediateIngredient {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+declare global {
+    interface Window {
+        castManager: CastManager;
+        __onGCastApiAvailable: (isAvailable: boolean) => void;
+    }
+    namespace chrome.cast {
+        const media: { DEFAULT_MEDIA_RECEIVER_APP_ID: string };
+        enum AutoJoinPolicy { ORIGIN_SCOPED }
+    }
+    namespace cast.framework {
+        class CastContext {
+            static getInstance(): CastContext;
+            setOptions(options: { receiverApplicationId: string; autoJoinPolicy: chrome.cast.AutoJoinPolicy }): void;
+            getCurrentSession(): any;
+        }
+        class RemotePlayer {
+            isConnected: boolean;
+        }
+        class RemotePlayerController {
+            constructor(player: RemotePlayer);
+            addEventListener(event: string, callback: () => void): void;
+        }
+        enum RemotePlayerEventType {
+            IS_CONNECTED_CHANGED = 'isConnectedChanged'
+        }
+    }
+}
+
 class CastManager {
+    private remotePlayer: cast.framework.RemotePlayer | null;
+    private remotePlayerController: cast.framework.RemotePlayerController | null;
+    private currentSession: any | null;
+    private static readonly RECEIVER_APP_ID = 'CC1AD845'; // Default custom receiver ID
+
     constructor() {
         this.initializeCastApi();
         this.remotePlayer = null;
@@ -31,21 +114,22 @@ class CastManager {
     }
 
     initializeCastApi() {
-        // Create a placeholder button until the Cast SDK is loaded
         const castButton = document.getElementById('castbutton');
         
-        window['__onGCastApiAvailable'] = (isAvailable) => {
+        window['__onGCastApiAvailable'] = (isAvailable: boolean) => {
             if (isAvailable) {
-                // Initialize Cast SDK
+                // Initialize Cast SDK with custom receiver
                 cast.framework.CastContext.getInstance().setOptions({
-                    receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                    receiverApplicationId: CastManager.RECEIVER_APP_ID,
                     autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
                 });
 
                 // Replace placeholder with actual Cast button
                 const castButtonElement = document.createElement('google-cast-launcher');
                 castButtonElement.id = 'castbutton';
-                castButton.parentNode.replaceChild(castButtonElement, castButton);
+                if (castButton && castButton.parentNode) {
+                    castButton.parentNode.replaceChild(castButtonElement, castButton);
+                }
 
                 this.remotePlayer = new cast.framework.RemotePlayer();
                 this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
@@ -54,12 +138,12 @@ class CastManager {
                 this.remotePlayerController.addEventListener(
                     cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
                     () => {
-                        const navControls = document.querySelector('.navigation-controls');
-                        if (this.remotePlayer.isConnected) {
-                            navControls.style.display = 'flex';
+                        const navControls = document.querySelector('.navigation-controls') as HTMLElement;
+                        if (this.remotePlayer && this.remotePlayer.isConnected) {
+                            if (navControls) navControls.style.display = 'flex';
                             this.currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
                         } else {
-                            navControls.style.display = 'none';
+                            if (navControls) navControls.style.display = 'none';
                             this.currentSession = null;
                             console.log('Disconnected from Cast device');
                         }
@@ -71,13 +155,13 @@ class CastManager {
                 document.getElementById('nextStep')?.addEventListener('click', () => this.sendControl('next'));
             } else {
                 console.error('Cast API not available');
-                castButton.style.display = 'none';
+                if (castButton) castButton.style.display = 'none';
             }
         };
     }
 
     // Send control command to receiver
-    async sendControl(action) {
+    async sendControl(action: 'previous' | 'next') {
         if (this.currentSession) {
             try {
                 await this.currentSession.sendMessage('urn:x-cast:com.cookbook.recipes', {
@@ -91,7 +175,7 @@ class CastManager {
     }
 
     // Cast a recipe to the Cast device
-    async castRecipe(recipe) {
+    async castRecipe(recipe: Recipe) {
         const castSession = cast.framework.CastContext.getInstance().getCurrentSession();
         if (!castSession) {
             console.log('No cast session available');

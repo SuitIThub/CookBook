@@ -731,9 +731,10 @@ try {
 
     // Get recipe data
     const recipeData = {
-      title: document.querySelector('h1').textContent,
-      ingredients: Array.from(document.querySelectorAll('.ingredient-item')).map(el => el.textContent.trim()),
-      steps: Array.from(document.querySelectorAll('.preparation-step')).map(el => el.textContent.trim())
+      title: recipe.title,
+      subtitle: recipe.subtitle,
+      ingredientGroups: recipe.ingredientGroups,
+      preparationGroups: recipe.preparationGroups
     };
 
     // Add cast button click handler

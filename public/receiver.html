@@ -19,13 +19,21 @@
 
         .recipe-title {
             font-size: 2.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .recipe-subtitle {
+            font-size: 1.5rem;
             margin-bottom: 2rem;
             text-align: center;
+            color: #f97316;
         }
 
         .step-view {
             text-align: center;
             padding: 2rem;
+            margin-bottom: 2rem;
         }
 
         .step-number {
@@ -52,31 +60,83 @@
             color: #f97316;
         }
 
+        .ingredient-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .ingredient-group-title {
+            font-size: 1.2rem;
+            color: #f97316;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 0.25rem;
+        }
+
         .ingredient-list {
             columns: 2;
             font-size: 1.2rem;
             line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .ingredient-item {
+            break-inside: avoid;
+            margin-bottom: 0.5rem;
+        }
+
+        .ingredient-amount {
+            color: #f97316;
+            margin-right: 0.5rem;
+        }
+
+        .linked-ingredients {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(249, 115, 22, 0.1);
+            border-radius: 0.5rem;
+        }
+
+        .linked-ingredients-title {
+            font-size: 1rem;
+            color: #f97316;
+            margin-bottom: 0.5rem;
+        }
+
+        .linked-ingredient {
+            display: inline-block;
+            margin: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            background: rgba(249, 115, 22, 0.2);
+            border-radius: 0.25rem;
+            font-size: 1rem;
         }
     </style>
 </head>
 <body>
     <div class="recipe">
         <h1 class="recipe-title"></h1>
+        <div class="recipe-subtitle"></div>
         
         <div class="step-view">
             <div class="step-number"></div>
             <div class="step-content"></div>
+            <div class="linked-ingredients">
+                <div class="linked-ingredients-title">Benötigte Zutaten für diesen Schritt:</div>
+                <div class="linked-ingredients-list"></div>
+            </div>
         </div>
 
         <div class="ingredients">
-            <div class="ingredients-title">Ingredients Needed:</div>
-            <div class="ingredient-list"></div>
+            <div class="ingredients-title">Alle Zutaten:</div>
+            <div class="ingredient-groups"></div>
         </div>
     </div>
 
     <script>
         const context = cast.framework.CastReceiverContext.getInstance();
+        let currentRecipe = null;
         let currentStepIndex = 0;
+        let allSteps = [];
 
         // Handle custom messages
         context.addCustomMessageListener('urn:x-cast:com.cookbook.recipes', event => {
@@ -88,34 +148,136 @@
         });
 
         function displayRecipe(recipe) {
+            currentRecipe = recipe;
             document.querySelector('.recipe-title').textContent = recipe.title;
+            document.querySelector('.recipe-subtitle').textContent = recipe.subtitle || '';
             
-            // Display ingredients
-            const ingredientList = document.querySelector('.ingredient-list');
-            ingredientList.innerHTML = recipe.ingredients
-                .map(ingredient => `<div>${ingredient}</div>`)
-                .join('');
-
+            // Display all ingredients
+            displayIngredientGroups(recipe.ingredientGroups);
+            
+            // Flatten preparation steps for navigation
+            allSteps = flattenPreparationSteps(recipe.preparationGroups);
+            
             // Display first step
-            displayStep(0, recipe.steps);
+            displayStep(0);
         }
 
-        function displayStep(index, steps) {
+        function displayIngredientGroups(groups) {
+            const container = document.querySelector('.ingredient-groups');
+            container.innerHTML = '';
+
+            // First display ungrouped ingredients
+            const ungroupedGroup = groups.find(g => !g.title);
+            if (ungroupedGroup) {
+                displayIngredientList(container, ungroupedGroup.ingredients);
+            }
+
+            // Then display grouped ingredients
+            groups.filter(g => g.title).forEach(group => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'ingredient-group';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'ingredient-group-title';
+                titleDiv.textContent = group.title;
+                groupDiv.appendChild(titleDiv);
+                
+                displayIngredientList(groupDiv, group.ingredients);
+                container.appendChild(groupDiv);
+            });
+        }
+
+        function displayIngredientList(container, ingredients) {
+            const list = document.createElement('div');
+            list.className = 'ingredient-list';
+            
+            ingredients.forEach(ingredient => {
+                if ('name' in ingredient) {
+                    const item = document.createElement('div');
+                    item.className = 'ingredient-item';
+                    
+                    const quantity = ingredient.quantities[0];
+                    let quantityText = '';
+                    if (quantity.amount > 0 || quantity.unit) {
+                        quantityText = `<span class="ingredient-amount">${quantity.amount} ${quantity.unit}</span>`;
+                    }
+                    
+                    item.innerHTML = `${quantityText}${ingredient.name}`;
+                    if (ingredient.description) {
+                        item.innerHTML += `<div class="ingredient-description">${ingredient.description}</div>`;
+                    }
+                    
+                    list.appendChild(item);
+                }
+            });
+            
+            container.appendChild(list);
+        }
+
+        function flattenPreparationSteps(groups) {
+            return groups.flatMap(group => {
+                return group.steps.filter(step => 'text' in step);
+            });
+        }
+
+        function displayStep(index) {
             currentStepIndex = index;
+            const step = allSteps[index];
+            
             const stepNumber = document.querySelector('.step-number');
             const stepContent = document.querySelector('.step-content');
+            const linkedIngredientsContainer = document.querySelector('.linked-ingredients');
+            const linkedIngredientsList = document.querySelector('.linked-ingredients-list');
 
-            stepNumber.textContent = `Step ${index + 1} of ${steps.length}`;
-            stepContent.textContent = steps[index];
+            stepNumber.textContent = `Schritt ${index + 1} von ${allSteps.length}`;
+            stepContent.textContent = step.text;
+
+            // Display linked ingredients for this step
+            if (step.linkedIngredients && step.linkedIngredients.length > 0) {
+                linkedIngredientsContainer.style.display = 'block';
+                linkedIngredientsList.innerHTML = '';
+
+                step.linkedIngredients.forEach(link => {
+                    let ingredient;
+                    if (link.isIntermediate) {
+                        // Find intermediate ingredient from previous steps
+                        for (let i = 0; i < index; i++) {
+                            const prevStep = allSteps[i];
+                            if (prevStep.intermediateIngredients) {
+                                ingredient = prevStep.intermediateIngredients.find(int => int.id === link.ingredientId);
+                                if (ingredient) break;
+                            }
+                        }
+                    } else {
+                        // Find regular ingredient
+                        for (const group of currentRecipe.ingredientGroups) {
+                            ingredient = group.ingredients.find(ing => 'id' in ing && ing.id === link.ingredientId);
+                            if (ingredient) break;
+                        }
+                    }
+
+                    if (ingredient) {
+                        const span = document.createElement('span');
+                        span.className = 'linked-ingredient';
+                        if (!link.isIntermediate && ingredient.quantities && ingredient.quantities[link.selectedQuantityIndex]) {
+                            const qty = ingredient.quantities[link.selectedQuantityIndex];
+                            span.textContent = `${ingredient.name} (${qty.amount} ${qty.unit})`;
+                        } else {
+                            span.textContent = ingredient.name;
+                        }
+                        linkedIngredientsList.appendChild(span);
+                    }
+                });
+            } else {
+                linkedIngredientsContainer.style.display = 'none';
+            }
         }
 
         function handleControl(action) {
-            const steps = context.getData().recipe.steps;
-            
-            if (action === 'next' && currentStepIndex < steps.length - 1) {
-                displayStep(currentStepIndex + 1, steps);
+            if (action === 'next' && currentStepIndex < allSteps.length - 1) {
+                displayStep(currentStepIndex + 1);
             } else if (action === 'previous' && currentStepIndex > 0) {
-                displayStep(currentStepIndex - 1, steps);
+                displayStep(currentStepIndex - 1);
             }
         }
 
