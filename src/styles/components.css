@@ -621,4 +621,148 @@ input[type="number"] {
 
 .timer-context-hint {
   @apply text-xs text-gray-500 dark:text-gray-400 mt-1 opacity-75;
-} 
+}
+
+/* Modal Components */
+.modal {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-all duration-200;
+}
+
+.modal.hidden {
+  @apply opacity-0 pointer-events-none;
+}
+
+.modal:not(.hidden) {
+  @apply opacity-100;
+}
+
+.modal-overlay {
+  @apply absolute inset-0 bg-black bg-opacity-50 cursor-pointer;
+}
+
+.modal-content {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 transition-all duration-200 relative z-10;
+  animation: modal-scale-in 0.2s ease-out;
+}
+
+.modal-header {
+  @apply flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700;
+}
+
+.modal-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white;
+}
+
+.modal-header .modal-close {
+  @apply text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-2xl font-bold w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+.modal-footer .modal-close.btn {
+  /* Ensure modal-close doesn't override btn styles in footer */
+  @apply w-auto h-auto;
+}
+
+.modal-body {
+  @apply p-6;
+}
+
+.modal-footer {
+  @apply flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700;
+}
+
+.modal-footer .btn {
+  @apply min-w-[100px] whitespace-nowrap;
+}
+
+@keyframes modal-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Modal size variants */
+.modal-content.modal-sm {
+  @apply max-w-sm;
+}
+
+.modal-content.modal-lg {
+  @apply max-w-lg;
+}
+
+.modal-content.modal-xl {
+  @apply max-w-2xl;
+}
+
+/* Additional modal sizes and components */
+.modal-lg .modal-content {
+  @apply max-w-4xl;
+}
+
+/* Recipe card styles */
+.recipe-card {
+  @apply transition-all duration-200;
+}
+
+.recipe-card:hover {
+  @apply border-orange-500 shadow-md;
+}
+
+.recipe-item {
+  @apply transition-all duration-200;
+}
+
+.recipe-item:hover {
+  @apply shadow-sm;
+}
+
+/* Button color variants */
+.btn-blue {
+  @apply bg-blue-500 text-white border-blue-500 hover:bg-blue-600 hover:border-blue-600;
+}
+
+.dark .btn-blue {
+  @apply bg-blue-600 hover:bg-blue-700 border-blue-600 hover:border-blue-700;
+}
+
+/* Line clamp utility for recipe descriptions */
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Recipe ingredient highlighting */
+.shopping-item.highlighted,
+.shopping-item-group.highlighted {
+  @apply bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600 border-2 rounded-lg;
+  animation: highlight-pulse 0.5s ease-in-out;
+}
+
+.detail-item-highlighted {
+  @apply bg-blue-100 dark:bg-blue-800/50 border-l-4 border-blue-500 dark:border-blue-400 pl-2 rounded-r;
+  animation: highlight-pulse 0.5s ease-in-out;
+}
+
+.recipe-item.active {
+  @apply bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+ 

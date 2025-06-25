@@ -87,15 +87,28 @@ export interface Recipe {
 
 export interface ShoppingListItem {
   id: string;
-  ingredientName: string;
+  name: string;
+  description?: string;
   quantity: Quantity;
   isChecked?: boolean;
+  recipeId?: string; // Optional: verknüpft Item mit Rezept
+  recipeIngredientId?: string; // Optional: Original Ingredient ID aus dem Rezept
+}
+
+export interface ShoppingListRecipe {
+  id: string; // Recipe ID
+  title: string;
+  servings?: number;
+  isCompleted: boolean; // Ob alle Zutaten des Rezepts markiert sind
+  addedAt: Date;
 }
 
 export interface ShoppingList {
   id: string;
   title: string;
+  description?: string;
   items: ShoppingListItem[];
+  recipes: ShoppingListRecipe[]; // Hinzugefügte Rezepte
   createdAt: Date;
   updatedAt: Date;
 }

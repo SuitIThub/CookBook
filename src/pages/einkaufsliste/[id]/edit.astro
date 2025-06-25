@@ -1,0 +1,918 @@
+---
+export const prerender = false;
+import Layout from '../../../layouts/Layout.astro';
+import { db } from '../../../lib/database';
+import type { ShoppingList } from '../../../types/recipe';
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/einkaufslisten');
+}
+
+// Einkaufsliste laden
+let shoppingList: ShoppingList | null = null;
+try {
+  shoppingList = db.getShoppingList(id);
+} catch (error) {
+  console.error('Error loading shopping list:', error);
+}
+
+if (!shoppingList) {
+  return Astro.redirect('/einkaufslisten');
+}
+---
+
+<Layout title={`${shoppingList.title} bearbeiten - Einkaufsliste`}>
+  <div class="container-narrow">
+    <!-- Edit Header -->
+    <div class="flex-between mb-6">
+      <div>
+        <h1 class="heading-primary">Einkaufsliste bearbeiten</h1>
+        <p class="text-muted">Ändern Sie Titel, Beschreibung und Artikel der Einkaufsliste</p>
+      </div>
+      <div class="flex space-x-2">
+        <a href={`/einkaufsliste/${id}`} class="btn btn-ghost">
+          Abbrechen
+        </a>
+        <button id="save-edit-btn" class="btn btn-success">
+          Speichern
+        </button>
+      </div>
+    </div>
+
+    <!-- Edit Form -->
+    <form id="edit-shopping-list-form" class="space-y-6">
+      <!-- Basic Info -->
+      <div class="card">
+        <div class="card-content space-y-4">
+          <div>
+            <label for="edit-title" class="form-label">Titel</label>
+            <input 
+              type="text" 
+              id="edit-title" 
+              name="title"
+              class="form-input" 
+              value={shoppingList.title}
+              required
+            />
+          </div>
+          
+          <div>
+            <label for="edit-description" class="form-label">Beschreibung (optional)</label>
+            <textarea 
+              id="edit-description" 
+              name="description"
+              class="form-textarea" 
+              rows="3"
+              placeholder="Beschreibung der Einkaufsliste..."
+            >{shoppingList.description || ''}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recipe Management Section -->
+      <div id="recipes-edit-section" class="card" style="display: none;">
+        <div class="card-content">
+          <div class="flex-between mb-4">
+            <div>
+              <h2 class="heading-secondary">Verknüpfte Rezepte</h2>
+              <p class="text-sm text-muted mt-1">
+                Rezepte, die der Einkaufsliste hinzugefügt wurden. Das Entfernen eines Rezepts entfernt alle zugehörigen Zutaten.
+              </p>
+            </div>
+          </div>
+          <div id="recipes-edit-container" class="space-y-3">
+            <!-- Recipes will be populated by JavaScript -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Items Edit Section -->
+      <div class="card">
+        <div class="card-content">
+          <div class="flex-between mb-4">
+            <div>
+              <h2 class="heading-secondary">Artikel ({shoppingList.items.length})</h2>
+              <p class="text-sm text-muted mt-1">
+                Artikel mit <span class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">🍳 Rezept</span> Kennzeichnung können nicht einzeln bearbeitet werden. Entfernen Sie stattdessen das gesamte Rezept oben.
+              </p>
+            </div>
+            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+              <button type="button" id="add-item-edit-btn" class="btn btn-success btn-sm flex items-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                </svg>
+                <span>Artikel hinzufügen</span>
+              </button>
+              <button type="button" id="add-recipe-edit-btn" class="btn btn-blue btn-sm flex items-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                </svg>
+                <span>Rezept hinzufügen</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="items-edit-container" class="space-y-3">
+            {shoppingList.items.map((item, index) => {
+              const isRecipeItem = item.recipeId;
+              const disabledClass = isRecipeItem ? 'opacity-60 bg-gray-50 dark:bg-gray-800' : '';
+              const inputDisabled = isRecipeItem ? 'disabled' : '';
+              
+              return (
+                <div class={`item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4 ${disabledClass}`} 
+                     data-item-id={item.id} 
+                     data-item-index={index}
+                     data-recipe-id={item.recipeId || ''}>
+                  <div class="grid grid-cols-12 gap-3 items-end">
+                    <div class="col-span-4">
+                      <div class="flex items-center space-x-2 mb-1">
+                        <label class="form-label text-sm">Name *</label>
+                        {isRecipeItem && (
+                          <span class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded" title="Zutat aus Rezept - nicht einzeln editierbar">
+                            🍳 Rezept
+                          </span>
+                        )}
+                      </div>
+                      <input 
+                        type="text" 
+                        class="item-name form-input"
+                        value={item.name}
+                        placeholder="Artikel..."
+                        required={!isRecipeItem}
+                        disabled={isRecipeItem}
+                      />
+                    </div>
+                    <div class="col-span-2">
+                      <label class="form-label text-sm">Menge</label>
+                      <input 
+                        type="number" 
+                        class="item-amount form-input"
+                        value={item.quantity.amount}
+                        placeholder="0"
+                        step="0.1"
+                        min="0"
+                        disabled={isRecipeItem}
+                      />
+                    </div>
+                    <div class="col-span-2">
+                      <label class="form-label text-sm">Einheit</label>
+                      <select 
+                        class="item-unit form-input"
+                        disabled={isRecipeItem}
+                      >
+                        <option value="">Einheit wählen...</option>
+                        <option value={item.quantity.unit} selected>{item.quantity.unit}</option>
+                      </select>
+                    </div>
+                    <div class="col-span-3">
+                      <label class="form-label text-sm">Beschreibung</label>
+                      <input 
+                        type="text" 
+                        class="item-description form-input"
+                        value={item.description || ''}
+                        placeholder="Optional..."
+                        disabled={isRecipeItem}
+                      />
+                    </div>
+                    <div class="col-span-1 flex items-center justify-between">
+                      <div class="flex flex-col items-center space-y-1">
+                        <label class="form-label text-xs">✓</label>
+                        <input 
+                          type="checkbox" 
+                          class="item-checked w-5 h-5 text-green-600"
+                          checked={item.isChecked}
+                          disabled={isRecipeItem}
+                        />
+                      </div>
+                      {isRecipeItem ? (
+                        <div class="btn btn-ghost btn-sm text-gray-400 cursor-not-allowed" title="Rezeptzutat - Über Rezeptverwaltung löschen">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728"/>
+                          </svg>
+                        </div>
+                      ) : (
+                        <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {shoppingList.items.length === 0 && (
+            <div id="empty-items-message" class="text-center py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+              <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v11a2 2 0 002 2h5.586a1 1 0 00.707-.293l5.414-5.414a1 1 0 00.293-.707V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+              </svg>
+              <p class="text-muted">Noch keine Artikel hinzugefügt</p>
+              <p class="text-sm text-muted">Klicken Sie auf "Artikel hinzufügen" um zu beginnen</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- Danger Zone -->
+      <div class="card border-red-200 dark:border-red-800">
+        <div class="card-content">
+          <h3 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Gefährlicher Bereich</h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Das Löschen der Einkaufsliste kann nicht rückgängig gemacht werden.
+          </p>
+          <button type="button" id="delete-list-btn" class="btn btn-danger">
+            Einkaufsliste löschen
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Add Recipe Modal -->
+  <div id="add-recipe-edit-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h2 class="modal-title">Rezept hinzufügen</h2>
+        <button class="modal-close">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <div id="recipe-loading-edit" class="text-center py-8">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+          <p class="text-muted mt-2">Rezepte werden geladen...</p>
+        </div>
+        
+        <div id="recipe-list-edit" class="hidden">
+          <div class="mb-4">
+            <input 
+              type="text" 
+              id="recipe-search-edit" 
+              class="form-input" 
+              placeholder="Rezepte durchsuchen..."
+            />
+          </div>
+          
+          <div id="available-recipes-edit" class="space-y-3 max-h-96 overflow-y-auto">
+            <!-- Recipes will be populated by JavaScript -->
+          </div>
+          
+          <div id="no-recipes-found-edit" class="hidden text-center py-8">
+            <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 15c-2.34 0-4.467-.881-6.072-2.327a8.002 8.002 0 01-.344-10.854"/>
+            </svg>
+            <p class="text-muted">Keine Rezepte gefunden</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ shoppingListId: id, shoppingListData: shoppingList }}>
+    // Variables are defined via define:vars
+    let itemCounter = shoppingListData.items.length;
+    let availableUnits = [];
+
+    // Load available units
+    async function loadUnits() {
+      try {
+        const response = await fetch('/api/units');
+        if (response.ok) {
+          availableUnits = await response.json();
+          populateExistingUnitDropdowns();
+        }
+      } catch (error) {
+        console.error('Error loading units:', error);
+      }
+    }
+
+    // Populate unit dropdowns for existing items
+    function populateExistingUnitDropdowns() {
+      const unitSelects = document.querySelectorAll('.item-unit');
+      unitSelects.forEach(select => {
+        const currentValue = select.querySelector('option[selected]')?.value || '';
+        populateUnitDropdown(select, currentValue);
+      });
+    }
+
+    // Populate a unit dropdown with options
+    function populateUnitDropdown(selectElement, selectedValue = '') {
+      // Clear existing options except the first one
+      while (selectElement.children.length > 1) {
+        selectElement.removeChild(selectElement.lastChild);
+      }
+
+      // Add all available units
+      availableUnits.forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit.name;
+        option.textContent = unit.name;
+        if (unit.name === selectedValue) {
+          option.selected = true;
+        }
+        selectElement.appendChild(option);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadUnits();
+      const saveBtn = document.getElementById('save-edit-btn');
+      const addItemEditBtn = document.getElementById('add-item-edit-btn');
+      const itemsContainer = document.getElementById('items-edit-container');
+      const emptyMessage = document.getElementById('empty-items-message');
+      const deleteListBtn = document.getElementById('delete-list-btn');
+
+      // Recipe management
+      
+      // Get unique recipes from shopping list items
+      function getShoppingListRecipes() {
+        const recipeIds = new Set();
+        const recipes = [];
+        
+        shoppingListData.items.forEach(item => {
+          if (item.recipeId && !recipeIds.has(item.recipeId)) {
+            recipeIds.add(item.recipeId);
+            // Get recipe info from the recipes array if available, or create minimal info
+            const recipeInfo = shoppingListData.recipes?.find(r => r.id === item.recipeId) || {
+              id: item.recipeId,
+              title: `Rezept ${item.recipeId}`, // Fallback title
+              images: []
+            };
+            recipes.push(recipeInfo);
+          }
+        });
+        
+        return recipes;
+      }
+      
+      // Render recipe management section
+      function renderRecipeManagement() {
+        const recipesSection = document.getElementById('recipes-edit-section');
+        const recipesContainer = document.getElementById('recipes-edit-container');
+        
+        const recipes = getShoppingListRecipes();
+        
+        if (recipes.length === 0) {
+          recipesSection.style.display = 'none';
+          return;
+        }
+        
+        recipesSection.style.display = 'block';
+        
+        recipesContainer.innerHTML = recipes.map(recipe => {
+          const itemCount = shoppingListData.items.filter(item => item.recipeId === recipe.id).length;
+          
+          return `
+            <div class="recipe-edit-item border border-gray-300 dark:border-gray-600 rounded-lg p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex items-start space-x-3 flex-1 min-w-0">
+                  ${recipe.images && recipe.images.length > 0 
+                    ? `<img src="${recipe.images[0].url}" alt="${recipe.title}" class="w-12 h-12 object-cover rounded-lg">`
+                    : `<div class="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                         <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                         </svg>
+                       </div>`
+                  }
+                  <div class="flex-1 min-w-0">
+                    <h3 class="font-medium text-gray-900 dark:text-white truncate">${recipe.title}</h3>
+                    <p class="text-sm text-muted">${itemCount} Zutaten in der Liste</p>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <a href="/rezept/${recipe.id}" class="btn btn-sm btn-ghost" title="Rezept anzeigen" target="_blank">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                  </a>
+                  <button class="remove-recipe-edit-btn btn btn-sm btn-danger" data-recipe-id="${recipe.id}" title="Rezept und alle Zutaten entfernen">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        // Attach remove handlers
+        recipesContainer.querySelectorAll('.remove-recipe-edit-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const recipeId = btn.getAttribute('data-recipe-id');
+            const recipe = recipes.find(r => r.id === recipeId);
+            
+            if (confirm(`Möchten Sie das Rezept "${recipe?.title}" und alle zugehörigen Zutaten aus der Einkaufsliste entfernen?`)) {
+              removeRecipeFromList(recipeId);
+            }
+          });
+        });
+      }
+      
+      // Remove recipe and its items from the shopping list
+      function removeRecipeFromList(recipeId) {
+        // Remove items with this recipe ID from the DOM
+        const itemsToRemove = document.querySelectorAll(`[data-recipe-id="${recipeId}"]`);
+        itemsToRemove.forEach(item => item.remove());
+        
+        // Update data structure
+        shoppingListData.items = shoppingListData.items.filter(item => item.recipeId !== recipeId);
+        if (shoppingListData.recipes) {
+          shoppingListData.recipes = shoppingListData.recipes.filter(recipe => recipe.id !== recipeId);
+        }
+        
+        // Re-render recipe management and update UI
+        renderRecipeManagement();
+        updateEmptyMessage();
+        updateGroupingIndicators();
+      }
+      
+      // Initial render of recipe management
+      renderRecipeManagement();
+
+      // Function to add visual grouping indicators
+      function updateGroupingIndicators() {
+        const items = Array.from(document.querySelectorAll('.item-edit-row'));
+        const groups = new Map();
+        
+        // Group items by name and unit
+        items.forEach(row => {
+          const name = row.querySelector('.item-name')?.value?.toLowerCase().trim();
+          const unit = row.querySelector('.item-unit')?.value?.toLowerCase().trim();
+          
+          if (name && unit) {
+            const key = `${name}_${unit}`;
+            if (!groups.has(key)) {
+              groups.set(key, []);
+            }
+            groups.get(key).push(row);
+          }
+        });
+        
+        // Remove all existing grouping indicators
+        document.querySelectorAll('.grouping-indicator').forEach(indicator => {
+          indicator.remove();
+        });
+        
+        // Add grouping indicators for groups with multiple items
+        const colors = ['bg-blue-100 border-blue-200', 'bg-green-100 border-green-200', 'bg-purple-100 border-purple-200', 'bg-yellow-100 border-yellow-200', 'bg-pink-100 border-pink-200'];
+        let colorIndex = 0;
+        
+        groups.forEach((groupItems, key) => {
+          if (groupItems.length > 1) {
+            const color = colors[colorIndex % colors.length];
+            colorIndex++;
+            
+            groupItems.forEach((row, index) => {
+              const indicator = document.createElement('div');
+              indicator.className = `grouping-indicator absolute -left-2 top-0 w-1 h-full ${color.split(' ')[0]} rounded-l`;
+              indicator.title = `Wird mit ${groupItems.length - 1} anderen Artikel(n) zusammengefasst`;
+              
+              // Make the parent relative for positioning
+              row.style.position = 'relative';
+              row.appendChild(indicator);
+            });
+          }
+        });
+      }
+
+      // Update empty message visibility
+      function updateEmptyMessage() {
+        const itemRows = document.querySelectorAll('.item-edit-row');
+        if (emptyMessage) {
+          emptyMessage.style.display = itemRows.length === 0 ? 'block' : 'none';
+        }
+      }
+
+      // Add item in edit mode
+      addItemEditBtn?.addEventListener('click', () => {
+        const newItemId = `new-${itemCounter++}`;
+        const itemHtml = `
+          <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4" data-item-id="${newItemId}">
+            <div class="grid grid-cols-12 gap-3 items-end">
+              <div class="col-span-4">
+                <label class="form-label text-sm">Name *</label>
+                <input type="text" class="item-name form-input" placeholder="Artikel..." required />
+              </div>
+              <div class="col-span-2">
+                <label class="form-label text-sm">Menge</label>
+                <input type="number" class="item-amount form-input" placeholder="0" step="0.1" min="0" value="1" />
+              </div>
+              <div class="col-span-2">
+                <label class="form-label text-sm">Einheit</label>
+                <select class="item-unit form-input">
+                  <option value="">Einheit wählen...</option>
+                </select>
+              </div>
+              <div class="col-span-3">
+                <label class="form-label text-sm">Beschreibung</label>
+                <input type="text" class="item-description form-input" placeholder="Optional..." />
+              </div>
+              <div class="col-span-1 flex items-center justify-between">
+                <div class="flex flex-col items-center space-y-1">
+                  <label class="form-label text-xs">✓</label>
+                  <input type="checkbox" class="item-checked w-5 h-5 text-green-600" />
+                </div>
+                <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+        itemsContainer?.insertAdjacentHTML('beforeend', itemHtml);
+        updateEmptyMessage();
+        updateGroupingIndicators();
+        
+        // Populate unit dropdown for the new item
+        const newRow = itemsContainer?.lastElementChild;
+        const unitSelect = newRow?.querySelector('.item-unit');
+        if (unitSelect) {
+          populateUnitDropdown(unitSelect);
+        }
+        
+        // Focus on the new item's name field
+        const nameInput = newRow?.querySelector('.item-name');
+        nameInput?.focus();
+      });
+
+      // Delete item buttons
+      document.addEventListener('click', (e) => {
+        const target = e.target;
+        const deleteBtn = target.closest('.delete-item-btn');
+        
+        if (deleteBtn) {
+          const itemRow = deleteBtn.closest('.item-edit-row');
+          const itemName = itemRow?.querySelector('.item-name')?.value || 'diesem Artikel';
+          
+          if (confirm(`Möchten Sie "${itemName}" wirklich löschen?`)) {
+            itemRow?.remove();
+            updateEmptyMessage();
+            updateGroupingIndicators();
+          }
+        }
+      });
+
+      // Save changes
+      saveBtn?.addEventListener('click', async () => {
+        const title = document.getElementById('edit-title')?.value.trim();
+        const description = document.getElementById('edit-description')?.value.trim();
+
+        if (!title) {
+          alert('Bitte geben Sie einen Titel ein.');
+          document.getElementById('edit-title')?.focus();
+          return;
+        }
+
+        // Collect items
+        const items = Array.from(document.querySelectorAll('.item-edit-row')).map(row => {
+          const name = row.querySelector('.item-name')?.value.trim();
+          const amount = parseFloat(row.querySelector('.item-amount')?.value || '1');
+          const unit = row.querySelector('.item-unit')?.value.trim();
+          const description = row.querySelector('.item-description')?.value.trim();
+          const isChecked = row.querySelector('.item-checked')?.checked || false;
+          const itemId = row.getAttribute('data-item-id');
+          const recipeId = row.getAttribute('data-recipe-id');
+
+          const item = {
+            id: itemId?.startsWith('new-') ? undefined : itemId,
+            name,
+            quantity: { 
+              amount: amount || 1, 
+              unit: unit || 'Stück' 
+            },
+            description: description || undefined,
+            isChecked
+          };
+          
+          // Preserve recipe ID for recipe-based items
+          if (recipeId && recipeId !== '') {
+            item.recipeId = recipeId;
+          }
+          
+          return item;
+        }).filter(item => item.name); // Only filter for name, amount and unit are now optional
+
+        // Validate that at least required fields are filled (only name is required now)
+        const invalidItems = Array.from(document.querySelectorAll('.item-edit-row')).filter(row => {
+          const name = row.querySelector('.item-name')?.value.trim();
+          // Only check if name is not disabled (recipe items) and if name is empty
+          const isRecipeItem = row.querySelector('.item-name')?.disabled;
+          return !isRecipeItem && !name;
+        });
+
+        if (invalidItems.length > 0) {
+          alert('Bitte geben Sie einen Namen für alle Artikel ein.');
+          invalidItems[0].querySelector('.item-name')?.focus();
+          return;
+        }
+
+        try {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Speichert...';
+
+          const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title,
+              description: description || undefined,
+              items
+            }),
+          });
+
+          if (response.ok) {
+            window.location.href = `/einkaufsliste/${shoppingListId}`;
+          } else {
+            const error = await response.json();
+            alert(error.error || 'Fehler beim Speichern');
+          }
+        } catch (error) {
+          console.error('Error saving shopping list:', error);
+          alert('Fehler beim Speichern');
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Speichern';
+        }
+      });
+
+      // Delete list
+      deleteListBtn?.addEventListener('click', async () => {
+        if (confirm(`Möchten Sie die Einkaufsliste "${shoppingListData.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+          try {
+            deleteListBtn.disabled = true;
+            deleteListBtn.textContent = 'Löscht...';
+
+            const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+              method: 'DELETE',
+            });
+
+            if (response.ok) {
+              window.location.href = '/einkaufslisten';
+            } else {
+              const error = await response.json();
+              alert(error.error || 'Fehler beim Löschen');
+            }
+          } catch (error) {
+            console.error('Error deleting shopping list:', error);
+            alert('Fehler beim Löschen');
+          } finally {
+            deleteListBtn.disabled = false;
+            deleteListBtn.textContent = 'Einkaufsliste löschen';
+          }
+        }
+      });
+
+      // Add event listeners for input changes to update grouping indicators
+      document.addEventListener('input', (e) => {
+        const target = e.target;
+        if (target.matches('.item-name, .item-unit')) {
+          // Debounce the update to avoid too frequent updates
+          clearTimeout(window.groupingUpdateTimeout);
+          window.groupingUpdateTimeout = setTimeout(() => {
+            updateGroupingIndicators();
+          }, 300);
+        }
+      });
+
+      // Initialize empty message visibility and grouping indicators
+      updateEmptyMessage();
+      updateGroupingIndicators();
+
+      // Recipe management for edit mode
+      let availableRecipes = [];
+
+      // Helper functions for recipe data structure
+      function getRecipeIngredients(recipe) {
+        const ingredients = [];
+        
+        function extractIngredientsFromGroup(group) {
+          if (group.ingredients) {
+            group.ingredients.forEach(item => {
+              if (item.ingredients) {
+                // It's a nested group
+                extractIngredientsFromGroup(item);
+              } else if (item.name) {
+                // It's an ingredient
+                ingredients.push(item);
+              }
+            });
+          }
+        }
+        
+        if (recipe.ingredientGroups) {
+          recipe.ingredientGroups.forEach(group => extractIngredientsFromGroup(group));
+        }
+        
+        return ingredients;
+      }
+
+      function getRecipeIngredientCount(recipe) {
+        return getRecipeIngredients(recipe).length;
+      }
+
+      // Load recipes for modal
+      async function loadRecipesEdit() {
+        try {
+          const response = await fetch('/api/recipes');
+          if (response.ok) {
+            availableRecipes = await response.json();
+            populateRecipeModalEdit();
+          }
+        } catch (error) {
+          console.error('Error loading recipes:', error);
+        }
+      }
+
+      // Populate recipe modal for edit mode
+      function populateRecipeModalEdit() {
+        const recipeLoading = document.getElementById('recipe-loading-edit');
+        const recipeList = document.getElementById('recipe-list-edit');
+        const availableRecipesContainer = document.getElementById('available-recipes-edit');
+        const noRecipesFound = document.getElementById('no-recipes-found-edit');
+        
+        recipeLoading?.classList.add('hidden');
+        recipeList?.classList.remove('hidden');
+        
+        if (availableRecipes.length === 0) {
+          availableRecipesContainer.innerHTML = '';
+          noRecipesFound?.classList.remove('hidden');
+          return;
+        }
+        
+        noRecipesFound?.classList.add('hidden');
+        renderAvailableRecipesEdit(availableRecipes);
+      }
+
+      // Render available recipes for edit mode
+      function renderAvailableRecipesEdit(recipes) {
+        const container = document.getElementById('available-recipes-edit');
+        if (!container) return;
+        
+        container.innerHTML = recipes.map(recipe => `
+          <div class="recipe-card border border-gray-300 dark:border-gray-600 rounded-lg p-4 hover:border-orange-500 cursor-pointer transition-colors" data-recipe-id="${recipe.id}">
+            <div class="flex items-start space-x-3">
+                             ${recipe.images && recipe.images.length > 0 
+                 ? `<img src="${recipe.images[0].url}" alt="${recipe.title}" class="w-16 h-16 object-cover rounded-lg">`
+                : `<div class="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                     <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                     </svg>
+                   </div>`
+              }
+              <div class="flex-1 min-w-0">
+                <h3 class="font-medium text-gray-900 dark:text-white truncate">${recipe.title}</h3>
+                <p class="text-sm text-muted mt-1">${getRecipeIngredientCount(recipe)} Zutaten</p>
+                ${recipe.description ? `<p class="text-sm text-muted mt-1 line-clamp-2">${recipe.description}</p>` : ''}
+              </div>
+              <button class="add-recipe-to-edit-btn btn btn-sm btn-success" data-recipe-id="${recipe.id}">
+                Hinzufügen
+              </button>
+            </div>
+          </div>
+        `).join('');
+        
+        // Attach click handlers
+        container.querySelectorAll('.add-recipe-to-edit-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const recipeId = btn.getAttribute('data-recipe-id');
+            await addRecipeToEditList(recipeId);
+          });
+        });
+      }
+
+      // Search recipes in edit mode
+      const recipeSearchEdit = document.getElementById('recipe-search-edit');
+      recipeSearchEdit?.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filteredRecipes = availableRecipes.filter(recipe => 
+          recipe.title.toLowerCase().includes(searchTerm) ||
+          recipe.description?.toLowerCase().includes(searchTerm) ||
+          getRecipeIngredients(recipe).some(ing => ing.name.toLowerCase().includes(searchTerm))
+        );
+        renderAvailableRecipesEdit(filteredRecipes);
+      });
+
+      // Add recipe to edit list
+      async function addRecipeToEditList(recipeId) {
+        try {
+          const response = await fetch(`/api/recipes?id=${recipeId}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch recipe');
+          }
+          
+          const recipe = await response.json();
+          
+          // Add recipe ingredients as new items
+          const recipeIngredients = getRecipeIngredients(recipe);
+          recipeIngredients.forEach(ingredient => {
+            const newItemId = `new-${itemCounter++}`;
+            const itemHtml = `
+              <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4" data-item-id="${newItemId}" data-recipe-ingredient="true">
+                <div class="grid grid-cols-12 gap-3 items-end">
+                  <div class="col-span-4">
+                    <label class="form-label text-sm">Name *</label>
+                    <input type="text" class="item-name form-input" value="${ingredient.name}" placeholder="Artikel..." required />
+                    <div class="text-xs text-blue-600 mt-1">Aus Rezept: ${recipe.title}</div>
+                  </div>
+                  <div class="col-span-2">
+                    <label class="form-label text-sm">Menge *</label>
+                    <input type="number" class="item-amount form-input" value="${ingredient.quantities[0]?.amount || 1}" placeholder="0" step="0.1" min="0" required />
+                  </div>
+                  <div class="col-span-2">
+                    <label class="form-label text-sm">Einheit *</label>
+                    <select class="item-unit form-input" required>
+                      <option value="">Einheit wählen...</option>
+                      <option value="${ingredient.quantities[0]?.unit || 'Stück'}" selected>${ingredient.quantities[0]?.unit || 'Stück'}</option>
+                    </select>
+                  </div>
+                  <div class="col-span-3">
+                    <label class="form-label text-sm">Beschreibung</label>
+                    <input type="text" class="item-description form-input" value="${ingredient.description || ''}" placeholder="Optional..." />
+                  </div>
+                  <div class="col-span-1 flex items-center justify-between">
+                    <div class="flex flex-col items-center space-y-1">
+                      <label class="form-label text-xs">✓</label>
+                      <input type="checkbox" class="item-checked w-5 h-5 text-green-600" />
+                    </div>
+                    <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+            itemsContainer?.insertAdjacentHTML('beforeend', itemHtml);
+            
+            // Populate unit dropdown for the new item
+            const newRow = itemsContainer?.lastElementChild;
+            const unitSelect = newRow?.querySelector('.item-unit');
+            if (unitSelect) {
+              populateUnitDropdown(unitSelect);
+              // Set the correct unit
+              unitSelect.value = ingredient.quantities[0]?.unit || 'Stück';
+            }
+          });
+          
+          updateEmptyMessage();
+          updateGroupingIndicators();
+          
+          // Close modal
+          document.getElementById('add-recipe-edit-modal')?.classList.add('hidden');
+          
+          // Show success message
+          alert(`${recipeIngredients.length} Zutaten aus "${recipe.title}" wurden hinzugefügt!`);
+          
+        } catch (error) {
+          console.error('Error adding recipe:', error);
+          alert('Fehler beim Hinzufügen des Rezepts');
+        }
+      }
+
+      // Add recipe modal handling for edit mode
+      const addRecipeEditBtn = document.getElementById('add-recipe-edit-btn');
+      const addRecipeEditModal = document.getElementById('add-recipe-edit-modal');
+      const addRecipeEditCloseButtons = addRecipeEditModal?.querySelectorAll('.modal-close');
+
+      addRecipeEditBtn?.addEventListener('click', async () => {
+        addRecipeEditModal?.classList.remove('hidden');
+        
+        // Load recipes if not already loaded
+        if (availableRecipes.length === 0) {
+          await loadRecipesEdit();
+        }
+      });
+
+      addRecipeEditCloseButtons?.forEach(btn => {
+        btn.addEventListener('click', () => {
+          addRecipeEditModal?.classList.add('hidden');
+          document.getElementById('recipe-search-edit').value = '';
+          renderAvailableRecipesEdit(availableRecipes);
+        });
+      });
+
+      addRecipeEditModal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
+        addRecipeEditModal?.classList.add('hidden');
+        document.getElementById('recipe-search-edit').value = '';
+        renderAvailableRecipesEdit(availableRecipes);
+      });
+    });
+  </script>
+</Layout> 

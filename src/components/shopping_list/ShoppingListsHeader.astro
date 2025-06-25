@@ -1,0 +1,140 @@
+---
+interface Props {
+  listCount: number;
+}
+
+const { listCount } = Astro.props;
+---
+
+<div class="flex-between">
+  <div>
+    <h1 class="heading-primary mb-2">Einkaufslisten</h1>
+    <p class="text-muted">
+      {listCount === 0 
+        ? 'Noch keine Einkaufslisten vorhanden' 
+        : `${listCount} ${listCount === 1 ? 'Liste' : 'Listen'} verfügbar`
+      }
+    </p>
+  </div>
+  
+  <div class="flex space-x-3">
+    <!-- Create New Shopping List Button -->
+    <button id="create-shopping-list-btn" class="btn btn-success flex items-center space-x-2">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+      </svg>
+      <span>Neue Liste</span>
+    </button>
+  </div>
+</div>
+
+<!-- Create Shopping List Modal -->
+<div id="create-shopping-list-modal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 class="modal-title">Neue Einkaufsliste erstellen</h2>
+      <button class="modal-close">&times;</button>
+    </div>
+    
+    <form id="create-shopping-list-form" class="modal-body space-y-4">
+      <div>
+        <label for="shopping-list-title" class="form-label">Titel</label>
+        <input 
+          type="text" 
+          id="shopping-list-title" 
+          name="title"
+          class="form-input" 
+          placeholder="z.B. Wocheneinkauf, Grillparty, ..."
+          required
+        />
+      </div>
+      
+      <div>
+        <label for="shopping-list-description" class="form-label">Beschreibung (optional)</label>
+        <textarea 
+          id="shopping-list-description" 
+          name="description"
+          class="form-textarea" 
+          rows="3"
+          placeholder="Kurze Beschreibung der Einkaufsliste..."
+        ></textarea>
+      </div>
+    </form>
+    
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary modal-close">Abbrechen</button>
+      <button type="submit" form="create-shopping-list-form" class="btn btn-success">
+        Erstellen
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const createBtn = document.getElementById('create-shopping-list-btn');
+  const modal = document.getElementById('create-shopping-list-modal');
+  const form = document.getElementById('create-shopping-list-form') as HTMLFormElement;
+  const closeButtons = modal?.querySelectorAll('.modal-close');
+
+  // Open modal
+  createBtn?.addEventListener('click', () => {
+    modal?.classList.remove('hidden');
+    document.getElementById('shopping-list-title')?.focus();
+  });
+
+  // Close modal
+  closeButtons?.forEach(btn => {
+    btn.addEventListener('click', () => {
+      modal?.classList.add('hidden');
+      form?.reset();
+    });
+  });
+
+  // Close on overlay click
+  modal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
+    modal.classList.add('hidden');
+    form?.reset();
+  });
+
+  // Handle form submission
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(form);
+    const title = formData.get('title') as string;
+    const description = formData.get('description') as string;
+
+    if (!title.trim()) {
+      alert('Bitte geben Sie einen Titel ein.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/shopping-lists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || undefined
+        }),
+      });
+
+      if (response.ok) {
+        const newList = await response.json();
+        // Redirect to the new list
+        window.location.href = `/einkaufsliste/${newList.id}`;
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Fehler beim Erstellen der Einkaufsliste');
+      }
+    } catch (error) {
+      console.error('Error creating shopping list:', error);
+      alert('Fehler beim Erstellen der Einkaufsliste');
+    }
+  });
+});
+</script> 

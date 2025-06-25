@@ -28,7 +28,9 @@ const EXPECTED_SCHEMA = {
       columns: [
         { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
         { name: 'title', type: 'TEXT', nullable: false },
+        { name: 'description', type: 'TEXT', nullable: true },
         { name: 'items', type: 'TEXT', nullable: true },
+        { name: 'recipes', type: 'TEXT', nullable: true, defaultValue: "'[]'" },
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
       ]
@@ -352,6 +354,62 @@ function performDataMigrations(db) {
     console.log(`✅ Migrated time data for ${timeUpdatesCount} recipes to new format.`);
   } else {
     console.log(`✅ No recipes needed time data migration.`);
+  }
+
+  // Migration 6: Update shopping list items structure (ingredientName → name)
+  console.log('🛒 Migrating shopping list items to new structure...');
+  const shoppingLists = db.prepare('SELECT * FROM shopping_lists').all();
+  
+  let shoppingListUpdatesCount = 0;
+  
+  for (const list of shoppingLists) {
+    try {
+      const items = JSON.parse(list.items || '[]');
+      let needsUpdate = false;
+      
+      const updatedItems = items.map(item => {
+        if (item.ingredientName && !item.name) {
+          needsUpdate = true;
+          return {
+            id: item.id,
+            name: item.ingredientName,
+            description: item.description,
+            quantity: item.quantity,
+            isChecked: item.isChecked || false
+          };
+        }
+        return item;
+      });
+      
+      if (needsUpdate) {
+        const updateStmt = db.prepare('UPDATE shopping_lists SET items = ? WHERE id = ?');
+        updateStmt.run(JSON.stringify(updatedItems), list.id);
+        shoppingListUpdatesCount++;
+        console.log(`  ✅ Migrated items structure for shopping list: ${list.title}`);
+      }
+    } catch (error) {
+      console.log(`  ⚠️  Failed to migrate items for shopping list ${list.title}: ${error.message}`);
+    }
+  }
+  
+  if (shoppingListUpdatesCount > 0) {
+    console.log(`✅ Migrated item structure for ${shoppingListUpdatesCount} shopping lists.`);
+  } else {
+    console.log(`✅ No shopping lists needed item structure migration.`);
+  }
+
+  // Migration 7: Initialize recipes array for existing shopping lists
+  console.log('🍽️  Initializing recipes array for existing shopping lists...');
+  const updateRecipesResult = db.prepare(`
+    UPDATE shopping_lists 
+    SET recipes = '[]' 
+    WHERE recipes IS NULL OR recipes = ''
+  `).run();
+
+  if (updateRecipesResult.changes > 0) {
+    console.log(`✅ Initialized recipes array for ${updateRecipesResult.changes} shopping lists.`);
+  } else {
+    console.log(`✅ All shopping lists already have recipes array initialized.`);
   }
 
   // Add more data migrations here as needed...

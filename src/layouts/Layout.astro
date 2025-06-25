@@ -122,11 +122,11 @@ const { title } = Astro.props;
             <!-- Theme Toggle Button for Mobile -->
             <button id="theme-toggle-mobile" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
               <!-- Sun icon (visible in dark mode) -->
-              <svg id="theme-toggle-light-icon-mobile" class="hidden dark:block w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <svg id="theme-toggle-light-icon-mobile" class="hidden dark:block w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
               </svg>
               <!-- Moon icon (visible in light mode) -->
-              <svg id="theme-toggle-dark-icon-mobile" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <svg id="theme-toggle-dark-icon-mobile" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M17.293 13.293A8 8 0 616.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
               </svg>
             </button>
@@ -172,7 +172,59 @@ const { title } = Astro.props;
     <!-- Global Modal for notifications -->
     <Modal id="notification-modal" size="md" />
 
+    <!-- Warning Modal -->
+    <div id="warning-modal" class="fixed inset-0 z-50 hidden">
+      <!-- Backdrop -->
+      <div class="fixed inset-0 bg-black/50 backdrop-blur-sm"></div>
+      
+      <!-- Modal Container -->
+      <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+              <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              Wichtige Hinweise
+            </h3>
+            <button class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" id="close-warning-modal">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          
+          <!-- Content -->
+          <div class="p-4 overflow-y-auto flex-1">
+            <div class="space-y-3" id="warning-list">
+              <!-- Warnings will be inserted here -->
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div class="flex justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+            <button id="continue-to-recipe" class="btn btn-primary">
+              Verstanden, weiter zum Rezept
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
+      // Declare global functions
+      declare global {
+        interface Window {
+          showModal: (message: string, autoHide?: number) => Promise<void>;
+          showWarning: (message: string) => Promise<void>;
+          showInfo: (message: string) => Promise<void>;
+          showConfirm: (message: string) => Promise<boolean>;
+          showDeleteConfirm: (message: string) => Promise<boolean>;
+          showWarnings: (warnings: string[], onContinue: () => void) => void;
+        }
+      }
+
       // Theme toggle functionality
       function initializeTheme() {
         const themeToggle = document.getElementById('theme-toggle');
@@ -210,7 +262,10 @@ const { title } = Astro.props;
         openIcon.classList.remove('hidden');
         closeIcon.classList.add('hidden');
 
-        function toggleMobileMenu() {
+        function toggleMobileMenu(e: Event) {
+          e.preventDefault();
+          e.stopPropagation();
+          
           if (!mobileMenu || !openIcon || !closeIcon) return;
           
           const isHidden = mobileMenu.classList.contains('hidden');
@@ -228,7 +283,8 @@ const { title } = Astro.props;
           }
         }
 
-        mobileMenuToggle.addEventListener('click', toggleMobileMenu);
+        // Add click event with capture phase to ensure it runs before other handlers
+        mobileMenuToggle.addEventListener('click', toggleMobileMenu, { capture: true });
 
         // Close mobile menu when clicking on links
         const mobileLinks = mobileMenu.querySelectorAll('a, button');
@@ -256,283 +312,284 @@ const { title } = Astro.props;
         window.addEventListener('resize', handleOrientationChange);
       }
 
-      // Remove inline styles once CSS is loaded and mark as loaded
-      function cleanupInlineStyles() {
-        document.documentElement.classList.add('css-loaded');
-        // Small delay to ensure CSS transitions work properly
-        setTimeout(() => {
-          document.documentElement.style.backgroundColor = '';
-          document.documentElement.style.color = '';
-        }, 100);
+      // Initialize modal functionality
+      function initializeModal() {
+        console.log('Initializing modals...'); // Debug log
+        
+        const modal = document.getElementById('notification-modal') as HTMLElement;
+        const warningModal = document.getElementById('warning-modal') as HTMLElement;
+        const warningList = document.getElementById('warning-list') as HTMLElement;
+        const closeWarningModal = document.getElementById('close-warning-modal') as HTMLButtonElement;
+        const continueWarning = document.getElementById('continue-to-recipe') as HTMLButtonElement;
+        
+        // Debug log for element existence and properties
+        console.log('Modal elements found:', {
+          modal: modal?.id,
+          warningModal: warningModal?.id,
+          warningList: warningList?.id,
+          closeWarningModal: {
+            id: closeWarningModal?.id,
+            className: closeWarningModal?.className
+          },
+          continueWarning: {
+            id: continueWarning?.id,
+            className: continueWarning?.className
+          }
+        });
+        
+        if (!modal || !warningModal || !warningList || !closeWarningModal || !continueWarning) {
+          console.error('Required modal elements not found:', {
+            modal: !!modal,
+            warningModal: !!warningModal,
+            warningList: !!warningList,
+            closeWarningModal: !!closeWarningModal,
+            continueWarning: !!continueWarning
+          });
+          return;
+        }
+
+        // Add click handler to continue button immediately to test
+        continueWarning.addEventListener('click', (e) => {
+          console.log('Direct continue button click handler');
+        });
+
+        function showModal(message: string, autoHide = 0): Promise<void> {
+          console.log('Showing modal with message:', message); // Debug log
+          return new Promise((resolve) => {
+            modal.innerHTML = `
+              <div class="p-4">
+                <p class="text-gray-800 dark:text-gray-200">${message}</p>
+              </div>
+            `;
+            modal.classList.remove('hidden');
+
+            if (autoHide > 0) {
+              setTimeout(() => {
+                modal.classList.add('hidden');
+                resolve();
+              }, autoHide);
+            } else {
+              resolve();
+            }
+          });
+        }
+
+        function showWarnings(warnings: string[], onContinue: () => void): void {
+          console.log('Showing warnings modal with warnings:', warnings);
+          
+          // Create warning list HTML
+          warningList.innerHTML = warnings.map(warning => `
+            <div class="flex items-start p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+              <svg class="w-5 h-5 text-yellow-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              <span class="text-gray-800 dark:text-gray-200">${warning}</span>
+            </div>
+          `).join('');
+
+          // Show warning modal
+          requestAnimationFrame(() => {
+            document.body.classList.add('overflow-hidden');
+            warningModal.classList.remove('hidden');
+            console.log('Warning modal shown');
+            
+            // Debug click areas
+            console.log('Button dimensions:', {
+              continueWarning: continueWarning.getBoundingClientRect(),
+              closeWarningModal: closeWarningModal.getBoundingClientRect()
+            });
+          });
+
+          // Clean up previous event listeners
+          const cleanup = () => {
+            console.log('Cleaning up event listeners');
+            closeWarningModal.removeEventListener('click', handleClose);
+            continueWarning.removeEventListener('click', handleContinue);
+            document.removeEventListener('keydown', handleEscape);
+          };
+
+          // Handle close button
+          function handleClose(e: Event) {
+            console.log('Close button clicked', e.target);
+            e.preventDefault();
+            cleanup();
+            warningModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+          }
+
+          // Handle continue button
+          function handleContinue(e: Event) {
+            console.log('Continue button clicked', e.target);
+            e.preventDefault();
+            e.stopPropagation();
+            cleanup();
+            warningModal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            // Wrap the callback in requestAnimationFrame to ensure DOM updates are complete
+            requestAnimationFrame(() => {
+              console.log('Executing onContinue callback');
+              onContinue();
+            });
+          }
+
+          // Handle ESC key
+          function handleEscape(e: KeyboardEvent) {
+            if (e.key === 'Escape') {
+              handleClose(e);
+            }
+          }
+
+          // Add event listeners with direct and delegated approach
+          console.log('Adding event listeners');
+          
+          // Direct button click listeners
+          closeWarningModal.onclick = handleClose;
+          continueWarning.onclick = handleContinue;
+          
+          // Backup delegated listeners
+          warningModal.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            console.log('Modal click event:', {
+              target: target,
+              id: target.id,
+              classList: Array.from(target.classList)
+            });
+            
+            if (target.id === 'continue-to-recipe' || target.closest('#continue-to-recipe')) {
+              handleContinue(e);
+            } else if (target.id === 'close-warning-modal' || target.closest('#close-warning-modal')) {
+              handleClose(e);
+            }
+          });
+          
+          document.addEventListener('keydown', handleEscape);
+        }
+
+        function showWarning(message: string): Promise<void> {
+          console.log('Showing warning:', message); // Debug log
+          return showModal(`
+            <div class="flex items-center">
+              <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              <span>${message}</span>
+            </div>
+          `, 3000);
+        }
+
+        function showInfo(message: string): Promise<void> {
+          console.log('Showing info:', message); // Debug log
+          return showModal(`
+            <div class="flex items-center">
+              <svg class="w-6 h-6 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span>${message}</span>
+            </div>
+          `, 3000);
+        }
+
+        function showConfirm(message: string, onExport?: () => void): Promise<boolean> {
+          return new Promise((resolve) => {
+            modal.innerHTML = `
+              <div class="p-4">
+                <p class="text-gray-800 dark:text-gray-200 mb-4">${message}</p>
+                <div class="flex justify-end space-x-2">
+                  <button class="btn btn-secondary" id="cancel-btn">Abbrechen</button>
+                  <button class="btn btn-primary" id="confirm-btn">Bestätigen</button>
+                </div>
+              </div>
+            `;
+            modal.classList.remove('hidden');
+
+            const cancelBtn = modal.querySelector('#cancel-btn');
+            const confirmBtn = modal.querySelector('#confirm-btn');
+
+            function cleanup() {
+              modal.classList.add('hidden');
+              cancelBtn?.removeEventListener('click', handleCancel);
+              confirmBtn?.removeEventListener('click', handleConfirm);
+            }
+
+            function handleCancel() {
+              cleanup();
+              resolve(false);
+            }
+
+            function handleConfirm() {
+              cleanup();
+              if (onExport) onExport();
+              resolve(true);
+            }
+
+            cancelBtn?.addEventListener('click', handleCancel);
+            confirmBtn?.addEventListener('click', handleConfirm);
+          });
+        }
+
+        function showDeleteConfirm(message: string): Promise<boolean> {
+          return new Promise((resolve) => {
+            modal.innerHTML = `
+              <div class="p-4">
+                <p class="text-gray-800 dark:text-gray-200 mb-4">${message}</p>
+                <div class="flex justify-end space-x-2">
+                  <button class="btn btn-secondary" id="cancel-btn">Abbrechen</button>
+                  <button class="btn btn-danger" id="delete-btn">Löschen</button>
+                </div>
+              </div>
+            `;
+            modal.classList.remove('hidden');
+
+            const cancelBtn = modal.querySelector('#cancel-btn');
+            const deleteBtn = modal.querySelector('#delete-btn');
+
+            function cleanup() {
+              modal.classList.add('hidden');
+              cancelBtn?.removeEventListener('click', handleCancel);
+              deleteBtn?.removeEventListener('click', handleDelete);
+            }
+
+            function handleCancel() {
+              cleanup();
+              resolve(false);
+            }
+
+            function handleDelete() {
+              cleanup();
+              resolve(true);
+            }
+
+            cancelBtn?.addEventListener('click', handleCancel);
+            deleteBtn?.addEventListener('click', handleDelete);
+          });
+        }
+
+        // Expose modal functions globally
+        console.log('Exposing modal functions globally...'); // Debug log
+        window.showModal = showModal;
+        window.showWarning = showWarning;
+        window.showInfo = showInfo;
+        window.showConfirm = showConfirm;
+        window.showDeleteConfirm = showDeleteConfirm;
+        window.showWarnings = showWarnings;
+        
+        console.log('Modal functions exposed:', {
+          showModal: !!window.showModal,
+          showWarning: !!window.showWarning,
+          showInfo: !!window.showInfo,
+          showConfirm: !!window.showConfirm,
+          showDeleteConfirm: !!window.showDeleteConfirm,
+          showWarnings: !!window.showWarnings
+        });
       }
 
-      // Initialize theme toggle and mobile menu when DOM is loaded
+      // Initialize all functionality
       document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM Content Loaded - Initializing...'); // Debug log
         initializeTheme();
         initializeMobileMenu();
-        cleanupInlineStyles();
+        initializeModal();
       });
-
-      // Create recipe functionality
-      async function createNewRecipe() {
-        try {
-          const response = await fetch('/api/recipes?action=create-empty', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (response.ok) {
-            const newRecipe = await response.json();
-            // Redirect to the new recipe in edit mode
-            window.location.href = `/rezept/${newRecipe.id}?edit=true`;
-          } else {
-            console.error('Failed to create recipe');
-            if (window.showError) {
-              window.showError('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
-            } else {
-              alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
-            }
-          }
-        } catch (error) {
-          console.error('Error creating recipe:', error);
-          if (window.showError) {
-            window.showError('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
-          } else {
-            alert('Fehler beim Erstellen des Rezepts. Bitte versuchen Sie es erneut.');
-          }
-        }
-      }
-
-      // Initialize create recipe buttons when DOM is loaded
-      document.addEventListener('DOMContentLoaded', () => {
-        const createBtn = document.getElementById('create-recipe-btn');
-        const createBtnMobile = document.getElementById('create-recipe-btn-mobile');
-        
-        if (createBtn) {
-          createBtn.addEventListener('click', createNewRecipe);
-        }
-        if (createBtnMobile) {
-          createBtnMobile.addEventListener('click', createNewRecipe);
-        }
-      });
-
-      // Multi-Timer functionality will be handled by the MultiTimerManager component
-      // Placeholder for global timer function that will be overridden
-      (window as any).startTimer = (label: string, duration: number) => {
-        console.log('Timer functionality loading...');
-      };
-      
-      // Register service worker for PWA functionality
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('SW registered: ', registration);
-            })
-            .catch((registrationError) => {
-              console.log('SW registration failed: ', registrationError);
-            });
-        });
-      }
-    </script>
-
-    <!-- Modal Helper Functions -->
-    <script>
-      // Modal helper functions to replace alerts
-      const getIcon = (type) => {
-        switch (type) {
-          case 'success':
-            return `<svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>`;
-          case 'error':
-            return `<svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>`;
-          case 'warning':
-            return `<svg class="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-            </svg>`;
-          case 'info':
-          default:
-            return `<svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>`;
-        }
-      };
-
-      const getDefaultTitle = (type) => {
-        switch (type) {
-          case 'success':
-            return 'Erfolgreich';
-          case 'error':
-            return 'Fehler';
-          case 'warning':
-            return 'Warnung';
-          case 'info':
-          default:
-            return 'Information';
-        }
-      };
-
-      // Show modal message
-      const showModal = (options) => {
-        return new Promise((resolve) => {
-          const {
-            title = getDefaultTitle(options.type || 'info'),
-            message,
-            type = 'info',
-            buttons = [{ text: 'OK', type: 'primary' }],
-            autoHide
-          } = options;
-
-          // Get the global modal instance - the Modal component creates window.modal_notification-modal
-          let modal = window['modal_notification-modal'];
-          
-          if (!modal) {
-            console.error('Modal instance not found. Available modal instances:', 
-              Object.keys(window).filter(key => key.startsWith('modal_')));
-          }
-          
-          if (!modal) {
-            console.error('Modal not available, falling back to alert');
-            alert(message);
-            resolve();
-            return;
-          }
-
-          // Prepare buttons with resolve callback
-          const modalButtons = buttons.map(button => ({
-            ...button,
-            action: () => {
-              if (button.action) {
-                button.action();
-              }
-              modal.hide();
-              resolve();
-            }
-          }));
-
-          // Show modal
-          modal.show({
-            title,
-            content: message,
-            buttons: modalButtons,
-            icon: getIcon(type)
-          });
-
-          // Auto-hide if specified
-          if (autoHide) {
-            setTimeout(() => {
-              modal.hide();
-              resolve();
-            }, autoHide);
-          }
-        });
-      };
-
-      // Convenience functions
-      const showSuccess = (message, autoHide = 3000) => {
-        return showModal({
-          message,
-          type: 'success',
-          autoHide
-        });
-      };
-
-      const showError = (message) => {
-        return showModal({
-          message,
-          type: 'error'
-        });
-      };
-
-      const showWarning = (message) => {
-        return showModal({
-          message,
-          type: 'warning'
-        });
-      };
-
-      const showInfo = (message, autoHide = 3000) => {
-        return showModal({
-          message,
-          type: 'info',
-          autoHide
-        });
-      };
-
-      // Confirmation dialog (replaces confirm())
-      const showConfirm = (message, title = 'Bestätigung') => {
-        return new Promise((resolve) => {
-          showModal({
-            title,
-            message,
-            type: 'warning',
-            buttons: [
-              {
-                text: 'Abbrechen',
-                type: 'secondary',
-                action: () => resolve(false)
-              },
-              {
-                text: 'Bestätigen',
-                type: 'danger',
-                action: () => resolve(true)
-              }
-            ]
-          });
-        });
-      };
-
-      // Special confirmation dialog for recipe deletion with export option
-      const showDeleteConfirm = (message, title = 'Rezept löschen', onExport) => {
-        return new Promise((resolve) => {
-          const buttons = [
-            {
-              text: 'Abbrechen',
-              type: 'secondary',
-              action: () => resolve('cancel')
-            }
-          ];
-
-          // Add export button if export function is provided
-          if (onExport) {
-            buttons.push({
-              text: 'Exportieren',
-              type: 'primary',
-              action: () => {
-                onExport();
-                resolve('export');
-              }
-            });
-          }
-
-          buttons.push({
-            text: 'Löschen',
-            type: 'danger',
-            action: () => resolve('delete')
-          });
-
-          showModal({
-            title,
-            message,
-            type: 'warning',
-            buttons
-          });
-        });
-      };
-
-      // Make functions available globally
-      window.showModal = showModal;
-      window.showSuccess = showSuccess;
-      window.showError = showError;
-      window.showWarning = showWarning;
-      window.showInfo = showInfo;
-      window.showConfirm = showConfirm;
-      window.showDeleteConfirm = showDeleteConfirm;
     </script>
   </body>
 </html> 

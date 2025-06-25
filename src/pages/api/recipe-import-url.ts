@@ -35,6 +35,42 @@ export const POST: APIRoute = async ({ request }) => {
     // Convert to our recipe format
     const extractor = factory.getExtractorForUrl(url);
     const recipeData = extractor.convertToRecipeFormat(extractedData);
+
+    // Get extractor capabilities to generate warnings
+    const capabilities = extractor.getCapabilities();
+    const warnings: string[] = [];
+
+    // Always add ingredient verification warning
+    warnings.push('Bitte überprüfen Sie die extrahierten Zutaten auf Korrektheit und Vollständigkeit.');
+
+    // Add warnings based on experimental or unsupported features
+    if (!capabilities.supportsIngredientGroups) {
+      warnings.push('Die Zutaten wurden ohne Gruppierung importiert. Sie können diese manuell in Gruppen organisieren.');
+    }
+
+    if (!capabilities.supportsPreparationGroups) {
+      warnings.push('Die Zubereitungsschritte wurden ohne Gruppierung importiert. Sie können diese manuell in Gruppen organisieren.');
+    }
+
+    if (capabilities.supportsNutrition === 'experimental') {
+      warnings.push('Die Nährwertinformationen wurden experimentell extrahiert und sollten überprüft werden.');
+    }
+
+    if (capabilities.supportsTimeExtraction === 'experimental') {
+      warnings.push('Die Zeitangaben wurden experimentell extrahiert und sollten überprüft werden.');
+    }
+
+    if (capabilities.supportsDifficultyExtraction === 'experimental') {
+      warnings.push('Der Schwierigkeitsgrad wurde experimentell bestimmt und sollte überprüft werden.');
+    }
+
+    if (!capabilities.supportsImages && extractedData.imageUrl) {
+      warnings.push('Das Bild wurde möglicherweise nicht korrekt extrahiert und sollte überprüft werden.');
+    }
+
+    if (extractor.name === 'JSON-LD Generic Extractor') {
+      warnings.push('Es wurde der generische Extraktor verwendet. Bitte überprüfen Sie alle importierten Daten besonders sorgfältig.');
+    }
     
     // Convert imageUrl to images array for frontend compatibility
     const images: RecipeImage[] = [];
@@ -76,13 +112,14 @@ export const POST: APIRoute = async ({ request }) => {
       extractorUsed: extractor.name,
       sourceUrl: url,
       imported: 1,
-      recipeId: createdRecipe.id
+      recipeId: createdRecipe.id,
+      warnings: warnings
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
     
-  } catch (error: unknown) {
+  } catch (error) {
     console.error('Error importing recipe from URL:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     

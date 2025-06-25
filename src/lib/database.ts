@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
-import type { Recipe, ShoppingList, ShoppingListItem } from '../types/recipe';
+import type { Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe } from '../types/recipe';
+import { eventBus, EVENTS } from './events';
 
 class CookbookDatabase {
   private db: Database.Database;
@@ -54,7 +55,9 @@ class CookbookDatabase {
       CREATE TABLE IF NOT EXISTS shopping_lists (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
+        description TEXT,
         items TEXT,
+        recipes TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -237,29 +240,36 @@ class CookbookDatabase {
   }
 
   // Shopping list operations
-  createShoppingList(title: string): ShoppingList {
+  createShoppingList(title: string, description?: string): ShoppingList {
     const id = uuidv4();
     const now = new Date();
     const shoppingList: ShoppingList = {
       id,
       title,
+      description,
       items: [],
+      recipes: [],
       createdAt: now,
       updatedAt: now
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO shopping_lists (id, title, items, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO shopping_lists (id, title, description, items, recipes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       shoppingList.id,
       shoppingList.title,
+      shoppingList.description,
       JSON.stringify(shoppingList.items),
+      JSON.stringify(shoppingList.recipes),
       shoppingList.createdAt.toISOString(),
       shoppingList.updatedAt.toISOString()
     );
+
+    // Emit event for new shopping list
+    eventBus.emit(EVENTS.SHOPPING_LIST_CREATED, { list: shoppingList });
 
     return shoppingList;
   }
@@ -275,7 +285,9 @@ class CookbookDatabase {
     return {
       id: row.id,
       title: row.title,
+      description: row.description,
       items: JSON.parse(row.items),
+      recipes: row.recipes ? JSON.parse(row.recipes) : [],
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -288,7 +300,9 @@ class CookbookDatabase {
     return rows.map(row => ({
       id: row.id,
       title: row.title,
+      description: row.description,
       items: JSON.parse(row.items),
+      recipes: row.recipes ? JSON.parse(row.recipes) : [],
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     }));
@@ -308,18 +322,35 @@ class CookbookDatabase {
 
     const stmt = this.db.prepare(`
       UPDATE shopping_lists 
-      SET title = ?, items = ?, updated_at = ?
+      SET title = ?, description = ?, items = ?, recipes = ?, updated_at = ?
       WHERE id = ?
     `);
 
     stmt.run(
       updatedList.title,
+      updatedList.description,
       JSON.stringify(updatedList.items),
+      JSON.stringify(updatedList.recipes),
       updatedList.updatedAt.toISOString(),
       id
     );
 
+    // Emit event for shopping list update
+    eventBus.emit(EVENTS.SHOPPING_LIST_UPDATED, { listId: id, list: updatedList });
+
     return updatedList;
+  }
+
+  deleteShoppingList(id: string): boolean {
+    const stmt = this.db.prepare('DELETE FROM shopping_lists WHERE id = ?');
+    const result = stmt.run(id);
+    
+    if (result.changes > 0) {
+      // Emit event for shopping list deletion
+      eventBus.emit(EVENTS.SHOPPING_LIST_DELETED, { listId: id });
+    }
+    
+    return result.changes > 0;
   }
 
   addItemToShoppingList(listId: string, item: Omit<ShoppingListItem, 'id'>): ShoppingList | null {
@@ -335,6 +366,118 @@ class CookbookDatabase {
 
     list.items.push(newItem);
     return this.updateShoppingList(listId, { items: list.items });
+  }
+
+  // Recipe management for shopping lists
+  addRecipeToShoppingList(listId: string, recipeId: string): ShoppingList | null {
+    const shoppingList = this.getShoppingList(listId);
+    const recipe = this.getRecipe(recipeId);
+    
+    if (!shoppingList || !recipe) {
+      return null;
+    }
+
+    // Check if recipe is already added
+    if (shoppingList.recipes.some(r => r.id === recipeId)) {
+      return shoppingList; // Already added
+    }
+
+    // Add recipe to shopping list
+    const shoppingListRecipe: ShoppingListRecipe = {
+      id: recipeId,
+      title: recipe.title,
+      servings: recipe.metadata.servings,
+      isCompleted: false,
+      addedAt: new Date()
+    };
+
+    shoppingList.recipes.push(shoppingListRecipe);
+
+    // Extract and add all ingredients from recipe
+    const newItems: ShoppingListItem[] = [];
+    
+    const extractIngredients = (groups: any[]): void => {
+      groups.forEach(group => {
+        if (group.ingredients) {
+          group.ingredients.forEach((ingredient: any) => {
+            if (ingredient.ingredients) {
+              // Nested group
+              extractIngredients([ingredient]);
+            } else if (ingredient.name && ingredient.quantities) {
+              // Individual ingredient
+              ingredient.quantities.forEach((quantity: any) => {
+                const newItem: ShoppingListItem = {
+                  id: uuidv4(),
+                  name: ingredient.name,
+                  description: ingredient.description,
+                  quantity: {
+                    amount: quantity.amount,
+                    unit: quantity.unit
+                  },
+                  isChecked: false,
+                  recipeId: recipeId,
+                  recipeIngredientId: ingredient.id
+                };
+                newItems.push(newItem);
+              });
+            }
+          });
+        }
+      });
+    };
+
+    extractIngredients(recipe.ingredientGroups);
+    
+    // Add all new items to shopping list
+    shoppingList.items.push(...newItems);
+
+    return this.updateShoppingList(listId, { 
+      items: shoppingList.items, 
+      recipes: shoppingList.recipes 
+    });
+  }
+
+  removeRecipeFromShoppingList(listId: string, recipeId: string): ShoppingList | null {
+    const shoppingList = this.getShoppingList(listId);
+    if (!shoppingList) {
+      return null;
+    }
+
+    // Remove recipe from recipes list
+    shoppingList.recipes = shoppingList.recipes.filter(r => r.id !== recipeId);
+    
+    // Remove all items associated with this recipe
+    shoppingList.items = shoppingList.items.filter(item => item.recipeId !== recipeId);
+
+    return this.updateShoppingList(listId, { 
+      items: shoppingList.items, 
+      recipes: shoppingList.recipes 
+    });
+  }
+
+  toggleRecipeCompletion(listId: string, recipeId: string, isCompleted: boolean): ShoppingList | null {
+    const shoppingList = this.getShoppingList(listId);
+    if (!shoppingList) {
+      return null;
+    }
+
+    // Update recipe completion status
+    const recipe = shoppingList.recipes.find(r => r.id === recipeId);
+    if (recipe) {
+      recipe.isCompleted = isCompleted;
+    }
+
+    // Update all items from this recipe
+    shoppingList.items.forEach(item => {
+      if (item.recipeId === recipeId) {
+        item.isChecked = isCompleted;
+      }
+    });
+
+    return this.updateShoppingList(listId, { 
+      items: shoppingList.items, 
+      recipes: shoppingList.recipes 
+    });
   }
 
   // Ingredient autocomplete
