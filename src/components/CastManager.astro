@@ -118,46 +118,64 @@ class CastManager {
         
         window['__onGCastApiAvailable'] = (isAvailable: boolean) => {
             if (isAvailable) {
-                // Initialize Cast SDK with custom receiver
-                cast.framework.CastContext.getInstance().setOptions({
-                    receiverApplicationId: CastManager.RECEIVER_APP_ID,
-                    autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-                });
+                try {
+                    // Initialize Cast SDK with custom receiver
+                    const context = cast.framework.CastContext.getInstance();
+                    context.setOptions({
+                        receiverApplicationId: CastManager.RECEIVER_APP_ID,
+                        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+                    });
 
-                // Replace placeholder with actual Cast button
-                const castButtonElement = document.createElement('google-cast-launcher');
-                castButtonElement.id = 'castbutton';
-                if (castButton && castButton.parentNode) {
-                    castButton.parentNode.replaceChild(castButtonElement, castButton);
-                }
-
-                this.remotePlayer = new cast.framework.RemotePlayer();
-                this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
-                
-                // Listen for connection changes
-                this.remotePlayerController.addEventListener(
-                    cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
-                    () => {
-                        const navControls = document.querySelector('.navigation-controls') as HTMLElement;
-                        if (this.remotePlayer && this.remotePlayer.isConnected) {
-                            if (navControls) navControls.style.display = 'flex';
-                            this.currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
-                        } else {
-                            if (navControls) navControls.style.display = 'none';
-                            this.currentSession = null;
-                            console.log('Disconnected from Cast device');
-                        }
+                    // Replace placeholder with actual Cast button
+                    const castButtonElement = document.createElement('google-cast-launcher');
+                    castButtonElement.id = 'castbutton';
+                    if (castButton && castButton.parentNode) {
+                        castButton.parentNode.replaceChild(castButtonElement, castButton);
                     }
-                );
 
-                // Add navigation controls event listeners
-                document.getElementById('prevStep')?.addEventListener('click', () => this.sendControl('previous'));
-                document.getElementById('nextStep')?.addEventListener('click', () => this.sendControl('next'));
+                    this.remotePlayer = new cast.framework.RemotePlayer();
+                    this.remotePlayerController = new cast.framework.RemotePlayerController(this.remotePlayer);
+                    
+                    // Listen for connection changes
+                    this.remotePlayerController.addEventListener(
+                        cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
+                        () => {
+                            const navControls = document.querySelector('.navigation-controls') as HTMLElement;
+                            if (this.remotePlayer && this.remotePlayer.isConnected) {
+                                if (navControls) navControls.style.display = 'flex';
+                                this.currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
+                                console.log('Connected to Cast device');
+                            } else {
+                                if (navControls) navControls.style.display = 'none';
+                                this.currentSession = null;
+                                console.log('Disconnected from Cast device');
+                            }
+                        }
+                    );
+
+                    // Add navigation controls event listeners
+                    document.getElementById('prevStep')?.addEventListener('click', () => this.sendControl('previous'));
+                    document.getElementById('nextStep')?.addEventListener('click', () => this.sendControl('next'));
+
+                    console.log('Cast SDK initialized successfully');
+                } catch (error) {
+                    console.error('Error initializing Cast SDK:', error);
+                    if (castButton) castButton.style.display = 'none';
+                }
             } else {
                 console.error('Cast API not available');
                 if (castButton) castButton.style.display = 'none';
             }
         };
+
+        // Add script error handler
+        const castScript = document.querySelector('script[src*="cast_sender.js"]');
+        if (castScript) {
+            castScript.addEventListener('error', (error) => {
+                console.error('Error loading Cast SDK script:', error);
+                if (castButton) castButton.style.display = 'none';
+            });
+        }
     }
 
     // Send control command to receiver

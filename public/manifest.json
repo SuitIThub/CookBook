@@ -9,6 +9,14 @@
   "orientation": "portrait-primary",
   "categories": ["food", "lifestyle", "productivity"],
   "lang": "de",
+  "permissions": [
+    "https://www.gstatic.com/",
+    "https://www.googleapis.com/"
+  ],
+  "related_applications": [{
+    "platform": "chrome_cast",
+    "id": "3D0A6542"
+  }],
   "icons": [
     {
       "src": "/icons/icon-72x72.svg",
