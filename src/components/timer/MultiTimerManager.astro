@@ -399,6 +399,16 @@
       // Show in-page notification with actions
       this.showTimerCompleteNotification(timer);
       
+      // Show system notification with timer details
+      let notificationBody = timer.label;
+      if (timer.recipeName) {
+        notificationBody += `\nRezept: ${timer.recipeName}`;
+      }
+      if (timer.stepDescription) {
+        notificationBody += `\nSchritt: ${timer.stepDescription}`;
+      }
+      this.showSystemNotification('Timer abgelaufen!', notificationBody);
+      
       // Start continuous notification sound
       this.startContinuousAlarm(timer.id);
       
@@ -1341,6 +1351,11 @@
 
     private playNotificationSound() {
       try {
+        // Request notification permission if not granted
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+
         // Create a more prominent alarm sound
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         
@@ -1371,11 +1386,35 @@
         
       } catch (error) {
         console.warn('Could not play notification sound:', error);
-        // Fallback: try to use system notification sound
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('Timer abgelaufen!', { 
-            body: 'Ein Timer ist abgelaufen.',
-            icon: '/favicon.svg'
+      }
+
+      // Send system notification
+      this.showSystemNotification('Timer abgelaufen!', 'Ein Timer ist abgelaufen.');
+    }
+
+    private showSystemNotification(title: string, body: string) {
+      if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+          const notification = new Notification(title, {
+            body: body,
+            icon: '/favicon.svg',
+            tag: 'timer-notification', // Prevents duplicate notifications
+            requireInteraction: true, // Notification persists until user interacts with it
+            vibrate: [200, 100, 200], // Vibration pattern for mobile devices
+          });
+
+          // Handle notification click
+          notification.onclick = () => {
+            // Focus on the window and close the notification
+            window.focus();
+            notification.close();
+          };
+        } else if (Notification.permission === 'default') {
+          // Request permission
+          Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+              this.showSystemNotification(title, body);
+            }
           });
         }
       }
