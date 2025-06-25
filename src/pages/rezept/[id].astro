@@ -12,6 +12,7 @@ import PreparationSteps from '../../components/recipe/details/PreparationSteps.a
 import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
 import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro';
 import EditFormActions from '../../components/recipe/edit/EditFormActions.astro';
+import OfflineToggle from '../../components/recipe/details/OfflineToggle.astro';
 
 const { id } = Astro.params;
 
@@ -31,7 +32,10 @@ try {
 <Layout title={`${recipe.title} - Kochbuch`}>
   <div class="max-w-4xl mx-auto">
     <!-- Header Section -->
-    <RecipeHeader recipe={recipe} />
+    <div class="flex justify-between items-start mb-6">
+      <RecipeHeader recipe={recipe} />
+      <OfflineToggle recipeId={recipe.id} />
+    </div>
 
     <!-- View Mode Content -->
     <div id="view-content" class="space-y-6">

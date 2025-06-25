@@ -1,0 +1,153 @@
+---
+interface Props {
+  listId: string;
+}
+
+const { listId } = Astro.props;
+---
+
+<div class="offline-toggle" data-list-id={listId}>
+  <button
+    class="download-button flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+  >
+    <span class="online-text">Offline verfügbar machen</span>
+    <span class="offline-text hidden">Offline verfügbar</span>
+    <svg
+      class="online-icon w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+      ></path>
+    </svg>
+    <svg
+      class="offline-icon hidden w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M5 13l4 4L19 7"
+      ></path>
+    </svg>
+  </button>
+</div>
+
+<script>
+  interface IDBRequestEventTarget extends EventTarget {
+    result: IDBDatabase;
+    error: Error;
+  }
+
+  class OfflineToggle extends HTMLElement {
+    constructor() {
+      super();
+      this.init();
+    }
+
+    async init() {
+      const button = this.querySelector('button');
+      const listId = this.dataset.listId;
+      
+      if (!listId) return;
+
+      // Check if shopping list is already available offline
+      const isAvailableOffline = await this.checkOfflineAvailability(listId);
+      this.updateUI(isAvailableOffline);
+
+      button?.addEventListener('click', async () => {
+        if (!button.classList.contains('offline')) {
+          await this.makeAvailableOffline(listId);
+        }
+      });
+    }
+
+    async checkOfflineAvailability(listId: string): Promise<boolean> {
+      const db = await this.openDB();
+      return new Promise((resolve) => {
+        const transaction = db.transaction(['offlineShoppingLists'], 'readonly');
+        const store = transaction.objectStore('offlineShoppingLists');
+        const request = store.get(listId);
+
+        request.onsuccess = () => {
+          resolve(!!request.result);
+        };
+        request.onerror = () => {
+          resolve(false);
+        };
+      });
+    }
+
+    async makeAvailableOffline(listId: string) {
+      try {
+        // Fetch shopping list data
+        const response = await fetch(`/api/shopping-lists/${listId}`);
+        const shoppingList = await response.json();
+
+        // Send message to service worker to cache shopping list
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            action: 'CACHE_SHOPPING_LIST',
+            shoppingList
+          });
+        }
+
+        // Update UI
+        this.updateUI(true);
+      } catch (error) {
+        console.error('Failed to make shopping list available offline:', error);
+      }
+    }
+
+    updateUI(isOffline: boolean) {
+      const button = this.querySelector('button');
+      const onlineText = this.querySelector('.online-text');
+      const offlineText = this.querySelector('.offline-text');
+      const onlineIcon = this.querySelector('.online-icon');
+      const offlineIcon = this.querySelector('.offline-icon');
+
+      if (isOffline) {
+        button?.classList.add('offline');
+        onlineText?.classList.add('hidden');
+        offlineText?.classList.remove('hidden');
+        onlineIcon?.classList.add('hidden');
+        offlineIcon?.classList.remove('hidden');
+      } else {
+        button?.classList.remove('offline');
+        onlineText?.classList.remove('hidden');
+        offlineText?.classList.add('hidden');
+        onlineIcon?.classList.remove('hidden');
+        offlineIcon?.classList.add('hidden');
+      }
+    }
+
+    async openDB(): Promise<IDBDatabase> {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('offlineStorage', 1);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = (event) => {
+          const target = event.target as IDBRequestEventTarget;
+          resolve(target.result);
+        };
+      });
+    }
+  }
+
+  customElements.define('shopping-list-offline-toggle', OfflineToggle);
+</script>
+
+<style>
+  .offline-toggle button.offline {
+    @apply bg-green-50 border-green-500 text-green-700;
+  }
+</style> 
