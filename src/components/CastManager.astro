@@ -1,6 +1,7 @@
-<div class="cast-controls">
-    <div id="cast-button-container" class="cast-button-wrapper">
+<div class="cast-controls debug-border">
+    <div id="cast-button-container" class="cast-button-wrapper debug-border">
         <!-- Cast button will be inserted here -->
+        <div id="cast-debug" class="text-xs text-gray-500"></div>
     </div>
     <div class="navigation-controls" style="display: none;">
         <button id="prevStep" class="nav-button">
@@ -109,6 +110,14 @@ script.async = true;
 document.head.appendChild(script);
 console.log('Cast SDK script added to document head');
 
+// Add debug info update function
+function updateDebugInfo(message: string) {
+    const debugElement = document.getElementById('cast-debug');
+    if (debugElement) {
+        debugElement.textContent = message;
+    }
+}
+
 class CastManager {
     private remotePlayer: cast.framework.RemotePlayer | null;
     private remotePlayerController: cast.framework.RemotePlayerController | null;
@@ -118,6 +127,7 @@ class CastManager {
 
     constructor() {
         console.log('CastManager: Constructor called');
+        updateDebugInfo('Initializing...');
         this.remotePlayer = null;
         this.remotePlayerController = null;
         this.currentSession = null;
@@ -125,6 +135,7 @@ class CastManager {
         // Set up the callback before anything else
         window['__onGCastApiAvailable'] = (isAvailable: boolean) => {
             console.log('CastManager: Cast API availability callback, isAvailable:', isAvailable);
+            updateDebugInfo(`Cast API available: ${isAvailable}`);
             if (isAvailable && !this.initialized) {
                 this.initializeCastContext();
             }
@@ -133,33 +144,40 @@ class CastManager {
         // Check if API is already available
         if (window.chrome && window.chrome.cast) {
             console.log('CastManager: Cast API already available, initializing...');
+            updateDebugInfo('Cast API found, initializing...');
             this.initializeCastContext();
         } else {
             console.log('CastManager: Waiting for Cast API to become available...');
+            updateDebugInfo('Waiting for Cast API...');
         }
     }
 
     private initializeCastContext() {
         try {
             console.log('CastManager: Initializing Cast context');
+            updateDebugInfo('Setting up Cast context...');
             const context = cast.framework.CastContext.getInstance();
             context.setOptions({
                 receiverApplicationId: CastManager.RECEIVER_APP_ID,
                 autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
             });
             console.log('CastManager: Cast context options set');
+            updateDebugInfo('Cast context ready');
 
             // Create the Cast button in its container
             const container = document.getElementById('cast-button-container');
             if (container) {
                 console.log('CastManager: Found button container');
+                updateDebugInfo('Creating Cast button...');
                 const castButtonElement = document.createElement('google-cast-launcher');
                 castButtonElement.id = 'castbutton';
                 container.innerHTML = ''; // Clear any existing content
                 container.appendChild(castButtonElement);
                 console.log('CastManager: Cast button added to container');
+                updateDebugInfo('Cast button created');
             } else {
                 console.error('CastManager: Could not find button container');
+                updateDebugInfo('Error: No container found');
             }
 
             this.remotePlayer = new cast.framework.RemotePlayer();
@@ -186,8 +204,10 @@ class CastManager {
 
             this.initialized = true;
             console.log('CastManager: Cast SDK initialized successfully');
-        } catch (error) {
+            updateDebugInfo('Cast SDK ready');
+        } catch (error: any) {
             console.error('CastManager: Error initializing Cast SDK:', error);
+            updateDebugInfo(`Error: ${error?.message || 'Unknown error'}`);
         }
     }
 
@@ -236,6 +256,8 @@ console.log('CastManager instance created');
     gap: 0.5rem;
     z-index: 100;
     position: relative;
+    min-height: 24px;
+    min-width: 24px;
 }
 
 .cast-button-wrapper {
@@ -243,6 +265,8 @@ console.log('CastManager instance created');
     height: 24px;
     position: relative;
     z-index: 101;
+    min-height: 24px;
+    min-width: 24px;
 }
 
 google-cast-launcher {
@@ -263,6 +287,19 @@ google-cast-launcher {
     outline: none !important;
     background: transparent !important;
     pointer-events: auto !important;
+}
+
+.debug-border {
+    border: 1px dashed #f97316;
+}
+
+#cast-debug {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    white-space: nowrap;
+    margin-top: 4px;
+    font-size: 10px;
 }
 
 .navigation-controls {
