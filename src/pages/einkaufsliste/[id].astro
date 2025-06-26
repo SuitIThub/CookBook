@@ -46,6 +46,12 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           <div id="sync-status-container"></div>
         </div>
         <div class="flex space-x-2">
+          <button id="share-list-btn" class="btn btn-secondary flex items-center space-x-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"/>
+            </svg>
+            <span>Teilen</span>
+          </button>
           <button id="add-item-btn" class="btn btn-success flex items-center space-x-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
@@ -272,6 +278,40 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 
     document.addEventListener('DOMContentLoaded', async () => {
       await loadUnits();
+      
+      // Share button functionality
+      const shareButton = document.getElementById('share-list-btn');
+      shareButton?.addEventListener('click', async () => {
+        try {
+          const shareData = {
+            title: shoppingListData.title,
+            text: `Einkaufsliste: ${shoppingListData.title}`,
+            url: window.location.href
+          };
+
+          if (navigator.share && navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+          } else {
+            // Fallback: Copy link to clipboard
+            await navigator.clipboard.writeText(window.location.href);
+            
+            // Show feedback
+            const originalText = shareButton.innerHTML;
+            shareButton.innerHTML = `
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              <span>Link kopiert!</span>
+            `;
+            
+            setTimeout(() => {
+              shareButton.innerHTML = originalText;
+            }, 2000);
+          }
+        } catch (error) {
+          console.error('Error sharing:', error);
+        }
+      });
       
       // Function to group items by name and unit
       function groupItems(items) {
