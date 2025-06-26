@@ -39,6 +39,12 @@ const { listCount } = Astro.props;
         </svg>
         <span>Auswählen</span>
       </button>
+      <button id="quick-add-list-btn" class="btn btn-success flex items-center space-x-2 w-full sm:w-auto justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span>Schnell hinzufügen</span>
+      </button>
       <button id="create-shopping-list-btn" class="btn btn-success flex items-center space-x-2 w-full sm:w-auto justify-center">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
@@ -95,6 +101,7 @@ const { listCount } = Astro.props;
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const createBtn = document.getElementById('create-shopping-list-btn');
+  const quickAddBtn = document.getElementById('quick-add-list-btn');
   const modal = document.getElementById('create-shopping-list-modal');
   const form = document.getElementById('create-shopping-list-form') as HTMLFormElement;
   const closeButtons = modal?.querySelectorAll('.modal-close');
@@ -242,6 +249,39 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       console.error('Error creating shopping list:', error);
       alert('Fehler beim Erstellen der Einkaufsliste');
+    }
+  });
+
+  // Quick add functionality
+  quickAddBtn?.addEventListener('click', async () => {
+    try {
+      // Format current date as "DD.MM.YYYY"
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}.${month}.${year}`;
+      
+      const response = await fetch('/api/shopping-lists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: `Einkaufsliste ${dateStr}`,
+          description: ''
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create shopping list');
+      }
+
+      const newList = await response.json();
+      window.location.href = `/einkaufsliste/${newList.id}`;
+    } catch (error) {
+      console.error('Error creating quick shopping list:', error);
+      window.showError('Fehler beim Erstellen der Einkaufsliste');
     }
   });
 });
