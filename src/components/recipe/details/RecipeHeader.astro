@@ -52,6 +52,19 @@ declare global {
         )}
       </div>
       <div class="flex flex-col space-y-2 flex-shrink-0 min-w-fit">
+        <!-- Cast Button -->
+        <button
+          id="castButton"
+          class="hidden items-center space-x-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap"
+        >
+          <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M2 8V6C2 4.89543 2.89543 4 4 4H20C21.1046 4 22 4.89543 22 6V8" stroke-width="2" stroke-linecap="round"/>
+            <path d="M2 12V18C2 19.1046 2.89543 20 4 20H8" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 16L16 20L12 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 20H22" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>Auf TV streamen</span>
+        </button>
         <button id="edit-btn" class="flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -117,6 +130,19 @@ declare global {
       
       <!-- Action buttons - full width on mobile -->
       <div class="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-3">
+        <!-- Cast Button Mobile -->
+        <button
+          id="castButton-mobile"
+          class="hidden items-center justify-center space-x-2 px-4 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md text-sm font-medium transition-colors flex-1"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M2 8V6C2 4.89543 2.89543 4 4 4H20C21.1046 4 22 4.89543 22 6V8" stroke-width="2" stroke-linecap="round"/>
+            <path d="M2 12V18C2 19.1046 2.89543 20 4 20H8" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 16L16 20L12 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 20H22" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>Auf TV streamen</span>
+        </button>
         <button id="edit-btn-mobile" class="flex items-center justify-center space-x-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -232,82 +258,11 @@ declare global {
   </div>
 </div>
 
-<script>
-  // Define the event type
-  interface EditModeEvent extends Event {
-    detail: {
-      isEditMode: boolean;
-    };
-  }
-
-  // Function to update button visibility based on edit mode
-  function updateButtonVisibility(isEditMode: boolean) {
-    // Desktop buttons
-    const exportContainer = document.getElementById('export-container');
-    const addToShoppingBtn = document.getElementById('add-to-shopping');
-    const saveBtn = document.getElementById('save-btn');
-    
-    // Mobile buttons
-    const exportContainerMobile = document.getElementById('export-container-mobile');
-    const addToShoppingBtnMobile = document.getElementById('add-to-shopping-mobile');
-    const saveBtnMobile = document.getElementById('save-btn-mobile');
-    
-    if (isEditMode) {
-      // Hide export and shopping list buttons
-      exportContainer?.classList.add('hidden');
-      addToShoppingBtn?.classList.add('hidden');
-      exportContainerMobile?.classList.add('hidden');
-      addToShoppingBtnMobile?.classList.add('hidden');
-      
-      // Show save buttons
-      saveBtn?.classList.remove('hidden');
-      saveBtn?.classList.add('flex');
-      saveBtnMobile?.classList.remove('hidden');
-      saveBtnMobile?.classList.add('flex');
-    } else {
-      // Show export and shopping list buttons
-      exportContainer?.classList.remove('hidden');
-      addToShoppingBtn?.classList.remove('hidden');
-      exportContainerMobile?.classList.remove('hidden');
-      addToShoppingBtnMobile?.classList.remove('hidden');
-      
-      // Hide save buttons
-      saveBtn?.classList.add('hidden');
-      saveBtn?.classList.remove('flex');
-      saveBtnMobile?.classList.add('hidden');
-      saveBtnMobile?.classList.remove('flex');
-    }
-  }
-
-  // Listen for edit mode changes
-  document.addEventListener('editModeChanged', ((event: EditModeEvent) => {
-    const isEditMode = event.detail.isEditMode;
-    updateButtonVisibility(isEditMode);
-  }) as EventListener);
-
-  // Initial state check
-  const viewContent = document.getElementById('view-content');
-  const isInitiallyHidden = viewContent?.classList.contains('hidden') ?? false;
-  updateButtonVisibility(isInitiallyHidden);
-
-  // Initialize Cast functionality
-  window.__onGCastApiAvailable = function(isAvailable) {
-    if (isAvailable) {
-      initializeCastApi();
-    }
-  };
-
-  function initializeCastApi() {
-    const context = cast.framework.CastContext.getInstance();
-    context.setOptions({
-      receiverApplicationId: '3D0A6542',
-      autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-    });
-
-    // Show cast button once API is ready
-    const castButton = document.getElementById('castButton');
-    if (castButton) {
-      castButton.classList.remove('hidden');
-    }
-  }
+<script define:vars={{ recipe }}>
+  // Initialize handlers
+  import { initializeCastHandler } from './cast-handler';
+  import { initializeEditModeHandler } from './edit-mode-handler';
+  
+  initializeCastHandler(recipe);
+  initializeEditModeHandler();
 </script> 
