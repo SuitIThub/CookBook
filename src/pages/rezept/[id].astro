@@ -117,6 +117,44 @@ try {
     </div>
   </div>
 
+  <!-- Add navigation controls for cast mode -->
+  <div id="cast-controls" class="fixed bottom-0 left-0 right-0 bg-gray-900 text-white p-4 hidden">
+    <div class="max-w-4xl mx-auto flex justify-between items-center">
+      <button
+        id="prev-step"
+        class="btn btn-secondary"
+        onclick="sendMessage({type: 'PREVIOUS_STEP'})"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+        Vorheriger Schritt
+      </button>
+      
+      <button
+        id="next-step"
+        class="btn btn-primary"
+        onclick="sendMessage({type: 'NEXT_STEP'})"
+      >
+        Nächster Schritt
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <style>
+    #cast-controls {
+      transform: translateY(100%);
+      transition: transform 0.3s ease-in-out;
+    }
+    
+    #cast-controls.visible {
+      transform: translateY(0);
+    }
+  </style>
+
   <script define:vars={{ recipe }}>
     // Timer functionality
     document.querySelectorAll('.timer-trigger').forEach(button => {
@@ -724,5 +762,112 @@ try {
         await addRecipeToMultipleShoppingLists(selectedListIds);
       }
     });
+
+    // Cast functionality
+    let castSession = null;
+    let currentStepIndex = 0;
+
+    // Initialize Cast API
+    window.__onGCastApiAvailable = function(isAvailable) {
+      if (isAvailable) {
+        initializeCastApi();
+      }
+    };
+
+    function initializeCastApi() {
+      const context = cast.framework.CastContext.getInstance();
+      context.setOptions({
+        receiverApplicationId: '3D0A6542',
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+      });
+
+      // Show cast button once API is ready
+      const castButton = document.getElementById('castButton');
+      if (castButton) {
+        castButton.classList.remove('hidden');
+        castButton.addEventListener('click', () => {
+          if (!castSession) {
+            // Start a new session
+            cast.framework.CastContext.getInstance().requestSession().then(
+              function(session) {
+                onSessionStarted(session);
+              },
+              function(error) {
+                console.error('Error starting cast session:', error);
+              }
+            );
+          } else {
+            // Session exists, send current recipe
+            sendRecipeToReceiver();
+          }
+        });
+      }
+
+      // Listen for session changes
+      context.addEventListener(
+        cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+        function(event) {
+          switch (event.sessionState) {
+            case cast.framework.SessionState.SESSION_STARTED:
+              onSessionStarted(event.session);
+              break;
+            case cast.framework.SessionState.SESSION_ENDED:
+              castSession = null;
+              // Hide cast controls
+              const castControls = document.getElementById('cast-controls');
+              if (castControls) {
+                castControls.classList.remove('visible');
+                setTimeout(() => castControls.classList.add('hidden'), 300);
+              }
+              break;
+          }
+        }
+      );
+
+      // Add navigation controls
+      document.addEventListener('keydown', function(event) {
+        if (!castSession) return;
+
+        switch(event.key) {
+          case 'ArrowRight':
+          case 'Space':
+            sendMessage({ type: 'NEXT_STEP' });
+            break;
+          case 'ArrowLeft':
+            sendMessage({ type: 'PREVIOUS_STEP' });
+            break;
+        }
+      });
+    }
+
+    function onSessionStarted(session) {
+      castSession = session;
+      sendRecipeToReceiver();
+      
+      // Show cast controls
+      const castControls = document.getElementById('cast-controls');
+      if (castControls) {
+        castControls.classList.remove('hidden');
+        setTimeout(() => castControls.classList.add('visible'), 100);
+      }
+    }
+
+    function sendRecipeToReceiver() {
+      if (!castSession) return;
+      
+      sendMessage({
+        type: 'LOAD_RECIPE',
+        recipe: recipe
+      });
+    }
+
+    function sendMessage(message) {
+      if (!castSession) return;
+      
+      castSession.sendMessage('urn:x-cast:com.cookbook.cooking', message)
+        .catch(function(error) {
+          console.error('Error sending message to receiver:', error);
+        });
+    }
   </script>
 </Layout> 

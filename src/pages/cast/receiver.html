@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Kochbuch Cast Receiver</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2/dist/tailwind.min.css">
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col">
+  <div id="recipe-view" class="flex-1 flex flex-col items-center justify-center p-8">
+    <h1 id="recipe-title" class="text-4xl font-bold mb-8 text-center"></h1>
+    
+    <!-- Progress indicator -->
+    <div class="w-full max-w-2xl mb-8">
+      <div class="flex justify-between mb-2">
+        <span id="current-step" class="text-sm">Schritt 1/10</span>
+        <span id="current-group" class="text-sm"></span>
+      </div>
+      <div class="h-2 bg-gray-700 rounded-full">
+        <div id="progress-bar" class="h-full bg-green-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Step content -->
+    <div id="step-content" class="w-full max-w-2xl">
+      <div class="bg-gray-800 rounded-lg p-8">
+        <h2 id="step-text" class="text-2xl mb-6"></h2>
+        
+        <!-- Ingredients for this step -->
+        <div id="step-ingredients" class="text-gray-300"></div>
+        
+        <!-- Timer for this step if available -->
+        <div id="step-timer" class="hidden mt-6">
+          <button id="timer-button" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg flex items-center">
+            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span id="timer-text"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const context = cast.framework.CastReceiverContext.getInstance();
+    const playerManager = context.getPlayerManager();
+    
+    let currentRecipe = null;
+    let currentStepIndex = 0;
+    let totalSteps = 0;
+    let flattenedSteps = [];
+
+    // Flatten nested preparation groups into a single array of steps
+    function flattenPreparationGroups(groups, parentTitle = '') {
+      let steps = [];
+      groups.forEach(group => {
+        if ('steps' in group) { // It's a group
+          const groupTitle = group.title || parentTitle;
+          steps = steps.concat(flattenPreparationGroups(group.steps, groupTitle));
+        } else { // It's a step
+          steps.push({
+            ...group,
+            groupTitle: parentTitle
+          });
+        }
+      });
+      return steps;
+    }
+
+    // Update the UI with current step information
+    function updateStepDisplay() {
+      if (!currentRecipe || !flattenedSteps.length) return;
+
+      const step = flattenedSteps[currentStepIndex];
+      const progress = ((currentStepIndex + 1) / totalSteps) * 100;
+
+      // Update progress indicators
+      document.getElementById('current-step').textContent = `Schritt ${currentStepIndex + 1}/${totalSteps}`;
+      document.getElementById('current-group').textContent = step.groupTitle || '';
+      document.getElementById('progress-bar').style.width = `${progress}%`;
+
+      // Update step content
+      document.getElementById('recipe-title').textContent = currentRecipe.title;
+      document.getElementById('step-text').textContent = step.text;
+
+      // Update linked ingredients
+      const ingredientsHtml = step.linkedIngredients.map(link => {
+        const ingredient = findIngredientById(currentRecipe.ingredientGroups, link.ingredientId);
+        if (ingredient && ingredient.quantities && ingredient.quantities[link.selectedQuantityIndex]) {
+          const quantity = ingredient.quantities[link.selectedQuantityIndex];
+          return `<div class="mb-2">
+            <span class="font-medium">${quantity.amount} ${quantity.unit}</span>
+            ${ingredient.name}
+          </div>`;
+        }
+        return '';
+      }).join('');
+      document.getElementById('step-ingredients').innerHTML = ingredientsHtml;
+
+      // Update timer if available
+      const timerContainer = document.getElementById('step-timer');
+      const timerText = document.getElementById('timer-text');
+      if (step.timeInSeconds) {
+        timerContainer.classList.remove('hidden');
+        timerText.textContent = `Timer: ${Math.floor(step.timeInSeconds / 60)} Min`;
+      } else {
+        timerContainer.classList.add('hidden');
+      }
+    }
+
+    // Helper function to find an ingredient by ID in nested groups
+    function findIngredientById(groups, id) {
+      for (const group of groups) {
+        for (const item of group.ingredients) {
+          if ('ingredients' in item) { // It's a subgroup
+            const found = findIngredientById([item], id);
+            if (found) return found;
+          } else if (item.id === id) { // It's an ingredient
+            return item;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Handle custom messages from sender
+    context.addCustomMessageListener('urn:x-cast:com.cookbook.cooking', function(event) {
+      const message = event.data;
+      
+      if (message.type === 'LOAD_RECIPE') {
+        currentRecipe = message.recipe;
+        flattenedSteps = flattenPreparationGroups(currentRecipe.preparationGroups);
+        totalSteps = flattenedSteps.length;
+        currentStepIndex = 0;
+        updateStepDisplay();
+      } else if (message.type === 'NEXT_STEP' && currentStepIndex < totalSteps - 1) {
+        currentStepIndex++;
+        updateStepDisplay();
+      } else if (message.type === 'PREVIOUS_STEP' && currentStepIndex > 0) {
+        currentStepIndex--;
+        updateStepDisplay();
+      }
+    });
+
+    // Start the receiver
+    context.start();
+  </script>
+</body>
+</html> 

@@ -1,4 +1,5 @@
 ---
+/// <reference types="chromecast-caf-sender" />
 import type { Recipe } from '../../../types/recipe';
 import NutritionInfo from './NutritionInfo.astro';
 
@@ -27,6 +28,13 @@ function formatTime(minutes: number): string {
 // Helper function to calculate total time
 function getTotalTime(timeEntries: any[]): number {
   return timeEntries.reduce((total, entry) => total + entry.minutes, 0);
+}
+
+// Only declare the window property for the callback, rest comes from the types
+declare global {
+  interface Window {
+    __onGCastApiAvailable: (available: boolean, reason?: string) => void;
+  }
 }
 ---
 
@@ -281,4 +289,25 @@ function getTotalTime(timeEntries: any[]): number {
   const viewContent = document.getElementById('view-content');
   const isInitiallyHidden = viewContent?.classList.contains('hidden') ?? false;
   updateButtonVisibility(isInitiallyHidden);
+
+  // Initialize Cast functionality
+  window.__onGCastApiAvailable = function(isAvailable) {
+    if (isAvailable) {
+      initializeCastApi();
+    }
+  };
+
+  function initializeCastApi() {
+    const context = cast.framework.CastContext.getInstance();
+    context.setOptions({
+      receiverApplicationId: '3D0A6542',
+      autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+    });
+
+    // Show cast button once API is ready
+    const castButton = document.getElementById('castButton');
+    if (castButton) {
+      castButton.classList.remove('hidden');
+    }
+  }
 </script> 
