@@ -4,15 +4,6 @@
 
 <!-- Timer Sidebar for landscape mode -->
 <div id="timer-sidebar" class="timer-sidebar hidden">
-  <!-- Sidebar toggle button (expand/collapse) -->
-  <button id="sidebar-toggle" class="timer-sidebar-toggle hidden" title="Timer anzeigen">
-    <svg id="sidebar-toggle-icon" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-      <!-- Left arrow (for expanding) -->
-      <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
-    </svg>
-    <span class="timer-count-indicator" id="sidebar-timer-count"></span>
-  </button>
-  
   <!-- Expanded content -->
   <div id="timer-sidebar-content" class="timer-sidebar-content">
     <div class="timer-sidebar-header">
@@ -28,6 +19,15 @@
     </div>
   </div>
 </div>
+
+<!-- Sidebar toggle button (expand/collapse) -->
+<button id="sidebar-toggle" class="timer-sidebar-toggle hidden" title="Timer anzeigen">
+  <svg id="sidebar-toggle-icon" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+    <!-- Left arrow (for expanding) -->
+    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+  </svg>
+  <span class="timer-count-indicator" id="sidebar-timer-count"></span>
+</button>
 
 <!-- Timer Footer for portrait mode -->
 <div id="timer-footer" class="timer-footer hidden">
@@ -191,18 +191,12 @@
       
       const sidebar = document.getElementById('timer-sidebar');
       const footer = document.getElementById('timer-footer');
+      const toggleBtn = document.getElementById('sidebar-toggle');
       
-      // Always show timer UI for manual timer creation
-      if (isLandscape) {
-        sidebar?.classList.remove('hidden');
-        footer?.classList.add('hidden');
-        // Remove footer fallback classes when in landscape
-        document.body.classList.remove('timer-footer-active');
-        document.body.classList.remove('timer-footer-expanded-active');
-        // Start collapsed by default in landscape mode
-        this.collapseSidebar();
-      } else {
+      if (this.isPortraitMode) {
+        // Portrait mode
         sidebar?.classList.add('hidden');
+        toggleBtn?.classList.add('hidden');
         footer?.classList.remove('hidden');
         document.body.classList.remove('timer-sidebar-active');
         // Add fallback class for timer footer being active in portrait
@@ -217,7 +211,20 @@
           // Remove expanded class if we're collapsing
           document.body.classList.remove('timer-footer-expanded-active');
         }
+      } else {
+        // Landscape mode
+        sidebar?.classList.remove('hidden');
+        footer?.classList.add('hidden');
+        toggleBtn?.classList.remove('hidden');
+        // Remove footer fallback classes when in landscape
+        document.body.classList.remove('timer-footer-active');
+        document.body.classList.remove('timer-footer-expanded-active');
+        // Start collapsed by default in landscape mode
+        this.collapseSidebar();
       }
+      
+      // Always update the toggle button visibility based on orientation
+      this.updateSidebarToggleDisplay();
     }
 
     public addTimer(label: string, duration: number, recipeName?: string, stepDescription?: string, autoStart: boolean = false, recipeId?: string, stepId?: string): string {
@@ -541,10 +548,14 @@
       const activeTimers = Array.from(this.timers.values()).filter(t => !t.isCompleted);
       sidebarCountEl.textContent = activeTimers.length.toString();
       
-      // Show toggle button even with 0 timers for manual timer creation
+      // Only show toggle button in landscape mode
       const toggleBtn = document.getElementById('sidebar-toggle');
       if (toggleBtn) {
-        toggleBtn.style.display = 'flex';
+        if (this.isPortraitMode) {
+          toggleBtn.classList.add('hidden');
+        } else {
+          toggleBtn.classList.remove('hidden');
+        }
       }
     }
 

@@ -84,6 +84,12 @@ function getTotalTime(timeEntries: any[]): number {
           </svg>
           <span>Zur Einkaufsliste</span>
         </button>
+        <a href={`/rezept/${recipe.id}/kochen`} class="flex items-center space-x-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 8l-7 7-7-7"/>
+          </svg>
+          <span>Kochmodus</span>
+        </a>
         <!-- Save button (initially hidden) -->
         <button id="save-btn" class="hidden items-center space-x-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,6 +155,12 @@ function getTotalTime(timeEntries: any[]): number {
           </svg>
           <span>Zur Einkaufsliste</span>
         </button>
+        <a href={`/rezept/${recipe.id}/kochen`} class="flex items-center justify-center space-x-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 8l-7 7-7-7"/>
+          </svg>
+          <span>Kochmodus</span>
+        </a>
         <!-- Save button mobile (initially hidden) -->
         <button id="save-btn-mobile" class="hidden items-center justify-center space-x-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

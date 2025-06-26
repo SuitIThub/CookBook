@@ -54,6 +54,7 @@ export interface PreparationStep {
   linkedIngredients: LinkedIngredient[];
   intermediateIngredients: IntermediateIngredient[]; // New: intermediate ingredients for this step
   timeInSeconds?: number;
+  timer?: number; // Timer duration in minutes
 }
 
 export interface PreparationGroup {

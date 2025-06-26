@@ -1,0 +1,413 @@
+---
+import type { Recipe, PreparationStep, PreparationGroup, IngredientGroup, Ingredient, LinkedIngredient } from '../../../types/recipe';
+import MultiTimerManager from '../../timer/MultiTimerManager.astro';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+
+// Helper function to convert Celsius to gas mark
+function celsiusToGasMark(celsius: number): string {
+  const gasMarks = [
+    { temp: 135, mark: '1' },
+    { temp: 150, mark: '2' },
+    { temp: 165, mark: '3' },
+    { temp: 180, mark: '4' },
+    { temp: 190, mark: '5' },
+    { temp: 200, mark: '6' },
+    { temp: 220, mark: '7' },
+    { temp: 230, mark: '8' },
+    { temp: 240, mark: '9' },
+    { temp: 260, mark: '10' }
+  ];
+
+  // Find the closest gas mark
+  const closest = gasMarks.reduce((prev, curr) => {
+    return Math.abs(curr.temp - celsius) < Math.abs(prev.temp - celsius) ? curr : prev;
+  });
+
+  return closest.mark;
+}
+
+// Helper function to extract temperatures from text
+function extractTemperatures(text: string): { temp: number; original: string }[] {
+  const temperatures: { temp: number; original: string }[] = [];
+  
+  // Match patterns like "180°C", "180 °C", "180 Grad", "180°", "180 °"
+  const tempRegex = /(\d+)\s*(?:°|Grad|℃)(?:\s*C)?/g;
+  let match;
+
+  while ((match = tempRegex.exec(text)) !== null) {
+    const temp = parseInt(match[1]);
+    if (!isNaN(temp) && temp > 0 && temp < 300) { // Reasonable temperature range
+      temperatures.push({
+        temp,
+        original: match[0]
+      });
+    }
+  }
+
+  return temperatures;
+}
+
+// Helper function to process text and extract timers
+function processText(text: string): string {
+  return text.replace(
+    /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+    `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="$&">$1</button>`
+  );
+}
+
+// Flatten preparation steps from groups
+const flattenSteps = (groups: PreparationGroup[]): PreparationStep[] => {
+  const steps: PreparationStep[] = [];
+  groups.forEach(group => {
+    if (Array.isArray(group.steps)) {
+      group.steps.forEach(step => {
+        if ('text' in step) {
+          steps.push(step as PreparationStep);
+        } else if (Array.isArray((step as PreparationGroup).steps)) {
+          steps.push(...flattenSteps([step as PreparationGroup]));
+        }
+      });
+    }
+  });
+  return steps;
+};
+
+const allSteps = flattenSteps(recipe.preparationGroups);
+
+// Flatten ingredients from groups
+const flattenIngredients = (groups: IngredientGroup[]): Ingredient[] => {
+  const ingredients: Ingredient[] = [];
+  groups.forEach(group => {
+    if (Array.isArray(group.ingredients)) {
+      group.ingredients.forEach(ingredient => {
+        if ('name' in ingredient) {
+          ingredients.push(ingredient as Ingredient);
+        } else if (Array.isArray((ingredient as IngredientGroup).ingredients)) {
+          ingredients.push(...flattenIngredients([ingredient as IngredientGroup]));
+        }
+      });
+    }
+  });
+  return ingredients;
+};
+
+const allIngredients = flattenIngredients(recipe.ingredientGroups);
+---
+
+<div class="fixed inset-0 bg-white dark:bg-gray-900 z-50 flex flex-col overscroll-none">
+  <!-- Header with close button -->
+  <header class="flex justify-between items-center p-4 md:p-6 border-b border-gray-200 dark:border-gray-700">
+    <h1 class="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 dark:text-white">{recipe.title}</h1>
+    <a href={`/rezept/${recipe.id}`} class="p-2 md:p-3 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+      <svg class="w-6 h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </a>
+  </header>
+
+  <!-- Main content area -->
+  <main class="flex-1 relative overflow-hidden overscroll-none">
+    <div id="cooking-slides" class="h-full overscroll-none">
+      <!-- Ingredients slide -->
+      <div class="cooking-slide absolute inset-0 transition-transform duration-300 flex flex-col p-4 md:p-8">
+        <h2 class="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 dark:text-white mb-4 md:mb-6">Zutaten</h2>
+        <div class="flex-1 overflow-y-auto overscroll-none">
+          <ul class="space-y-3 md:space-y-4">
+            {allIngredients.map((ingredient) => (
+              <li class="flex items-center text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl text-gray-800 dark:text-gray-200">
+                {ingredient.quantities.map((quantity, index) => (
+                  <span class="font-medium">
+                    {index > 0 && ' oder '}
+                    {quantity.amount} {quantity.unit}
+                  </span>
+                ))}
+                <span class="ml-2 md:ml-3">{ingredient.name}</span>
+                {ingredient.description && (
+                  <span class="ml-2 md:ml-3 text-gray-500 dark:text-gray-400">({ingredient.description})</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <!-- Steps slides -->
+      {allSteps.map((step, index) => {
+        const temperatures = extractTemperatures(step.text);
+        const processedText = step.text.replace(
+          /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+          `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${step.text.replace(/"/g, '&quot;')}" data-step-id="step-${index}">$1</button>`
+        );
+        return (
+          <div class="cooking-slide absolute inset-0 translate-x-full transition-transform duration-300 flex flex-col p-4 md:p-8">
+            <div class="mb-4 md:mb-6 flex justify-between items-center">
+              <h2 class="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 dark:text-white">
+                Schritt {index + 1}/{allSteps.length}
+              </h2>
+              {step.timer && (
+                <button class="start-timer px-3 py-1.5 md:px-4 md:py-2 lg:px-6 lg:py-3 text-base sm:text-lg md:text-xl lg:text-2xl bg-blue-500 hover:bg-blue-600 text-white rounded-lg"
+                        data-minutes={step.timer}>
+                  Timer {step.timer} Min
+                </button>
+              )}
+            </div>
+            <div class="flex-1 overflow-y-auto">
+              <p class="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl text-gray-800 dark:text-gray-200 mb-4 md:mb-6 whitespace-pre-wrap leading-relaxed" set:html={processedText} />
+              
+              <div class="flex flex-wrap gap-2 md:gap-3">
+                {temperatures.map(temp => (
+                  <span class="inline-flex items-center px-3 py-1 md:px-4 md:py-1.5 rounded-full text-sm sm:text-base md:text-lg lg:text-xl bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100">
+                    {temp.original} (Gasstufe {celsiusToGasMark(temp.temp)})
+                  </span>
+                ))}
+              </div>
+
+              {temperatures.length > 0 && step.linkedIngredients && step.linkedIngredients.length > 0 && (
+                <div class="my-2 md:my-3"></div>
+              )}
+
+              {step.linkedIngredients && step.linkedIngredients.length > 0 && (
+                <div class="flex flex-wrap gap-2 md:gap-3">
+                  {step.linkedIngredients.map((link) => {
+                    const ingredient = allIngredients.find(i => i.id === link.ingredientId);
+                    if (!ingredient) return null;
+                    const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                    const shouldShowUnit = quantity.unit && 
+                      quantity.unit.trim() !== '' && 
+                      !['Stück', 'Stk.', 'Stk', 'stück', 'stk.', 'stk'].includes(quantity.unit.trim());
+                    
+                    return (
+                      <span class="inline-flex items-center px-3 py-1 md:px-4 md:py-1.5 rounded-full text-sm sm:text-base md:text-lg lg:text-xl bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-100">
+                        {quantity.amount > 0 && (
+                          <span class="font-medium">{quantity.amount}</span>
+                        )}
+                        {quantity.amount > 0 && shouldShowUnit && (
+                          <span class="ml-1">&nbsp;</span>
+                        )}
+                        {shouldShowUnit && (
+                          <span class="font-medium">{quantity.unit}</span>
+                        )}
+                        {(quantity.amount > 0 || shouldShowUnit) && (
+                          <span class="ml-1">&nbsp;</span>
+                        )}
+                        <span>{ingredient.name}</span>
+                        {ingredient.description && (
+                          <span class="text-orange-600 dark:text-orange-300 ml-1 md:ml-2">({ingredient.description})</span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {index < allSteps.length - 1 && (
+                <div class="portrait:block landscape:hidden mt-4 md:mt-6 p-3 md:p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <p class="text-sm sm:text-base md:text-lg lg:text-xl text-gray-500 dark:text-gray-400 mb-1 md:mb-2">Nächster Schritt:</p>
+                  <p class="text-base sm:text-lg md:text-xl lg:text-2xl text-gray-700 dark:text-gray-300 line-clamp-2">{allSteps[index + 1].text}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    <!-- Navigation buttons -->
+    <button id="prev-slide" class="absolute landscape:left-4 md:landscape:left-6 landscape:top-1/2 landscape:-translate-y-1/2 portrait:left-1/2 portrait:-translate-x-1/2 portrait:top-4 md:portrait:top-6 p-4 md:p-6 bg-gray-900/10 dark:bg-white/10 hover:bg-gray-900/20 dark:hover:bg-white/20 rounded-full transition-colors hidden">
+      <svg class="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-16 lg:h-16 text-gray-900 dark:text-white transform portrait:rotate-90 landscape:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7l7 7-7 7"/>
+      </svg>
+    </button>
+    <button id="next-slide" class="absolute landscape:right-4 md:landscape:right-6 landscape:top-1/2 landscape:-translate-y-1/2 portrait:left-1/2 portrait:-translate-x-1/2 portrait:bottom-24 md:portrait:bottom-28 p-4 md:p-6 bg-gray-900/10 dark:bg-white/10 hover:bg-gray-900/20 dark:hover:bg-white/20 rounded-full transition-colors hidden">
+      <svg class="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-16 lg:h-16 text-gray-900 dark:text-white transform portrait:rotate-90 landscape:rotate-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7l7 7-7 7"/>
+      </svg>
+    </button>
+  </main>
+</div>
+
+<script define:vars={{ recipe }}>
+  const slidesContainer = document.getElementById('cooking-slides');
+  const slides = document.querySelectorAll('.cooking-slide');
+  const prevButton = document.getElementById('prev-slide');
+  const nextButton = document.getElementById('next-slide');
+  let currentSlide = 0;
+
+  // Prevent pull-to-refresh
+  document.body.style.overflow = 'hidden';
+  document.body.style.position = 'fixed';
+  document.body.style.width = '100%';
+  document.body.style.height = '100%';
+
+  // Prevent all touch events from triggering refresh
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) return; // Allow pinch zoom
+    e.preventDefault();
+  }, { passive: false });
+
+  // Check for touch support
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+  // Show navigation buttons only if touch is not supported
+  if (!hasTouch) {
+    prevButton?.classList.remove('hidden');
+    nextButton?.classList.remove('hidden');
+  }
+
+  function updateSlidePositions() {
+    const isLandscape = window.innerWidth > window.innerHeight;
+    slides.forEach((slide, index) => {
+      const position = index - currentSlide;
+      if (isLandscape) {
+        slide.style.transform = `translateX(${position * 100}%)`;
+      } else {
+        slide.style.transform = `translateY(${position * 100}%)`;
+      }
+    });
+
+    // Update button visibility based on current slide
+    if (!hasTouch) {
+      if (prevButton) {
+        prevButton.style.visibility = currentSlide === 0 ? 'hidden' : 'visible';
+      }
+      if (nextButton) {
+        nextButton.style.visibility = currentSlide === slides.length - 1 ? 'hidden' : 'visible';
+      }
+    }
+  }
+
+  function navigateSlides(direction) {
+    if (
+      (direction < 0 && currentSlide > 0) ||
+      (direction > 0 && currentSlide < slides.length - 1)
+    ) {
+      currentSlide += direction;
+      updateSlidePositions();
+    }
+  }
+
+  // Touch/swipe handling
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let isSwiping = false;
+
+  slidesContainer?.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    isSwiping = false;
+  });
+
+  slidesContainer?.addEventListener('touchmove', (e) => {
+    if (!isSwiping) {
+      const deltaY = e.touches[0].clientY - touchStartY;
+      const deltaX = e.touches[0].clientX - touchStartX;
+      const isLandscape = window.innerWidth > window.innerHeight;
+      
+      // If we're in portrait mode and trying to swipe vertically
+      // or in landscape mode and trying to swipe horizontally
+      if ((!isLandscape && Math.abs(deltaY) > Math.abs(deltaX)) ||
+          (isLandscape && Math.abs(deltaX) > Math.abs(deltaY))) {
+        isSwiping = true;
+        e.preventDefault(); // Prevent browser refresh
+      }
+    }
+  }, { passive: false }); // Important for preventDefault to work
+
+  slidesContainer?.addEventListener('touchend', (e) => {
+    if (!isSwiping) return;
+    
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+    const isLandscape = window.innerWidth > window.innerHeight;
+
+    if (isLandscape) {
+      if (Math.abs(deltaX) > 50) {
+        navigateSlides(deltaX > 0 ? -1 : 1);
+      }
+    } else {
+      if (Math.abs(deltaY) > 50) {
+        navigateSlides(deltaY > 0 ? -1 : 1);
+      }
+    }
+  });
+
+  prevButton?.addEventListener('click', () => navigateSlides(-1));
+  nextButton?.addEventListener('click', () => navigateSlides(1));
+  window.addEventListener('resize', updateSlidePositions);
+
+  // Timer functionality
+  document.querySelectorAll('.timer-trigger').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const target = e.target;
+      const timeText = target.dataset.time || '';
+      const recipeName = target.dataset.recipeName || recipe.title;
+      const stepDescription = target.dataset.stepDescription || '';
+      
+      // Parse time string correctly to handle hours and minutes with decimals
+      function parseTimeToSeconds(timeStr) {
+        const str = timeStr.toLowerCase();
+        let totalMinutes = 0;
+        
+        // Match hours (Stunden, Std.) - support decimals like 1,5 or 1.5
+        const hourMatch = str.match(/(\d+(?:[,\.]\d+)?)\s*(?:stunden?|std\.?)/i);
+        if (hourMatch) {
+          const hours = parseFloat(hourMatch[1].replace(',', '.'));
+          totalMinutes += hours * 60;
+        }
+        
+        // Match minutes (Minuten, Min.) - support decimals like 2,5 or 2.5
+        const minuteMatch = str.match(/(\d+(?:[,\.]\d+)?)\s*(?:minuten?|min\.?)/i);
+        if (minuteMatch) {
+          const minutes = parseFloat(minuteMatch[1].replace(',', '.'));
+          totalMinutes += minutes;
+        }
+        
+        // If no specific unit found, assume minutes and support decimals
+        if (totalMinutes === 0) {
+          const numberMatch = str.match(/(\d+(?:[,\.]\d+)?)/);
+          if (numberMatch) {
+            totalMinutes = parseFloat(numberMatch[1].replace(',', '.'));
+          }
+        }
+        
+        return Math.round(totalMinutes * 60); // Convert to seconds and round
+      }
+      
+      const seconds = parseTimeToSeconds(timeText);
+      
+      // Call timer with recipe context
+      window.startTimer(timeText, seconds, recipeName, stepDescription, true);
+    });
+  });
+
+  // Initialize
+  updateSlidePositions();
+
+  // Request fullscreen when entering cooking mode
+  document.addEventListener('DOMContentLoaded', () => {
+    const enterFullscreen = async () => {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (error) {
+        console.warn('Could not enter fullscreen mode:', error);
+      }
+    };
+    enterFullscreen();
+  });
+
+  // Exit fullscreen when leaving cooking mode
+  window.addEventListener('beforeunload', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
+  });
+</script>

@@ -1,0 +1,18 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import CookingMode from '../../../components/recipe/cooking/CookingMode.astro';
+import { CookbookDatabase } from '../../../lib/database';
+
+const { id } = Astro.params;
+const db = new CookbookDatabase();
+const recipe = db.getRecipe(id);
+db.close();
+
+if (!recipe) {
+  return Astro.redirect('/');
+}
+---
+
+<Layout title={`${recipe.title} - Kochmodus`}>
+  <CookingMode recipe={recipe} />
+</Layout> 

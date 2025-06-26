@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe } from '../types/recipe';
 import { eventBus, EVENTS } from './events';
 
-class CookbookDatabase {
+export class CookbookDatabase {
   private db: Database.Database;
 
   constructor(dbPath: string = './cookbook.db') {
