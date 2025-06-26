@@ -1,15 +1,23 @@
 ---
 import type { Recipe } from '../../types/recipe';
 import RecipeImageCarousel from './RecipeImageCarousel.astro';
+import AddToShoppingListModal from '../shopping_list/AddToShoppingListModal.astro';
 
 interface Props {
   recipe: Recipe;
 }
 
 const { recipe } = Astro.props;
+
+// Get the first 3 tags and count remaining
+const displayTags = recipe.tags?.slice(0, 3) || [];
+const remainingTagsCount = recipe.tags ? Math.max(0, recipe.tags.length - 3) : 0;
+
+// Calculate total cooking time
+const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + entry.minutes, 0) || 0;
 ---
 
-<div class="recipe-card group relative" data-recipe-id={recipe.id}>
+<div class="recipe-card group relative" data-recipe-id={recipe.id} data-category={recipe.category || ''}>
   <!-- Selection Checkbox -->
   <div class="selection-indicator absolute top-2 left-2 z-10 opacity-0 md:group-hover:opacity-100 transition-opacity">
     <input 
@@ -23,88 +31,126 @@ const { recipe } = Astro.props;
   <RecipeImageCarousel images={recipe.images || []} />
   
   <!-- Recipe Content -->
-  <div class="card-content">
+  <div class="card-content p-4">
     <div class="mb-3">
-      <h3 class="heading-tertiary mb-1">
-        <a href={`/rezept/${recipe.id}`} class="recipe-link hover:text-orange-600 dark:hover:text-orange-400 transition-colors">
+      <a href={`/rezept/${recipe.id}`} class="block group recipe-link" data-recipe-link>
+        <h3 class="heading-tertiary mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
           {recipe.title}
-        </a>
-      </h3>
-      {recipe.subtitle && (
-        <p class="text-sm text-muted">{recipe.subtitle}</p>
-      )}
+        </h3>
+        {recipe.subtitle && (
+          <p class="text-sm text-muted">{recipe.subtitle}</p>
+        )}
+      </a>
     </div>
     
     {recipe.description && (
-      <p class="text-body text-sm mb-4 line-clamp-2">{recipe.description}</p>
+      <p class="text-body text-sm mb-3 line-clamp-2">{recipe.description}</p>
     )}
-    
+
+    <!-- Recipe Tags -->
+    {(displayTags.length > 0 || remainingTagsCount > 0) && (
+      <div class="flex flex-wrap gap-1.5 mb-4">
+        {displayTags.map((tag) => (
+          <span class="tag">{tag}</span>
+        ))}
+        {remainingTagsCount > 0 && (
+          <span class="tag-more" title={recipe.tags?.slice(3).join(', ')}>
+            +{remainingTagsCount} weitere
+          </span>
+        )}
+      </div>
+    )}
+
+    <!-- Divider -->
+    <div class="border-t border-gray-200 dark:border-gray-700 my-3"></div>
+
     <!-- Recipe Metadata -->
-    <div class="flex flex-wrap gap-2 mb-4">
-      {recipe.metadata.servings && (
-        <span class="badge badge-gray">
-          <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
-          </svg>
-          {recipe.metadata.servings} Portionen
-        </span>
-      )}
-      {recipe.metadata.timeEntries && recipe.metadata.timeEntries.length > 0 && (
-        <span class="badge badge-blue">
-          <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-          </svg>
-          {recipe.metadata.timeEntries.reduce((total, entry) => total + entry.minutes, 0)} Min
-        </span>
-      )}
-      {recipe.metadata.difficulty && (
-        <span class={`badge ${
-          recipe.metadata.difficulty === 'leicht' ? 'badge-green' :
-          recipe.metadata.difficulty === 'mittel' ? 'badge-yellow' :
-          'badge-red'
-        }`}>
-          {recipe.metadata.difficulty}
-        </span>
-      )}
-    </div>
-    
-    <!-- Action Buttons -->
-    <div class="flex space-x-2">
-      <a href={`/rezept/${recipe.id}`} class="recipe-link btn btn-primary flex-1 text-center">
-        Anzeigen
-      </a>
-      <!-- Export dropdown -->
-      <div class="relative">
-        <button class={`export-recipe-btn btn btn-icon text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600`} data-recipe-id={recipe.id}>
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+    <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+      <div class="flex items-center gap-4">
+        {recipe.metadata.servings && (
+          <div class="flex items-center">
+            <svg class="w-4 h-4 mr-1.5 text-gray-400 dark:text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+            </svg>
+            <span>{recipe.metadata.servings} Portionen</span>
+          </div>
+        )}
+        {totalTime > 0 && (
+          <div class="flex items-center">
+            <svg class="w-4 h-4 mr-1.5 text-gray-400 dark:text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+            </svg>
+            <span>{totalTime} Min</span>
+          </div>
+        )}
+      </div>
+
+      <!-- Meatball Menu -->
+      <div class="recipe-menu-container">
+        <button class="recipe-menu-btn p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+          <svg class="w-5 h-5 text-gray-400 dark:text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
           </svg>
         </button>
-        <div class={`export-menu hidden absolute right-0 bottom-full mb-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10`}>
-          <div class="py-1">
-            <button class="export-json flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-recipe-id={recipe.id}>
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              JSON (ohne Bilder)
-            </button>
-            <button class="export-rcb flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-recipe-id={recipe.id}>
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
-              </svg>
-              Vollständig (mit Bildern)
-            </button>
-          </div>
-        </div>
       </div>
-      <button class="btn btn-icon text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-        </svg>
-      </button>
     </div>
   </div>
 </div>
+
+<!-- Menu Portal (outside of card) -->
+<div class="recipe-menu hidden fixed w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-50" role="menu">
+  <div class="py-1">
+    <!-- Export Option with Submenu -->
+    <div class="relative">
+      <button class="menu-item export-recipe group" data-recipe-id={recipe.id}>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <span>Exportieren</span>
+        <svg class="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+
+      <!-- Export Submenu -->
+      <div class="submenu absolute left-full top-0 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 ml-0.5 hidden group-hover:block">
+        <div class="py-1">
+          <button class="menu-item export-json" data-recipe-id={recipe.id}>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span>Als JSON</span>
+          </button>
+          <button class="menu-item export-rcb" data-recipe-id={recipe.id}>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+            </svg>
+            <span>Vollständig</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shopping List Option -->
+    <button class="menu-item add-to-shopping-list" data-recipe-id={recipe.id}>
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+      </svg>
+      <span>Zur Einkaufsliste</span>
+    </button>
+
+    <!-- Delete Option -->
+    <button class="menu-item delete-recipe text-red-600 dark:text-red-400" data-recipe-id={recipe.id}>
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+      </svg>
+      <span>Löschen</span>
+    </button>
+  </div>
+</div>
+
+<!-- Shopping List Modal -->
+<AddToShoppingListModal recipeId={recipe.id} />
 
 <style>
   .recipe-card.selected {
@@ -126,4 +172,215 @@ const { recipe } = Astro.props;
   .recipe-card.selection-mode .selection-indicator {
     @apply opacity-100;
   }
-</style> 
+
+  .recipe-card.selection-mode .recipe-menu-btn {
+    @apply pointer-events-auto;
+  }
+
+  .tag {
+    @apply text-xs py-0.5 px-2 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300;
+  }
+
+  .tag-more {
+    @apply text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400;
+  }
+
+  .recipe-card {
+    @apply relative;
+  }
+
+  .recipe-menu {
+    @apply absolute top-full right-0 mt-1;
+  }
+
+  .menu-item {
+    @apply flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 gap-2;
+  }
+
+  /* Submenu styles */
+  .submenu {
+    @apply z-50;
+  }
+
+  .submenu:hover,
+  .export-recipe:hover + .submenu {
+    @apply block;
+  }
+
+  /* Adjust submenu position if it would go off screen */
+  .recipe-menu.align-submenu-left .submenu {
+    @apply right-full left-auto -mr-0.5 ml-0;
+  }
+</style>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const menuBtns = document.querySelectorAll('.recipe-menu-btn');
+    const menu = document.querySelector('.recipe-menu') as HTMLElement;
+    
+    if (!menu) return;
+
+    // Handle selection mode clicks on the entire card
+    document.querySelectorAll('.recipe-card').forEach(card => {
+      const handleCardSelection = (e: Event) => {
+        if (!card.classList.contains('selection-mode')) return;
+        
+        const target = e.target as HTMLElement;
+        // Prevent click if clicking on menu button or menu
+        if (target.closest('.recipe-menu-btn') || target.closest('.recipe-menu')) {
+          return;
+        }
+
+        // Prevent the link from being followed in selection mode
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Find the checkbox and toggle it
+        const checkbox = card.querySelector('.recipe-select-checkbox') as HTMLInputElement;
+        if (checkbox) {
+          checkbox.checked = !checkbox.checked;
+          // Trigger the change event manually
+          const event = new Event('change', { bubbles: true });
+          checkbox.dispatchEvent(event);
+        }
+      };
+
+      // Add click handler to the entire card
+      card.addEventListener('click', handleCardSelection);
+      
+      // Add touch handler for better mobile support
+      card.addEventListener('touchend', handleCardSelection);
+
+      // Prevent link clicks in selection mode
+      const recipeLink = card.querySelector('[data-recipe-link]');
+      if (recipeLink) {
+        recipeLink.addEventListener('click', (e) => {
+          if (card.classList.contains('selection-mode')) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        });
+      }
+    });
+
+    // Handle menu positioning
+    menuBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        
+        // Close all other menus first
+        document.querySelectorAll('.recipe-menu').forEach(m => {
+          m.classList.add('hidden');
+        });
+
+        // Position and show menu
+        const rect = (btn as HTMLElement).getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+
+        menu.style.top = `${rect.bottom + scrollTop + 4}px`;
+        menu.style.left = `${rect.left + scrollLeft - menu.offsetWidth + (btn as HTMLElement).offsetWidth}px`;
+        
+        // Copy recipe ID to menu
+        const recipeId = (btn.closest('.recipe-card') as HTMLElement)?.dataset.recipeId;
+        menu.querySelectorAll('[data-recipe-id]').forEach(el => {
+          (el as HTMLElement).dataset.recipeId = recipeId || '';
+        });
+
+        menu.classList.toggle('hidden');
+
+        // Check if menu would go off screen
+        const menuRect = menu.getBoundingClientRect();
+        if (menuRect.right > window.innerWidth) {
+          menu.style.left = `${rect.left + scrollLeft - menu.offsetWidth}px`;
+        }
+        if (menuRect.bottom > window.innerHeight) {
+          menu.style.top = `${rect.top + scrollTop - menu.offsetHeight - 4}px`;
+        }
+
+        // Check if submenu would go off screen
+        const submenu = menu.querySelector('.submenu') as HTMLElement;
+        if (submenu) {
+          const submenuRect = submenu.getBoundingClientRect();
+          if (submenuRect.right > window.innerWidth) {
+            menu.classList.add('align-submenu-left');
+          } else {
+            menu.classList.remove('align-submenu-left');
+          }
+        }
+      });
+    });
+
+    // Handle export options
+    menu.querySelectorAll('.export-json, .export-rcb').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
+        const format = (e.currentTarget as HTMLElement).classList.contains('export-json') ? 'json' : 'rcb';
+        window.location.href = `/api/recipe-export?id=${recipeId}&format=${format}`;
+        menu.classList.add('hidden');
+      });
+    });
+
+    // Handle delete option
+    menu.querySelectorAll('.delete-recipe').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
+        const card = document.querySelector(`.recipe-card[data-recipe-id="${recipeId}"]`);
+        
+        if (!recipeId || !card) return;
+
+        const confirmed = await window.showDeleteConfirm('Möchtest du dieses Rezept wirklich löschen?');
+        if (!confirmed) return;
+
+        try {
+          const response = await fetch(`/api/recipes?id=${recipeId}`, {
+            method: 'DELETE',
+          });
+
+          if (!response.ok) throw new Error('Fehler beim Löschen des Rezepts');
+
+          // Remove card with animation
+          card.classList.add('fade-out');
+          setTimeout(() => card.remove(), 300);
+          
+          // Update recipe count
+          const countElement = document.getElementById('recipe-count');
+          if (countElement) {
+            const currentCount = parseInt(countElement.textContent || '0');
+            countElement.textContent = (currentCount - 1).toString();
+          }
+
+          await window.showSuccess('Rezept wurde gelöscht');
+        } catch (error) {
+          console.error('Error deleting recipe:', error);
+          await window.showError('Fehler beim Löschen des Rezepts');
+        }
+
+        menu.classList.add('hidden');
+      });
+    });
+
+    // Handle add to shopping list
+    menu.querySelectorAll('.add-to-shopping-list').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
+        if (!recipeId) return;
+
+        // Show shopping list modal
+        const modal = document.getElementById('shopping-list-modal');
+        modal?.classList.remove('hidden');
+        menu.classList.add('hidden');
+      });
+    });
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', () => {
+      menu.classList.add('hidden');
+    });
+
+    // Prevent menu from closing when clicking inside it
+    menu.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  });
+</script> 

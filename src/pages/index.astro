@@ -6,6 +6,7 @@ import type { Recipe } from '../types/recipe';
 import RecipeListHeader from '../components/recipe_list/RecipeListHeader.astro';
 import RecipeCard from '../components/recipe_list/RecipeCard.astro';
 import EmptyState from '../components/recipe_list/EmptyState.astro';
+import SearchBar from '../components/recipe_list/SearchBar.astro';
 
 // Rezepte aus der Datenbank laden
 let recipes: Recipe[] = [];
@@ -15,12 +16,18 @@ try {
   console.error('Error loading recipes from database:', error);
   recipes = [];
 }
+
+// Extract unique categories
+const categories = Array.from(new Set(recipes.map(recipe => recipe.category).filter((category): category is string => category !== undefined && category !== null)));
 ---
 
 <Layout title="Kochbuch - Alle Rezepte">
   <div class="space-y-6">
     <!-- Header -->
     <RecipeListHeader recipeCount={recipes.length} />
+
+    <!-- Search and Filter -->
+    <SearchBar categories={categories} />
 
     {recipes.length > 0 ? (
       <!-- Recipe Grid -->

@@ -1,0 +1,185 @@
+---
+interface Props {
+  recipeId: string;
+}
+
+const { recipeId } = Astro.props;
+---
+
+<div id="shopping-list-modal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content modal-lg">
+    <div class="modal-header">
+      <h2 class="modal-title">Zu Einkaufsliste hinzufügen</h2>
+      <button class="modal-close">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Create New List Button -->
+      <button id="create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2 mb-4">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        <span>Neue Einkaufsliste erstellen</span>
+      </button>
+
+      <!-- Existing Lists -->
+      <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Oder zu bestehender Liste hinzufügen:</h4>
+        <div id="shopping-lists-loading" class="text-center py-8">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+          <p class="text-muted mt-2">Einkaufslisten werden geladen...</p>
+        </div>
+        <div id="existing-lists" class="space-y-2 max-h-60 overflow-y-auto hidden">
+          <!-- Lists will be inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script define:vars={{ recipeId }}>
+  let availableShoppingLists = [];
+  
+  // Load shopping lists
+  async function loadShoppingLists() {
+    try {
+      const response = await fetch('/api/shopping-lists');
+      if (response.ok) {
+        availableShoppingLists = await response.json();
+        populateShoppingListModal();
+      }
+    } catch (error) {
+      console.error('Error loading shopping lists:', error);
+    }
+  }
+
+  // Populate shopping list modal
+  function populateShoppingListModal() {
+    const loadingIndicator = document.getElementById('shopping-lists-loading');
+    const existingLists = document.getElementById('existing-lists');
+    
+    loadingIndicator?.classList.add('hidden');
+    existingLists?.classList.remove('hidden');
+    
+    if (!existingLists) return;
+    
+    if (availableShoppingLists.length === 0) {
+      existingLists.innerHTML = `
+        <p class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+          Keine bestehenden Einkaufslisten gefunden
+        </p>
+      `;
+      return;
+    }
+    
+    existingLists.innerHTML = availableShoppingLists
+      .map(list => `
+        <button class="existing-list-btn w-full btn btn-secondary flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700" data-list-id="${list.id}">
+          <span class="flex items-center space-x-3">
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <span class="text-left">
+              <span class="block font-medium">${list.title}</span>
+              <span class="block text-sm text-gray-500">${list.items?.length || 0} Zutaten</span>
+            </span>
+          </span>
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      `)
+      .join('');
+
+    // Add click handlers for existing lists
+    existingLists.querySelectorAll('.existing-list-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const listId = btn.getAttribute('data-list-id');
+        if (listId) addToExistingList(listId);
+      });
+    });
+  }
+
+  // Add to existing list
+  async function addToExistingList(listId) {
+    try {
+      const response = await fetch(`/api/shopping-lists/${listId}/recipes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeIds: [recipeId]
+        })
+      });
+      
+      if (!response.ok) throw new Error('Fehler beim Hinzufügen zur Einkaufsliste');
+      
+      window.location.href = `/einkaufsliste/${listId}`;
+    } catch (error) {
+      console.error('Error adding to shopping list:', error);
+      await window.showError('Fehler beim Hinzufügen zur Einkaufsliste');
+    }
+
+    closeModal();
+  }
+
+  // Create new list
+  async function createNewList() {
+    try {
+      const response = await fetch('/api/shopping-lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
+          recipeIds: [recipeId]
+        })
+      });
+      
+      if (!response.ok) throw new Error('Fehler beim Erstellen der Einkaufsliste');
+      
+      const { id } = await response.json();
+      window.location.href = `/einkaufsliste/${id}`;
+    } catch (error) {
+      console.error('Error creating shopping list:', error);
+      await window.showError('Die Einkaufsliste konnte nicht erstellt werden.');
+    }
+
+    closeModal();
+  }
+
+  function closeModal() {
+    const modal = document.getElementById('shopping-list-modal');
+    modal?.classList.add('hidden');
+  }
+
+  // Event Listeners
+  document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('shopping-list-modal');
+    const closeButtons = modal?.querySelectorAll('.modal-close, .modal-overlay');
+    const createNewListBtn = document.getElementById('create-new-list');
+
+    // Load lists when modal becomes visible
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          const element = mutation.target;
+          if (element instanceof HTMLElement && !element.classList.contains('hidden')) {
+            loadShoppingLists();
+          }
+        }
+      });
+    });
+
+    if (modal) {
+      observer.observe(modal, { attributes: true });
+    }
+
+    // Close modal
+    closeButtons?.forEach(btn => {
+      btn.addEventListener('click', closeModal);
+    });
+
+    // Create new list
+    createNewListBtn?.addEventListener('click', createNewList);
+  });
+</script> 
