@@ -34,24 +34,22 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
   <div class="card-content p-4">
     <div class="mb-3">
       <a href={`/rezept/${recipe.id}`} class="block group recipe-link" data-recipe-link>
-        <h3 class="heading-tertiary mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
-          {recipe.title}
-        </h3>
+        <h3 class="heading-tertiary mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors" data-content={recipe.title}></h3>
         {recipe.subtitle && (
-          <p class="text-sm text-muted">{recipe.subtitle}</p>
+          <p class="text-sm text-muted" data-content={recipe.subtitle}></p>
         )}
       </a>
     </div>
     
     {recipe.description && (
-      <p class="text-body text-sm mb-3 line-clamp-2">{recipe.description}</p>
+      <p class="text-body text-sm mb-3 line-clamp-2" data-content={recipe.description}></p>
     )}
 
     <!-- Recipe Tags -->
     {(displayTags.length > 0 || remainingTagsCount > 0) && (
       <div class="flex flex-wrap gap-1.5 mb-4">
         {displayTags.map((tag) => (
-          <span class="tag">{tag}</span>
+          <span class="tag" data-content={tag}></span>
         ))}
         {remainingTagsCount > 0 && (
           <span class="tag-more" title={recipe.tags?.slice(3).join(', ')}>
@@ -214,6 +212,16 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
 </style>
 
 <script>
+  // Initialize content decoding
+  document.querySelectorAll('[data-content]').forEach(element => {
+    const content = element.getAttribute('data-content');
+    if (content) {
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = content;
+      element.textContent = textarea.value;
+    }
+  });
+
   document.addEventListener('DOMContentLoaded', () => {
     const menuBtns = document.querySelectorAll('.recipe-menu-btn');
     const menu = document.querySelector('.recipe-menu') as HTMLElement;
