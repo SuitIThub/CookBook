@@ -21,6 +21,44 @@ function getAllIngredients(recipe: Recipe) {
   );
 }
 
+// Helper function to convert Celsius to gas mark
+function getGasMark(celsius: number): string {
+  // Gas mark conversion table
+  const gasMarks = [
+    { mark: '¼', min: 110, max: 120 },
+    { mark: '½', min: 121, max: 135 },
+    { mark: '1', min: 136, max: 150 },
+    { mark: '2', min: 151, max: 165 },
+    { mark: '3', min: 166, max: 180 },
+    { mark: '4', min: 181, max: 195 },
+    { mark: '5', min: 196, max: 210 },
+    { mark: '6', min: 211, max: 225 },
+    { mark: '7', min: 226, max: 240 },
+    { mark: '8', min: 241, max: 260 },
+    { mark: '9', min: 261, max: 290 },
+    { mark: '10', min: 291, max: 320 }
+  ];
+
+  const gasMark = gasMarks.find(mark => celsius >= mark.min && celsius <= mark.max);
+  return gasMark ? `Gasherd-Stufe ${gasMark.mark}` : '';
+}
+
+// Helper function to process text and add temperature tooltips
+function processText(text: string): string {
+  // Match temperatures like "180°C", "180 °C", "180° C", "180 Grad", etc.
+  return text.replace(
+    /(\d+)\s*(?:°|Grad|grad|°C|° C|°c|° c)\b/g, 
+    (match, temp) => {
+      const celsius = parseInt(temp);
+      const gasMark = getGasMark(celsius);
+      if (gasMark) {
+        return `<button type="button" class="temperature-mark tooltip-trigger" data-tooltip="${gasMark}">${match}</button>`;
+      }
+      return match;
+    }
+  );
+}
+
 // Helper function to track used ingredients across steps
 function getUsedIngredients(preparationGroups: any[], currentStepIndex: number) {
   const usedIngredients = new Set<string>();
@@ -92,16 +130,20 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
               const usedIngredients = getUsedIngredients(recipe.preparationGroups, globalStepIndex);
               const stepId = `ungrouped-${index}`;
               
+              // Process text for both temperatures and timers
+              let processedText = processText(preparationStep.text);
+              processedText = processedText.replace(
+                /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+                `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
+              );
+              
               return (
                 <li class="flex space-x-4" id={`step-${stepId}`}>
                   <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
                     {index + 1}
                   </div>
                   <div class="flex-1">
-                    <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={preparationStep.text.replace(
-                      /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
-                      `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
-                    )}></p>
+                    <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={processedText}></p>
                     
                     {/* Linked Ingredients Tags */}
                     {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
@@ -120,9 +162,11 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                             if (!intermediateIngredient) return null;
                             
                             return (
-                              <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                              <button type="button" 
+                                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors tooltip-trigger"
+                                      data-tooltip={intermediateIngredient.description}>
                                 {intermediateIngredient.name}
-                              </span>
+                              </button>
                             );
                           } else {
                             // Regular ingredient
@@ -148,13 +192,15 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                             }
                             
                             return (
-                              <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                wasUsedBefore 
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
-                                  : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                              }`}>
+                              <button type="button" 
+                                      class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors tooltip-trigger ${
+                                        wasUsedBefore 
+                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800' 
+                                          : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800'
+                                      }`}
+                                      data-tooltip={ingredient.description}>
                                 {ingredient.name}{quantityElement}
-                              </span>
+                              </button>
                             );
                           }
                         })}
@@ -168,17 +214,17 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
         );
       })}
       
-              {/* Then show grouped steps */}
-        {preparationGroups.filter(group => group && group.title).map((group) => {
-          const groupedGroupIndex = preparationGroups.findIndex(g => g === group);
-          
-          return (
-            <div>
-              <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b border-gray-200 dark:border-gray-600 pb-1">
-                {group.title}
-              </h3>
-              <ol class="space-y-4">
-                {(group.steps || []).map((step, index) => {
+      {/* Then show grouped steps */}
+      {preparationGroups.filter(group => group && group.title).map((group) => {
+        const groupedGroupIndex = preparationGroups.findIndex(g => g === group);
+        
+        return (
+          <div>
+            <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b border-gray-200 dark:border-gray-600 pb-1">
+              {group.title}
+            </h3>
+            <ol class="space-y-4">
+              {(group.steps || []).map((step, index) => {
                 if (!('text' in step)) return null;
                 const preparationStep = step as PreparationStep;
                 const allIngredients = getAllIngredients(recipe);
@@ -186,16 +232,20 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                 const usedIngredients = getUsedIngredients(recipe.preparationGroups, globalStepIndex);
                 const stepId = `${group.title?.toLowerCase().replace(/\s+/g, '-') || 'group'}-${index}`;
                 
+                // Process text for both temperatures and timers
+                let processedText = processText(preparationStep.text);
+                processedText = processedText.replace(
+                  /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+                  `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
+                );
+                
                 return (
                   <li class="flex space-x-4" id={`step-${stepId}`}>
                     <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
                       {index + 1}
                     </div>
                     <div class="flex-1">
-                      <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={preparationStep.text.replace(
-                        /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
-                        `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
-                      )}></p>
+                      <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={processedText}></p>
                       
                       {/* Linked Ingredients Tags */}
                       {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
@@ -214,9 +264,11 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                               if (!intermediateIngredient) return null;
                               
                               return (
-                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                <button type="button" 
+                                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors tooltip-trigger"
+                                        data-tooltip={intermediateIngredient.description}>
                                   {intermediateIngredient.name}
-                                </span>
+                                </button>
                               );
                             } else {
                               // Regular ingredient
@@ -242,13 +294,15 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
                               }
                               
                               return (
-                                <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                  wasUsedBefore 
-                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200' 
-                                    : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                }`}>
+                                <button type="button" 
+                                        class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors tooltip-trigger ${
+                                          wasUsedBefore 
+                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800' 
+                                            : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800'
+                                        }`}
+                                        data-tooltip={ingredient.description}>
                                   {ingredient.name}{quantityElement}
-                                </span>
+                                </button>
                               );
                             }
                           })}
@@ -265,4 +319,138 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
       </div>
     )}
   </div>
-</div> 
+</div>
+
+<!-- Tooltip container -->
+<div id="tooltip" class="fixed left-0 top-0 z-[9999] px-3 py-2 text-sm bg-gray-900 text-white dark:bg-gray-800 rounded shadow-lg pointer-events-none opacity-0 transition-all duration-200 max-w-[250px] sm:max-w-[300px]" style="display: none;">
+  <div class="tooltip-content"></div>
+  <div class="tooltip-arrow"></div>
+</div>
+
+<script>
+  const tooltip = document.getElementById('tooltip');
+  let activeTarget: Element | null = null;
+  let hideTimeout: number | null = null;
+
+  if (!tooltip) {
+    console.error('Tooltip element not found!');
+  } else {
+    console.log('Tooltip element found and initialized');
+  }
+
+  function showTooltip(target: Element) {
+    const tooltipText = target.getAttribute('data-tooltip');
+    if (!tooltipText || !tooltip) {
+      console.log('No tooltip text or tooltip element:', { tooltipText, tooltip });
+      return;
+    }
+
+    console.log('Showing tooltip:', tooltipText);
+
+    // Clear any pending hide timeout
+    if (hideTimeout !== null) {
+      clearTimeout(hideTimeout);
+      hideTimeout = null;
+    }
+
+    // Update content
+    tooltip.querySelector('.tooltip-content')!.textContent = tooltipText;
+    
+    // Make tooltip visible
+    tooltip.style.display = 'block';
+    
+    // Get positions
+    const targetRect = target.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    
+    // Calculate position
+    let top = targetRect.top - tooltipRect.height - 10;
+    let left = targetRect.left + (targetRect.width / 2) - (tooltipRect.width / 2);
+    
+    // Check if tooltip would go above viewport
+    const showBelow = top < 10;
+    if (showBelow) {
+      top = targetRect.bottom + 10;
+      tooltip.classList.add('tooltip-below');
+    } else {
+      tooltip.classList.remove('tooltip-below');
+    }
+    
+    // Keep tooltip in viewport horizontally
+    if (left < 10) {
+      left = 10;
+    } else if (left + tooltipRect.width > window.innerWidth - 10) {
+      left = window.innerWidth - tooltipRect.width - 10;
+    }
+    
+    // Apply position
+    tooltip.style.transform = `translate(${left}px, ${top}px)`;
+    
+    // Show tooltip
+    requestAnimationFrame(() => {
+      tooltip.style.opacity = '1';
+    });
+    
+    activeTarget = target;
+    console.log('Tooltip positioned at:', { top, left, showBelow });
+  }
+
+  function hideTooltip() {
+    if (!tooltip) return;
+    
+    console.log('Hiding tooltip');
+    tooltip.style.opacity = '0';
+    tooltip.classList.remove('tooltip-below');
+    
+    hideTimeout = window.setTimeout(() => {
+      tooltip.style.display = 'none';
+      hideTimeout = null;
+    }, 200);
+    
+    activeTarget = null;
+  }
+
+  // Event delegation for better performance
+  document.addEventListener('click', (e) => {
+    const target = e.target as Element;
+    const tooltipTrigger = target.closest('.tooltip-trigger');
+
+    if (tooltipTrigger) {
+      console.log('Tooltip trigger clicked:', tooltipTrigger);
+      if (activeTarget === tooltipTrigger) {
+        hideTooltip();
+      } else {
+        showTooltip(tooltipTrigger);
+      }
+    } else if (activeTarget) {
+      hideTooltip();
+    }
+  });
+
+  // Mouse events for desktop
+  document.addEventListener('mouseover', (e) => {
+    const target = e.target as Element;
+    const tooltipTrigger = target.closest('.tooltip-trigger');
+    
+    if (tooltipTrigger && !('ontouchstart' in window)) {
+      console.log('Tooltip trigger hovered:', tooltipTrigger);
+      showTooltip(tooltipTrigger);
+    }
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    const target = e.target as Element;
+    const tooltipTrigger = target.closest('.tooltip-trigger');
+    
+    if (tooltipTrigger && !('ontouchstart' in window)) {
+      hideTooltip();
+    }
+  });
+
+  // Hide on scroll
+  document.addEventListener('scroll', () => {
+    if (activeTarget) {
+      hideTooltip();
+    }
+  }, { passive: true });
+</script> 

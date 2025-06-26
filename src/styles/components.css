@@ -765,4 +765,62 @@ input[type="number"] {
   }
 }
 
+/* Temperature marks in preparation steps */
+.temperature-mark {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  border-bottom: 1px dashed currentColor;
+  padding-bottom: 1px;
+  color: inherit;
+  font: inherit;
+}
+
+.temperature-mark:hover,
+.temperature-mark:focus {
+  border-bottom-style: solid;
+  outline: none;
+}
+
+.dark .temperature-mark {
+  border-bottom-color: rgba(255, 255, 255, 0.4);
+}
+
+.dark .temperature-mark:hover,
+.dark .temperature-mark:focus {
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Custom tooltip */
+#tooltip {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tooltip-arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border: inherit;
+  border-right: 0;
+  border-bottom: 0;
+  bottom: -5px;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(225deg);
+}
+
+.tooltip-below .tooltip-arrow {
+  bottom: auto;
+  top: -5px;
+  transform: translate(-50%, 50%) rotate(45deg);
+}
+
+@media (max-width: 640px) {
+  #tooltip {
+    padding: 0.5rem 0.75rem;
+  }
+}
+
  
