@@ -605,14 +605,20 @@ const { recipe } = Astro.props;
   async function handleFormSubmit(e) {
     e.preventDefault();
     
-    const form = e.target;
-    const submitButton = form.querySelector('button[type="submit"]');
-    const originalText = submitButton.textContent;
+    // Get the save buttons
+    const saveBtn = document.getElementById('save-btn');
+    const saveBtnMobile = document.getElementById('save-btn-mobile');
+    const saveButtons = [saveBtn, saveBtnMobile].filter(btn => btn instanceof HTMLButtonElement);
     
     try {
-      // Show loading state
-      submitButton.textContent = 'Speichert...';
-      submitButton.disabled = true;
+      // Show loading state on all save buttons
+      saveButtons.forEach(btn => {
+        const span = btn.querySelector('span');
+        const svg = btn.querySelector('svg');
+        if (span) span.textContent = 'Speichert...';
+        if (svg) svg.style.display = 'none';
+        btn.disabled = true;
+      });
       
       // Collect updated recipe data
       const updatedRecipe = collectRecipeData();
@@ -647,10 +653,15 @@ const { recipe } = Astro.props;
     } catch (error) {
       console.error('Error saving recipe:', error);
       showNotification('Fehler beim Speichern des Rezepts. Bitte versuchen Sie es erneut.', 'error');
-    } finally {
-      // Restore button state
-      submitButton.textContent = originalText;
-      submitButton.disabled = false;
+      
+      // Restore button state on error
+      saveButtons.forEach(btn => {
+        const span = btn.querySelector('span');
+        const svg = btn.querySelector('svg');
+        if (span) span.textContent = 'Speichern';
+        if (svg) svg.style.display = 'block';
+        btn.disabled = false;
+      });
     }
   }
 

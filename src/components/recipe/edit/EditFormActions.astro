@@ -54,15 +54,23 @@ const { recipeId } = Astro.props;
 
 <script>
   // Get the form element
-  const form = document.querySelector('form');
+  const form = document.getElementById('edit-recipe-form');
   
   // Get the save buttons from the header
-  const saveBtn = document.getElementById('save-btn');
-  const saveBtnMobile = document.getElementById('save-btn-mobile');
+  const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
+  const saveBtnMobile = document.getElementById('save-btn-mobile') as HTMLButtonElement;
   
   // Add click handlers to save buttons
   [saveBtn, saveBtnMobile].forEach(btn => {
     btn?.addEventListener('click', () => {
+      // Show loading state
+      const span = btn.querySelector('span');
+      const svg = btn.querySelector('svg');
+      
+      btn.disabled = true;
+      if (span) span.textContent = 'Speichert...';
+      if (svg) svg.style.display = 'none';
+      
       // Submit the form
       form?.dispatchEvent(new Event('submit'));
     });
