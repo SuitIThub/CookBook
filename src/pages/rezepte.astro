@@ -1,0 +1,61 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+import SearchBar from '../components/recipe_list/SearchBar.astro';
+import RecipeCard from '../components/recipe_list/RecipeCard.astro';
+import RecipeListHeader from '../components/recipe_list/RecipeListHeader.astro';
+import EmptyState from '../components/recipe_list/EmptyState.astro';
+import { db } from '../lib/database';
+import type { Recipe } from '../types/recipe';
+
+// Load recipes from database
+let recipes: Recipe[] = [];
+try {
+  recipes = db.getAllRecipes();
+} catch (error) {
+  console.error('Error loading recipes:', error);
+}
+
+// Extract unique categories and remove undefined/null
+const categories = Array.from(new Set(
+  recipes
+    .map(r => r.category)
+    .filter((c): c is string => c != null)
+));
+
+// Get URL parameters
+const searchQuery = Astro.url.searchParams.get('search') || '';
+const selectedCategory = Astro.url.searchParams.get('category') || '';
+---
+
+<Layout title="Rezepte">
+  <div class="container mx-auto px-4 py-8">
+    <RecipeListHeader recipeCount={recipes.length} />
+    <SearchBar 
+      categories={categories}
+      initialSearchQuery={searchQuery}
+      initialCategory={selectedCategory}
+    />
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-8">
+      {recipes.map(recipe => (
+        <RecipeCard recipe={recipe} />
+      ))}
+    </div>
+
+    {recipes.length === 0 && <EmptyState />}
+  </div>
+</Layout>
+
+<script>
+  // Clear URL parameters when leaving the page
+  window.addEventListener('beforeunload', () => {
+    // Only clear if we're navigating away from the recipe list
+    if (window.location.pathname === '/rezepte') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('search');
+      url.searchParams.delete('category');
+      window.history.replaceState({}, '', url);
+    }
+  });
+</script> 

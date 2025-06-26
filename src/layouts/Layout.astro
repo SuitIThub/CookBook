@@ -95,15 +95,12 @@ const { title } = Astro.props;
           
           <!-- Desktop navigation -->
           <div class="hidden portrait:hidden landscape:flex items-center space-x-4">
-            <a href="/" class="nav-link">
+            <a href="/rezepte" class="nav-link">
               Rezepte
             </a>
-            <a href="/einkaufsliste" class="nav-link">
-              Einkaufsliste
+            <a href="/einkaufslisten" class="nav-link">
+              Einkaufslisten
             </a>
-            <button id="create-recipe-btn" class="btn btn-primary">
-              Neues Rezept
-            </button>
             <!-- Theme Toggle Button -->
             <button id="theme-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
               <!-- Sun icon (visible in dark mode) -->
@@ -148,15 +145,12 @@ const { title } = Astro.props;
         <!-- Mobile menu -->
         <div id="mobile-menu" class="hidden border-t border-gray-200 dark:border-gray-700 mt-2 pt-4 pb-4">
           <div class="flex flex-col space-y-3">
-            <a href="/" class="nav-link text-base">
+            <a href="/rezepte" class="nav-link text-base">
               Rezepte
             </a>
-            <a href="/einkaufsliste" class="nav-link text-base">
-              Einkaufsliste
+            <a href="/einkaufslisten" class="nav-link text-base">
+              Einkaufslisten
             </a>
-            <button id="create-recipe-btn-mobile" class="btn btn-primary text-left">
-              Neues Rezept
-            </button>
           </div>
         </div>
       </nav>

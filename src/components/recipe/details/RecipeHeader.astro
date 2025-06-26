@@ -84,7 +84,7 @@ function getTotalTime(timeEntries: any[]): number {
           </svg>
           <span>Zur Einkaufsliste</span>
         </button>
-        <a href={`/rezept/${recipe.id}/kochen`} class="flex items-center space-x-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+        <a href={`/rezept/${recipe.id}/kochen`} id="cooking-mode-btn" class="flex items-center space-x-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 8l-7 7-7-7"/>
           </svg>
@@ -155,7 +155,7 @@ function getTotalTime(timeEntries: any[]): number {
           </svg>
           <span>Zur Einkaufsliste</span>
         </button>
-        <a href={`/rezept/${recipe.id}/kochen`} class="flex items-center justify-center space-x-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
+        <a href={`/rezept/${recipe.id}/kochen`} id="cooking-mode-btn-mobile" class="flex items-center justify-center space-x-2 px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 8l-7 7-7-7"/>
           </svg>
@@ -293,4 +293,29 @@ function getTotalTime(timeEntries: any[]): number {
   const viewContent = document.getElementById('view-content');
   const isInitiallyHidden = viewContent?.classList.contains('hidden') ?? false;
   updateButtonVisibility(isInitiallyHidden);
+
+  // Handle edit mode
+  const editBtn = document.getElementById('edit-btn');
+  const editBtnMobile = document.getElementById('edit-btn-mobile');
+  const saveBtn = document.getElementById('save-btn');
+  const saveBtnMobile = document.getElementById('save-btn-mobile');
+  const cookingModeBtn = document.getElementById('cooking-mode-btn');
+  const cookingModeBtnMobile = document.getElementById('cooking-mode-btn-mobile');
+
+  function enterEditMode() {
+    // ... existing code ...
+    cookingModeBtn?.classList.add('hidden');
+    cookingModeBtnMobile?.classList.add('hidden');
+  }
+
+  function exitEditMode() {
+    // ... existing code ...
+    cookingModeBtn?.classList.remove('hidden');
+    cookingModeBtnMobile?.classList.remove('hidden');
+  }
+
+  editBtn?.addEventListener('click', enterEditMode);
+  editBtnMobile?.addEventListener('click', enterEditMode);
+  saveBtn?.addEventListener('click', exitEditMode);
+  saveBtnMobile?.addEventListener('click', exitEditMode);
 </script> 
