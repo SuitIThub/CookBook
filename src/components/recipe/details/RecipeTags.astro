@@ -13,7 +13,7 @@ const { recipe } = Astro.props;
     {/* Category Tag */}
     {recipe.category && (
       <a 
-        href={`/?category=${encodeURIComponent(recipe.category)}`}
+        href={`/rezepte/?category=${encodeURIComponent(recipe.category)}`}
         class="tag category-tag"
         title="Nach Kategorie filtern"
       >
@@ -24,7 +24,7 @@ const { recipe } = Astro.props;
     {/* Regular Tags */}
     {recipe.tags && recipe.tags.map(tag => (
       <a 
-        href={`/?search=${encodeURIComponent(`"tag:${tag}"`)}`}
+        href={`/rezepte/?search=${encodeURIComponent(`"tag:${tag}"`)}`}
         class="tag"
         title="Nach Tag filtern"
       >

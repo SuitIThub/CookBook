@@ -95,7 +95,7 @@ if (!shoppingList) {
             <div>
               <h2 class="heading-secondary">Artikel ({shoppingList.items.length})</h2>
               <p class="text-sm text-muted mt-1">
-                Artikel mit <span class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">🍳 Rezept</span> Kennzeichnung können nicht einzeln bearbeitet werden. Entfernen Sie stattdessen das gesamte Rezept oben.
+                Artikel mit <span class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">🍳 Rezept</span> stammen aus einem Rezept. Änderungen an der Menge werden beim Anpassen der Portionen berücksichtigt.
               </p>
             </div>
             <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
@@ -117,21 +117,22 @@ if (!shoppingList) {
           <div id="items-edit-container" class="space-y-3">
             {shoppingList.items.map((item, index) => {
               const isRecipeItem = item.recipeId;
-              const disabledClass = isRecipeItem ? 'opacity-60 bg-gray-50 dark:bg-gray-800' : '';
-              const inputDisabled = isRecipeItem ? 'disabled' : '';
+              const recipe = shoppingList.recipes?.find(r => r.id === item.recipeId);
+              const recipeTitle = recipe?.title;
               
               return (
-                <div class={`item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4 ${disabledClass}`} 
+                <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4" 
                      data-item-id={item.id} 
                      data-item-index={index}
-                     data-recipe-id={item.recipeId || ''}>
+                     data-recipe-id={item.recipeId || ''}
+                     data-recipe-ingredient-id={item.recipeIngredientId || ''}>
                   <div class="grid grid-cols-12 gap-3 items-end">
                     <div class="col-span-4">
                       <div class="flex items-center space-x-2 mb-1">
                         <label class="form-label text-sm">Name *</label>
                         {isRecipeItem && (
-                          <span class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded" title="Zutat aus Rezept - nicht einzeln editierbar">
-                            🍳 Rezept
+                          <span class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded" title="Zutat aus Rezept">
+                            🍳 {recipeTitle}
                           </span>
                         )}
                       </div>
@@ -140,8 +141,7 @@ if (!shoppingList) {
                         class="item-name form-input"
                         value={item.name}
                         placeholder="Artikel..."
-                        required={!isRecipeItem}
-                        disabled={isRecipeItem}
+                        required
                       />
                     </div>
                     <div class="col-span-2">
@@ -153,14 +153,12 @@ if (!shoppingList) {
                         placeholder="0"
                         step="0.1"
                         min="0"
-                        disabled={isRecipeItem}
                       />
                     </div>
                     <div class="col-span-2">
                       <label class="form-label text-sm">Einheit</label>
                       <select 
                         class="item-unit form-input"
-                        disabled={isRecipeItem}
                       >
                         <option value="">Einheit wählen...</option>
                         <option value={item.quantity.unit} selected>{item.quantity.unit}</option>
@@ -173,32 +171,18 @@ if (!shoppingList) {
                         class="item-description form-input"
                         value={item.description || ''}
                         placeholder="Optional..."
-                        disabled={isRecipeItem}
                       />
                     </div>
                     <div class="col-span-1 flex items-center justify-between">
                       <div class="flex flex-col items-center space-y-1">
                         <label class="form-label text-xs">✓</label>
-                        <input 
-                          type="checkbox" 
-                          class="item-checked w-5 h-5 text-green-600"
-                          checked={item.isChecked}
-                          disabled={isRecipeItem}
-                        />
+                        <input type="checkbox" class="item-checked w-5 h-5 text-green-600" checked={item.isChecked} />
                       </div>
-                      {isRecipeItem ? (
-                        <div class="btn btn-ghost btn-sm text-gray-400 cursor-not-allowed" title="Rezeptzutat - Über Rezeptverwaltung löschen">
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728"/>
-                          </svg>
-                        </div>
-                      ) : (
-                        <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                          </svg>
-                        </button>
-                      )}
+                      <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -615,6 +599,7 @@ if (!shoppingList) {
           const isChecked = row.querySelector('.item-checked')?.checked || false;
           const itemId = row.getAttribute('data-item-id');
           const recipeId = row.getAttribute('data-recipe-id');
+          const recipeIngredientId = row.getAttribute('data-recipe-ingredient-id');
 
           const item = {
             id: itemId?.startsWith('new-') ? undefined : itemId,
@@ -627,9 +612,18 @@ if (!shoppingList) {
             isChecked
           };
           
-          // Preserve recipe ID for recipe-based items
+          // Preserve recipe information for recipe-based items
           if (recipeId && recipeId !== '') {
             item.recipeId = recipeId;
+            if (recipeIngredientId && recipeIngredientId !== '') {
+              item.recipeIngredientId = recipeIngredientId;
+            }
+            
+            // Find the original item to preserve original quantity
+            const originalItem = shoppingListData.items.find(i => i.id === itemId);
+            if (originalItem?.originalQuantity) {
+              item.originalQuantity = originalItem.originalQuantity;
+            }
           }
           
           return item;
@@ -638,9 +632,7 @@ if (!shoppingList) {
         // Validate that at least required fields are filled (only name is required now)
         const invalidItems = Array.from(document.querySelectorAll('.item-edit-row')).filter(row => {
           const name = row.querySelector('.item-name')?.value.trim();
-          // Only check if name is not disabled (recipe items) and if name is empty
-          const isRecipeItem = row.querySelector('.item-name')?.disabled;
-          return !isRecipeItem && !name;
+          return !name;
         });
 
         if (invalidItems.length > 0) {

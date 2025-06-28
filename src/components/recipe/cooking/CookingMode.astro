@@ -60,24 +60,43 @@ function processText(text: string): string {
   );
 }
 
-// Flatten preparation steps from groups
-const flattenSteps = (groups: PreparationGroup[]): PreparationStep[] => {
-  const steps: PreparationStep[] = [];
-  groups.forEach(group => {
-    if (Array.isArray(group.steps)) {
-      group.steps.forEach(step => {
-        if ('text' in step) {
-          steps.push(step as PreparationStep);
-        } else if (Array.isArray((step as PreparationGroup).steps)) {
-          steps.push(...flattenSteps([step as PreparationGroup]));
-        }
-      });
-    }
-  });
-  return steps;
-};
+// Process preparation groups and steps
+const preparationGroups = recipe.preparationGroups.map((group, groupIndex) => {
+  const steps = group.steps.filter(step => 'text' in step) as PreparationStep[];
+  return {
+    ...group,
+    steps,
+    index: groupIndex + 1
+  };
+}).filter(group => group.steps.length > 0);
 
-const allSteps = flattenSteps(recipe.preparationGroups);
+// Calculate total steps and current step info
+function getStepInfo(globalStepIndex: number) {
+  let currentGroup = preparationGroups[0];
+  let currentGroupIndex = 0;
+  let stepInGroupIndex = 0;
+  let stepsBeforeCurrentGroup = 0;
+
+  for (let i = 0; i < preparationGroups.length; i++) {
+    const group = preparationGroups[i];
+    if (stepsBeforeCurrentGroup + group.steps.length > globalStepIndex) {
+      currentGroup = group;
+      currentGroupIndex = i;
+      stepInGroupIndex = globalStepIndex - stepsBeforeCurrentGroup;
+      break;
+    }
+    stepsBeforeCurrentGroup += group.steps.length;
+  }
+
+  return {
+    currentGroup,
+    currentGroupIndex,
+    stepInGroupIndex,
+    totalGroups: preparationGroups.length,
+    totalStepsInGroup: currentGroup.steps.length,
+    globalStepIndex
+  };
+}
 
 // Flatten ingredients from groups
 const flattenIngredients = (groups: IngredientGroup[]): Ingredient[] => {
@@ -97,6 +116,7 @@ const flattenIngredients = (groups: IngredientGroup[]): Ingredient[] => {
 };
 
 const allIngredients = flattenIngredients(recipe.ingredientGroups);
+const totalSteps = preparationGroups.reduce((sum, group) => sum + group.steps.length, 0);
 ---
 
 <div class="fixed inset-0 bg-white dark:bg-gray-900 z-50 flex flex-col overscroll-none">
@@ -137,84 +157,116 @@ const allIngredients = flattenIngredients(recipe.ingredientGroups);
       </div>
 
       <!-- Steps slides -->
-      {allSteps.map((step, index) => {
-        const temperatures = extractTemperatures(step.text);
-        const processedText = step.text.replace(
-          /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
-          `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${step.text.replace(/"/g, '&quot;')}" data-step-id="step-${index}">$1</button>`
-        );
-        return (
-          <div class="cooking-slide absolute inset-0 translate-x-full transition-transform duration-300 flex flex-col p-4 md:p-8">
-            <div class="mb-4 md:mb-6 flex justify-between items-center">
-              <h2 class="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 dark:text-white">
-                Schritt {index + 1}/{allSteps.length}
-              </h2>
-              {step.timer && (
-                <button class="start-timer px-3 py-1.5 md:px-4 md:py-2 lg:px-6 lg:py-3 text-base sm:text-lg md:text-xl lg:text-2xl bg-blue-500 hover:bg-blue-600 text-white rounded-lg"
-                        data-minutes={step.timer}>
-                  Timer {step.timer} Min
-                </button>
-              )}
-            </div>
-            <div class="flex-1 overflow-y-auto">
-              <p class="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl text-gray-800 dark:text-gray-200 mb-4 md:mb-6 whitespace-pre-wrap leading-relaxed" set:html={processedText} />
-              
-              <div class="flex flex-wrap gap-2 md:gap-3">
-                {temperatures.map(temp => (
-                  <span class="inline-flex items-center px-3 py-1 md:px-4 md:py-1.5 rounded-full text-sm sm:text-base md:text-lg lg:text-xl bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100">
-                    {temp.original} (Gasstufe {celsiusToGasMark(temp.temp)})
+      {preparationGroups.map((group, groupIndex) => 
+        group.steps.map((step, stepIndex) => {
+          const globalStepIndex = preparationGroups.slice(0, groupIndex).reduce((sum, g) => sum + g.steps.length, 0) + stepIndex + 1;
+          const temperatures = extractTemperatures(step.text);
+          const processedText = step.text.replace(
+            /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+            `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${step.text.replace(/"/g, '&quot;')}" data-step-id="step-${groupIndex}-${stepIndex}">$1</button>`
+          );
+
+          return (
+            <div class="cooking-slide absolute inset-0 translate-x-full transition-transform duration-300 flex flex-col p-4 md:p-8">
+              <div class="mb-4 md:mb-6 space-y-2">
+                {group.title && (
+                  <button class="group-selector text-lg sm:text-xl md:text-2xl lg:text-3xl text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium" data-group-index={groupIndex}>
+                    {group.title}
+                  </button>
+                )}
+                <h2 class="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                  <span>Schritt {stepIndex + 1}/{group.steps.length}</span>
+                  <span class="text-gray-400 dark:text-gray-500 text-base sm:text-lg md:text-xl lg:text-2xl">
+                    (Gruppe {groupIndex + 1}/{preparationGroups.length}, Gesamt {globalStepIndex}/{totalSteps})
                   </span>
-                ))}
+                </h2>
               </div>
-
-              {temperatures.length > 0 && step.linkedIngredients && step.linkedIngredients.length > 0 && (
-                <div class="my-2 md:my-3"></div>
-              )}
-
-              {step.linkedIngredients && step.linkedIngredients.length > 0 && (
+              <div class="flex-1 overflow-y-auto">
+                <p class="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl text-gray-800 dark:text-gray-200 mb-4 md:mb-6 whitespace-pre-wrap leading-relaxed" set:html={processedText} />
+                
                 <div class="flex flex-wrap gap-2 md:gap-3">
-                  {step.linkedIngredients.map((link) => {
-                    const ingredient = allIngredients.find(i => i.id === link.ingredientId);
-                    if (!ingredient) return null;
-                    const quantity = ingredient.quantities[link.selectedQuantityIndex];
-                    const shouldShowUnit = quantity.unit && 
-                      quantity.unit.trim() !== '' && 
-                      !['Stück', 'Stk.', 'Stk', 'stück', 'stk.', 'stk'].includes(quantity.unit.trim());
-                    
-                    return (
-                      <span class="inline-flex items-center px-3 py-1 md:px-4 md:py-1.5 rounded-full text-sm sm:text-base md:text-lg lg:text-xl bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-100">
-                        {quantity.amount > 0 && (
-                          <span class="font-medium">{quantity.amount}</span>
-                        )}
-                        {quantity.amount > 0 && shouldShowUnit && (
-                          <span class="ml-1">&nbsp;</span>
-                        )}
-                        {shouldShowUnit && (
-                          <span class="font-medium">{quantity.unit}</span>
-                        )}
-                        {(quantity.amount > 0 || shouldShowUnit) && (
-                          <span class="ml-1">&nbsp;</span>
-                        )}
-                        <span>{ingredient.name}</span>
-                        {ingredient.description && (
-                          <span class="text-orange-600 dark:text-orange-300 ml-1 md:ml-2">({ingredient.description})</span>
-                        )}
-                      </span>
-                    );
-                  })}
+                  {temperatures.map(temp => (
+                    <span class="inline-flex items-center px-3 py-1 md:px-4 md:py-1.5 rounded-full text-sm sm:text-base md:text-lg lg:text-xl bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100">
+                      {temp.original} (Gasstufe {celsiusToGasMark(temp.temp)})
+                    </span>
+                  ))}
                 </div>
-              )}
 
-              {index < allSteps.length - 1 && (
-                <div class="portrait:block landscape:hidden mt-4 md:mt-6 p-3 md:p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                  <p class="text-sm sm:text-base md:text-lg lg:text-xl text-gray-500 dark:text-gray-400 mb-1 md:mb-2">Nächster Schritt:</p>
-                  <p class="text-base sm:text-lg md:text-xl lg:text-2xl text-gray-700 dark:text-gray-300 line-clamp-2">{allSteps[index + 1].text}</p>
-                </div>
-              )}
+                {temperatures.length > 0 && step.linkedIngredients && step.linkedIngredients.length > 0 && (
+                  <div class="my-2 md:my-3"></div>
+                )}
+
+                {step.linkedIngredients && step.linkedIngredients.length > 0 && (
+                  <div class="flex flex-wrap gap-2 md:gap-3">
+                    {step.linkedIngredients.map((link) => {
+                      const ingredient = allIngredients.find(i => i.id === link.ingredientId);
+                      if (!ingredient) return null;
+                      const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                      const shouldShowUnit = quantity.unit && 
+                        quantity.unit.trim() !== '' && 
+                        !['Stück', 'Stk.', 'Stk', 'stück', 'stk.', 'stk'].includes(quantity.unit.trim());
+                      
+                      return (
+                        <span class="inline-flex items-center px-3 py-1 md:px-4 md:py-1.5 rounded-full text-sm sm:text-base md:text-lg lg:text-xl bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-100">
+                          {quantity.amount > 0 && (
+                            <span class="font-medium">{quantity.amount}</span>
+                          )}
+                          {quantity.amount > 0 && shouldShowUnit && (
+                            <span class="ml-1">&nbsp;</span>
+                          )}
+                          {shouldShowUnit && (
+                            <span class="font-medium">{quantity.unit}</span>
+                          )}
+                          {(quantity.amount > 0 || shouldShowUnit) && (
+                            <span class="ml-1">&nbsp;</span>
+                          )}
+                          <span>{ingredient.name}</span>
+                          {ingredient.description && (
+                            <span class="text-orange-600 dark:text-orange-300 ml-1 md:ml-2">({ingredient.description})</span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {stepIndex < group.steps.length - 1 && (
+                  <div class="portrait:block landscape:hidden mt-4 md:mt-6 p-3 md:p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                    <p class="text-sm sm:text-base md:text-lg lg:text-xl text-gray-500 dark:text-gray-400 mb-1 md:mb-2">Nächster Schritt:</p>
+                    <p class="text-base sm:text-lg md:text-xl lg:text-2xl text-gray-700 dark:text-gray-300 line-clamp-2">{group.steps[stepIndex + 1].text}</p>
+                  </div>
+                )}
+              </div>
             </div>
+          );
+        })
+      )}
+    </div>
+
+    <!-- Group selection modal -->
+    <div id="group-selector-modal" class="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full max-h-[80vh] overflow-y-auto">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Gruppe auswählen</h3>
+        </div>
+        <div class="p-4">
+          <div class="space-y-2">
+            {preparationGroups.map((group, index) => (
+              <button
+                class="group-select-btn w-full text-left p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                data-group-index={index}
+              >
+                <div class="font-medium text-gray-900 dark:text-white">
+                  {group.title || 'Ungruppierte Schritte'}
+                </div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">
+                  {group.steps.length} {group.steps.length === 1 ? 'Schritt' : 'Schritte'}
+                </div>
+              </button>
+            ))}
           </div>
-        );
-      })}
+        </div>
+      </div>
     </div>
 
     <!-- Navigation buttons -->
@@ -231,11 +283,12 @@ const allIngredients = flattenIngredients(recipe.ingredientGroups);
   </main>
 </div>
 
-<script define:vars={{ recipe }}>
+<script define:vars={{ preparationGroups, totalSteps }}>
   const slidesContainer = document.getElementById('cooking-slides');
   const slides = document.querySelectorAll('.cooking-slide');
   const prevButton = document.getElementById('prev-slide');
   const nextButton = document.getElementById('next-slide');
+  const groupSelectorModal = document.getElementById('group-selector-modal');
   let currentSlide = 0;
 
   // Prevent pull-to-refresh
@@ -290,6 +343,39 @@ const allIngredients = flattenIngredients(recipe.ingredientGroups);
       updateSlidePositions();
     }
   }
+
+  function navigateToGroup(groupIndex) {
+    // Calculate the slide index for the first step in the selected group
+    let targetSlide = 1; // Start after ingredients slide
+    for (let i = 0; i < groupIndex; i++) {
+      targetSlide += preparationGroups[i].steps.length;
+    }
+    
+    currentSlide = targetSlide;
+    updateSlidePositions();
+    groupSelectorModal.classList.add('hidden');
+  }
+
+  // Group selection handling
+  document.querySelectorAll('.group-selector').forEach(button => {
+    button.addEventListener('click', () => {
+      groupSelectorModal.classList.remove('hidden');
+    });
+  });
+
+  document.querySelectorAll('.group-select-btn').forEach(button => {
+    button.addEventListener('click', () => {
+      const groupIndex = parseInt(button.dataset.groupIndex);
+      navigateToGroup(groupIndex);
+    });
+  });
+
+  // Close modal when clicking outside
+  groupSelectorModal.addEventListener('click', (e) => {
+    if (e.target === groupSelectorModal) {
+      groupSelectorModal.classList.add('hidden');
+    }
+  });
 
   // Touch/swipe handling
   let touchStartX = 0;

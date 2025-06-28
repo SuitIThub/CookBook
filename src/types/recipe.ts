@@ -91,6 +91,7 @@ export interface ShoppingListItem {
   name: string;
   description?: string;
   quantity: Quantity;
+  originalQuantity?: Quantity; // Optional: original quantity from recipe before scaling
   isChecked?: boolean;
   recipeId?: string; // Optional: verknüpft Item mit Rezept
   recipeIngredientId?: string; // Optional: Original Ingredient ID aus dem Rezept
@@ -99,7 +100,8 @@ export interface ShoppingListItem {
 export interface ShoppingListRecipe {
   id: string; // Recipe ID
   title: string;
-  servings?: number;
+  servings: number;
+  currentServings?: number; // Optional: current number of servings (defaults to servings if not set)
   isCompleted: boolean; // Ob alle Zutaten des Rezepts markiert sind
   addedAt: Date;
 }

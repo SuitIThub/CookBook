@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
-import type { Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe } from '../types/recipe';
+import type { Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe, Quantity } from '../types/recipe';
 import { eventBus, EVENTS } from './events';
 
 export class CookbookDatabase {
@@ -377,48 +377,45 @@ export class CookbookDatabase {
       return null;
     }
 
-    // Check if recipe is already added
+    // Check if recipe is already in list
     if (shoppingList.recipes.some(r => r.id === recipeId)) {
-      return shoppingList; // Already added
+      return shoppingList;
     }
 
-    // Add recipe to shopping list
+    // Add recipe to list
     const shoppingListRecipe: ShoppingListRecipe = {
-      id: recipeId,
+      id: recipe.id,
       title: recipe.title,
       servings: recipe.metadata.servings,
+      currentServings: recipe.metadata.servings,
       isCompleted: false,
       addedAt: new Date()
     };
 
     shoppingList.recipes.push(shoppingListRecipe);
 
-    // Extract and add all ingredients from recipe
-    const newItems: ShoppingListItem[] = [];
-    
+    // Extract and add ingredients
     const extractIngredients = (groups: any[]): void => {
       groups.forEach(group => {
         if (group.ingredients) {
-          group.ingredients.forEach((ingredient: any) => {
-            if (ingredient.ingredients) {
-              // Nested group
-              extractIngredients([ingredient]);
-            } else if (ingredient.name && ingredient.quantities) {
-              // Individual ingredient
-              ingredient.quantities.forEach((quantity: any) => {
-                const newItem: ShoppingListItem = {
+          group.ingredients.forEach((item: any) => {
+            if (item.ingredients) {
+              // It's a nested group
+              extractIngredients([item]);
+            } else if (item.name && item.quantities && item.quantities.length > 0) {
+              // It's an ingredient with quantities
+              item.quantities.forEach((quantity: Quantity) => {
+                const shoppingItem: ShoppingListItem = {
                   id: uuidv4(),
-                  name: ingredient.name,
-                  description: ingredient.description,
-                  quantity: {
-                    amount: quantity.amount,
-                    unit: quantity.unit
-                  },
+                  name: item.name,
+                  description: item.description,
+                  quantity: { ...quantity },
+                  originalQuantity: { ...quantity },
                   isChecked: false,
-                  recipeId: recipeId,
-                  recipeIngredientId: ingredient.id
+                  recipeId: recipe.id,
+                  recipeIngredientId: item.id
                 };
-                newItems.push(newItem);
+                shoppingList.items.push(shoppingItem);
               });
             }
           });
@@ -427,14 +424,25 @@ export class CookbookDatabase {
     };
 
     extractIngredients(recipe.ingredientGroups);
-    
-    // Add all new items to shopping list
-    shoppingList.items.push(...newItems);
 
-    return this.updateShoppingList(listId, { 
-      items: shoppingList.items, 
-      recipes: shoppingList.recipes 
-    });
+    // Save updated shopping list
+    const stmt = this.db.prepare(`
+      UPDATE shopping_lists 
+      SET items = ?, recipes = ?, updated_at = ?
+      WHERE id = ?
+    `);
+
+    stmt.run(
+      JSON.stringify(shoppingList.items),
+      JSON.stringify(shoppingList.recipes),
+      new Date().toISOString(),
+      listId
+    );
+
+    // Notify about the update
+    eventBus.emit(EVENTS.SHOPPING_LIST_UPDATED, { listId });
+
+    return shoppingList;
   }
 
   removeRecipeFromShoppingList(listId: string, recipeId: string): ShoppingList | null {
@@ -555,6 +563,55 @@ export class CookbookDatabase {
     tags.forEach(tag => {
       stmt.run(uuidv4(), tag, tag);
     });
+  }
+
+  updateRecipeServingsInShoppingList(listId: string, recipeId: string, newServings: number): ShoppingList | null {
+    const shoppingList = this.getShoppingList(listId);
+    if (!shoppingList) return null;
+
+    // Find the recipe in the shopping list
+    const shoppingListRecipe = shoppingList.recipes.find(r => r.id === recipeId);
+    if (!shoppingListRecipe) return null;
+
+    // Calculate scaling factor using the original servings from the shopping list recipe
+    const originalServings = shoppingListRecipe.servings;
+    const scalingFactor = newServings / originalServings;
+
+    // Update recipe servings in shopping list
+    shoppingListRecipe.currentServings = newServings;
+
+    // Update quantities of items from this recipe
+    shoppingList.items = shoppingList.items.map(item => {
+      if (item.recipeId === recipeId && item.originalQuantity) {
+        return {
+          ...item,
+          quantity: {
+            ...item.quantity,
+            amount: parseFloat((item.originalQuantity.amount * scalingFactor).toFixed(2))
+          }
+        };
+      }
+      return item;
+    });
+
+    // Save the updated shopping list
+    const stmt = this.db.prepare(`
+      UPDATE shopping_lists 
+      SET items = ?, recipes = ?, updated_at = ?
+      WHERE id = ?
+    `);
+
+    stmt.run(
+      JSON.stringify(shoppingList.items),
+      JSON.stringify(shoppingList.recipes),
+      new Date().toISOString(),
+      listId
+    );
+
+    // Notify about the update
+    eventBus.emit(EVENTS.SHOPPING_LIST_UPDATED, { listId });
+
+    return shoppingList;
   }
 
   close(): void {

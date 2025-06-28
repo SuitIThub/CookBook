@@ -179,6 +179,23 @@ export const PUT: APIRoute = async ({ request, url }) => {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // Handle update-recipe-servings action
+    if (requestData.action === 'update-recipe-servings' && requestData.recipeId && typeof requestData.servings === 'number') {
+      const updatedShoppingList = db.updateRecipeServingsInShoppingList(id, requestData.recipeId, requestData.servings);
+      
+      if (!updatedShoppingList) {
+        return new Response(JSON.stringify({ error: 'Shopping list or recipe not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      return new Response(JSON.stringify(updatedShoppingList), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     
     // Handle regular update
     const updatedShoppingList = db.updateShoppingList(id, requestData);

@@ -23,7 +23,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS shopping_lists (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    description TEXT,
     items TEXT,
+    recipes TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
@@ -332,40 +334,37 @@ const sampleRecipes = [
   }
 ];
 
-// Sample shopping list
+// Sample shopping list data
 const sampleShoppingList = {
   id: uuidv4(),
   title: 'Wocheneinkauf',
+  description: 'Einkaufsliste für die Woche',
   items: [
     {
       id: uuidv4(),
-      ingredientName: 'Spaghetti',
-      quantity: { amount: 500, unit: 'g' },
-      isChecked: false
-    },
-    {
-      id: uuidv4(),
-      ingredientName: 'Tomaten',
-      quantity: { amount: 6, unit: 'Stück' },
-      isChecked: true
-    },
-    {
-      id: uuidv4(),
-      ingredientName: 'Milch',
+      name: 'Milch',
+      description: '1,5% Fett',
       quantity: { amount: 1, unit: 'L' },
+      originalQuantity: { amount: 1, unit: 'L' },
       isChecked: false
     },
     {
       id: uuidv4(),
-      ingredientName: 'Brot',
-      quantity: { amount: 1, unit: 'Laib' },
+      name: 'Brot',
+      description: 'Vollkornbrot',
+      quantity: { amount: 1, unit: 'Stück' },
+      originalQuantity: { amount: 1, unit: 'Stück' },
       isChecked: false
-    },
+    }
+  ],
+  recipes: [
     {
-      id: uuidv4(),
-      ingredientName: 'Eier',
-      quantity: { amount: 12, unit: 'Stück' },
-      isChecked: false
+      id: sampleRecipes[0].id, // Reference to Spaghetti Carbonara
+      title: 'Spaghetti Carbonara',
+      servings: 4,
+      currentServings: 4,
+      isCompleted: false,
+      addedAt: new Date()
     }
   ],
   createdAt: new Date().toISOString(),
@@ -396,14 +395,16 @@ sampleRecipes.forEach(recipe => {
 
 // Insert sample shopping list
 const insertShoppingList = db.prepare(`
-  INSERT OR REPLACE INTO shopping_lists (id, title, items, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?)
+  INSERT OR REPLACE INTO shopping_lists (id, title, description, items, recipes, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 
 insertShoppingList.run(
   sampleShoppingList.id,
   sampleShoppingList.title,
+  sampleShoppingList.description,
   JSON.stringify(sampleShoppingList.items),
+  JSON.stringify(sampleShoppingList.recipes),
   sampleShoppingList.createdAt,
   sampleShoppingList.updatedAt
 );

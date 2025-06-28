@@ -99,7 +99,55 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       </div>
     </div>
 
-            <!-- Shopping List Items -->
+    <!-- Recipe Template -->
+    <template id="recipe-template">
+      <div class="recipe-item border border-gray-300 dark:border-gray-600 rounded-lg p-4 cursor-pointer hover:shadow-sm transition-all" data-recipe-id="">
+        <div class="flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-medium text-gray-900 dark:text-white recipe-title"></h3>
+            <div class="flex items-center space-x-2 ml-4 flex-shrink-0">
+              <a href="" class="recipe-link btn btn-sm btn-ghost recipe-action" title="Rezept anzeigen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+              </a>
+              <button class="remove-recipe btn btn-sm btn-ghost text-gray-400 hover:text-red-500 recipe-action" title="Rezept entfernen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+              <p class="text-sm text-muted recipe-info"></p>
+              <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                <div class="flex items-center space-x-2">
+                  <label class="text-sm text-gray-600 dark:text-gray-400">Portionen:</label>
+                  <div class="flex items-center space-x-1">
+                    <button class="portion-decrease btn btn-icon btn-sm recipe-action" title="Portionen verringern">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                      </svg>
+                    </button>
+                    <input type="number" class="portion-input form-input form-input-sm w-16 text-center recipe-action" min="1" value="1" />
+                    <button class="portion-increase btn btn-icon btn-sm recipe-action" title="Portionen erhöhen">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <span class="text-sm text-gray-500">Originalportionen: <span class="original-servings"></span></span>
+              </div>
+              <p class="text-xs text-blue-600 dark:text-blue-400 mt-1 opacity-75">Klicken zum Hervorheben</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Shopping List Items -->
     <div class="card mt-6">
       <div class="card-content">
         <h2 id="items-heading" class="heading-secondary mb-4">
@@ -405,55 +453,60 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           
           return `
             <div class="shopping-item-group" data-item-ids="${itemIds}" data-recipe-ids="${recipeIds}">
-              <div class="shopping-item flex items-center space-x-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors ${hasMultipleItems ? 'cursor-pointer' : ''}" ${hasMultipleItems ? 'data-expandable="true"' : ''}>
-                <input 
-                  type="checkbox" 
-                  class="item-checkbox w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2 ${isPartiallyChecked ? 'opacity-50' : ''}"
-                  ${isChecked ? 'checked' : ''}
-                  title="${isPartiallyChecked ? 'Teilweise erledigt' : ''}"
-                />
-                <div class="flex-1 min-w-0">
-                  <div class="flex-between">
-                    <div class="flex items-center space-x-2">
-                      <span class="font-medium transition-colors ${
+              <div class="shopping-item flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors ${hasMultipleItems ? 'cursor-pointer' : ''}" ${hasMultipleItems ? 'data-expandable="true"' : ''}>
+                <!-- First Row: Checkbox and Title -->
+                <div class="flex items-center gap-3 flex-1">
+                  <input 
+                    type="checkbox" 
+                    class="item-checkbox w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2 ${isPartiallyChecked ? 'opacity-50' : ''} flex-shrink-0"
+                    ${isChecked ? 'checked' : ''}
+                    title="${isPartiallyChecked ? 'Teilweise erledigt' : ''}"
+                  />
+                  <span class="font-medium transition-colors ${
+                    isChecked 
+                      ? 'text-green-800 dark:text-green-300 line-through' 
+                      : 'text-gray-900 dark:text-white'
+                  }">
+                    ${group.name}
+                    ${hasMultipleItems ? `<span class="text-xs text-gray-500 ml-1">(${group.items.length}x)</span>` : ''}
+                  </span>
+                </div>
+
+                <!-- Second Row: Description, Actions, and Amount -->
+                <div class="flex items-center justify-between gap-2 ml-8 sm:ml-0">
+                  <div class="flex items-center gap-2 flex-1 min-w-0">
+                    ${group.descriptions.length > 0 ? `
+                      <p class="text-sm transition-colors truncate ${
                         isChecked 
-                          ? 'text-green-800 dark:text-green-300 line-through' 
-                          : 'text-gray-900 dark:text-white'
+                          ? 'text-green-700 dark:text-green-300 line-through' 
+                          : 'text-muted'
                       }">
-                        ${group.name}
-                        ${hasMultipleItems ? `<span class="text-xs text-gray-500 ml-1">(${group.items.length}x)</span>` : ''}
-                      </span>
-                      ${recipeIds ? `
-                        <button class="recipe-highlight-btn w-5 h-5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors" 
-                                data-recipe-ids="${recipeIds}" 
-                                title="Rezept hervorheben">
-                          <svg class="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                          </svg>
-                        </button>
-                      ` : ''}
-                      ${hasMultipleItems ? `
-                        <svg class="expand-icon w-4 h-4 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        ${group.descriptions.join(', ')}
+                      </p>
+                    ` : ''}
+                  </div>
+                  <div class="flex items-center gap-2 flex-shrink-0">
+                    ${recipeIds ? `
+                      <button class="recipe-highlight-btn w-5 h-5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors flex-shrink-0" 
+                              data-recipe-ids="${recipeIds}" 
+                              title="Rezept hervorheben">
+                        <svg class="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
                         </svg>
-                      ` : ''}
-                    </div>
+                      </button>
+                    ` : ''}
+                    ${hasMultipleItems ? `
+                      <svg class="expand-icon w-4 h-4 text-gray-400 transition-transform duration-200 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                      </svg>
+                    ` : ''}
                     <span class="${isChecked 
-                      ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-2 py-1 rounded'
-                      : 'quantity-badge'
+                      ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-2 py-1 rounded flex-shrink-0'
+                      : 'quantity-badge flex-shrink-0'
                     }">
                       ${formattedAmount} ${group.unit}
                     </span>
                   </div>
-                  ${group.descriptions.length > 0 ? `
-                    <p class="text-sm mt-1 transition-colors ${
-                      isChecked 
-                        ? 'text-green-700 dark:text-green-300 line-through' 
-                        : 'text-muted'
-                    }">
-                      ${group.descriptions.join(', ')}
-                    </p>
-                  ` : ''}
                 </div>
               </div>
               ${hasMultipleItems ? `
@@ -712,10 +765,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       }
 
       function toggleRecipeHighlight(recipeId) {
+        console.log('toggleRecipeHighlight called with recipeId:', recipeId);
+        
         // Clear existing highlights
         clearRecipeHighlights();
         
         if (currentlyHighlightedRecipe === recipeId) {
+          console.log('Same recipe clicked, clearing highlight');
           // If same recipe clicked, just clear highlights
           currentlyHighlightedRecipe = null;
           return;
@@ -723,10 +779,12 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         
         // Set new highlight
         currentlyHighlightedRecipe = recipeId;
+        console.log('Setting new highlight for recipe:', recipeId);
         highlightRecipeIngredients(recipeId);
       }
 
       function clearRecipeHighlights() {
+        console.log('Clearing all recipe highlights');
         // Remove all highlights from shopping item groups
         document.querySelectorAll('.shopping-item-group').forEach(group => {
           group.classList.remove('highlighted');
@@ -757,10 +815,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       }
 
       function highlightRecipeIngredients(recipeId) {
+        console.log('Highlighting ingredients for recipe:', recipeId);
         // Find all shopping item groups that belong to this recipe
         document.querySelectorAll('.shopping-item-group').forEach(group => {
           const recipeIds = group.getAttribute('data-recipe-ids');
+          console.log('Group recipe IDs:', recipeIds);
           if (recipeIds && recipeIds.split(',').includes(recipeId)) {
+            console.log('Found matching group:', group);
             group.classList.add('highlighted');
             
             // Auto-expand groups that have multiple items
@@ -781,19 +842,19 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           }
         });
         
-        // Mark recipe card as active by finding it by title
-        const recipe = shoppingListData.recipes?.find(r => r.id === recipeId);
-        if (recipe) {
-          document.querySelectorAll('.recipe-item').forEach(card => {
-            const cardTitle = card.querySelector('h3')?.textContent?.trim();
-            if (cardTitle === recipe.title) {
-              card.classList.add('active');
-            }
-          });
-        }
+        // Mark recipe card as active
+        document.querySelectorAll('.recipe-item').forEach(card => {
+          const cardRecipeId = card.getAttribute('data-recipe-id');
+          console.log('Checking recipe card:', cardRecipeId);
+          if (cardRecipeId === recipeId) {
+            console.log('Found matching card, adding active class');
+            card.classList.add('active');
+          }
+        });
       }
       
       function highlightIndividualItems(group, recipeId) {
+        console.log('Highlighting individual items in group for recipe:', recipeId);
         // Highlight individual detail items that belong to this recipe
         const details = group.querySelector('.item-details');
         if (details) {
@@ -804,6 +865,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             const item = shoppingListData.items.find(item => item.id === itemId);
             
             if (item && item.recipeId === recipeId) {
+              console.log('Found matching detail item:', itemId);
               detailItem.classList.add('detail-item-highlighted');
             }
           });
@@ -989,202 +1051,178 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         await addMultipleRecipesToShoppingList([recipeId]);
       }
 
-      // Render shopping recipes
-      function renderShoppingRecipes() {
-        const recipesSection = document.getElementById('shopping-recipes-section');
-        const recipesContainer = document.getElementById('shopping-recipes');
-        
-        if (!shoppingListData.recipes || shoppingListData.recipes.length === 0) {
-          recipesSection?.style.setProperty('display', 'none');
-          return;
-        }
-        
-        recipesSection?.style.setProperty('display', 'block');
-        
-        if (!recipesContainer) return;
-        
-        recipesContainer.innerHTML = shoppingListData.recipes.map(recipe => {
-          // Count items from this recipe in the shopping list
-          const recipeItemCount = shoppingListData.items.filter(item => item.recipeId === recipe.id).length;
-          
-          return `
-          <div class="recipe-item border border-gray-300 dark:border-gray-600 rounded-lg p-4 cursor-pointer hover:shadow-sm transition-all" title="Klicken um Zutaten hervorzuheben">
-            <div class="flex items-start justify-between">
-              <div class="flex items-start space-x-3 flex-1 min-w-0">
-                                 ${recipe.images && recipe.images.length > 0 
-                   ? `<img src="${recipe.images[0].url}" alt="${recipe.title}" class="w-12 h-12 object-cover rounded-lg">`
-                  : `<div class="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                       <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                       </svg>
-                     </div>`
-                }
-                <div class="flex-1 min-w-0">
-                  <h3 class="font-medium text-gray-900 dark:text-white truncate">${recipe.title}</h3>
-                  <p class="text-sm text-muted">${recipeItemCount} Zutaten in der Liste</p>
-                  <p class="text-xs text-blue-600 dark:text-blue-400 mt-1 opacity-75">Klicken zum Hervorheben</p>
-                </div>
-              </div>
-              <div class="flex items-center space-x-2">
-                <a href="/rezept/${recipe.id}" class="btn btn-sm btn-ghost" title="Rezept anzeigen">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                  </svg>
-                </a>
-                <span class="btn btn-sm btn-ghost text-gray-400 cursor-not-allowed" title="Rezepte können nur im Bearbeitungsmodus entfernt werden">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728"/>
-                  </svg>
-                </span>
-              </div>
-            </div>
-          </div>
-        `;
-        }).join('');
-        
-        // Note: Recipe removal is disabled in view mode - only available in edit mode
-
-        // Attach click handlers for recipe highlighting
-        recipesContainer.querySelectorAll('.recipe-item').forEach(recipeCard => {
-          recipeCard.addEventListener('click', (e) => {
-            // Don't trigger if clicking on action buttons
-            if (e.target.closest('button') || e.target.closest('a')) {
-              return;
-            }
-            
-            // Find recipe ID from the recipe data
-            const recipeTitle = recipeCard.querySelector('h3')?.textContent?.trim();
-            const recipe = shoppingListData.recipes?.find(r => r.title === recipeTitle);
-            const recipeId = recipe?.id;
-            
-            if (recipeId) {
-              toggleRecipeHighlight(recipeId);
-            }
-          });
-        });
-      }
-
-      // Remove recipe from shopping list
-      async function removeRecipeFromShoppingList(recipeId) {
-        // Wait for modal functions to be available
-        let attempts = 0;
-        while (!window.showDeleteConfirm && attempts < 10) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          attempts++;
-        }
-
-        let confirmed = false;
-        if (window.showDeleteConfirm) {
-          confirmed = await window.showDeleteConfirm('Sollen die Zutaten dieses Rezepts aus der Einkaufsliste entfernt werden?');
-        } else {
-          confirmed = confirm('Sollen die Zutaten dieses Rezepts aus der Einkaufsliste entfernt werden?');
-        }
-        
-        if (!confirmed) {
-          return;
-        }
-        
-        try {
-          const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'remove-recipe',
-              recipeId: recipeId
-            }),
-          });
-
-          if (response.ok) {
-            const updatedList = await response.json();
-            shoppingListData.items = updatedList.items;
-            shoppingListData.recipes = updatedList.recipes || [];
-            
-            // Re-render items and recipes
-            renderShoppingItems();
-            renderShoppingRecipes();
-            updateHeaderCounters();
-          } else {
-            const error = await response.json();
-            alert(error.error || 'Fehler beim Entfernen des Rezepts');
-          }
-        } catch (error) {
-          console.error('Error removing recipe:', error);
-          alert('Fehler beim Entfernen des Rezepts');
-        }
-      }
-
-      // Add recipe modal handling
-      const addRecipeBtn = document.getElementById('add-recipe-btn');
-      const addRecipeModal = document.getElementById('add-recipe-modal');
-      const addRecipeCloseButtons = addRecipeModal?.querySelectorAll('.modal-close');
-
-      addRecipeBtn?.addEventListener('click', async () => {
-        addRecipeModal?.classList.remove('hidden');
-        
-        // Load recipes if not already loaded
-        if (availableRecipes.length === 0) {
-          await loadRecipes();
-        }
-      });
-
-      addRecipeCloseButtons?.forEach(btn => {
-        btn.addEventListener('click', () => {
-          addRecipeModal?.classList.add('hidden');
-          document.getElementById('recipe-search').value = '';
-          renderAvailableRecipes(availableRecipes);
-          clearAllSelections();
-        });
-      });
-
-      addRecipeModal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
-        addRecipeModal?.classList.add('hidden');
-        document.getElementById('recipe-search').value = '';
-        renderAvailableRecipes(availableRecipes);
-        clearAllSelections();
-      });
-
-      // Handle select all checkbox
-      const selectAllCheckbox = document.getElementById('select-all-recipes');
-      selectAllCheckbox?.addEventListener('change', (e) => {
-        const checkboxes = document.querySelectorAll('.recipe-checkbox');
-        checkboxes.forEach(checkbox => {
-          checkbox.checked = e.target.checked;
-        });
-        updateSelectedCount();
-      });
-
-      // Handle add selected recipes button
-      const addSelectedButton = document.getElementById('add-selected-recipes');
-      addSelectedButton?.addEventListener('click', async () => {
-        const selectedCheckboxes = document.querySelectorAll('.recipe-checkbox:checked');
-        const selectedRecipeIds = Array.from(selectedCheckboxes).map(checkbox => 
-          checkbox.getAttribute('data-recipe-id')
-        );
-        
-        if (selectedRecipeIds.length > 0) {
-          await addMultipleRecipesToShoppingList(selectedRecipeIds);
-          clearAllSelections();
-        }
-      });
-
-      // Helper function to clear all selections
-      function clearAllSelections() {
-        document.querySelectorAll('.recipe-checkbox').forEach(checkbox => {
-          checkbox.checked = false;
-        });
-        const selectAllCheckbox = document.getElementById('select-all-recipes');
-        if (selectAllCheckbox) {
-          selectAllCheckbox.checked = false;
-          selectAllCheckbox.indeterminate = false;
-        }
-        updateSelectedCount();
-      }
-
       // Initial render of recipes
       renderShoppingRecipes();
+      
+      // Function to render shopping recipes
+      function renderShoppingRecipes() {
+        const section = document.getElementById('shopping-recipes-section');
+        const container = document.getElementById('shopping-recipes');
+        
+        if (!section || !container) return;
+        
+        if (!shoppingListData.recipes || shoppingListData.recipes.length === 0) {
+          section.style.display = 'none';
+          return;
+        }
+        
+        section.style.display = 'block';
+        
+        // Get the template
+        const template = document.getElementById('recipe-template');
+        if (!template) {
+          console.error('Recipe template not found');
+          return;
+        }
+        
+        // Clear the container
+        container.innerHTML = '';
+        
+        // Add each recipe
+        shoppingListData.recipes.forEach(recipe => {
+          // Clone the template
+          const clone = template.content.cloneNode(true);
+          const recipeElement = clone.querySelector('.recipe-item');
+          
+          // Set recipe ID
+          recipeElement.setAttribute('data-recipe-id', recipe.id);
+          
+          // Set title
+          const titleElement = clone.querySelector('.recipe-title');
+          if (titleElement) {
+            titleElement.textContent = recipe.title;
+          }
+          
+                    // Set info text
+           const infoElement = clone.querySelector('.recipe-info');
+           if (infoElement) {
+             const recipeItemCount = shoppingListData.items.filter(item => item.recipeId === recipe.id).length;
+             infoElement.textContent = `${recipeItemCount} Zutaten in der Liste`;
+           }
+          
+          // Set servings
+          const servingsInput = clone.querySelector('.portion-input');
+          if (servingsInput) {
+            servingsInput.value = recipe.currentServings || recipe.servings;
+            servingsInput.setAttribute('data-recipe-id', recipe.id);
+          }
+          
+          // Set original servings
+          const originalServingsElement = clone.querySelector('.original-servings');
+          if (originalServingsElement) {
+            originalServingsElement.textContent = recipe.servings;
+          }
+          
+          // Set recipe link
+          const recipeLink = clone.querySelector('.recipe-link');
+          if (recipeLink) {
+            recipeLink.href = `/rezept/${recipe.id}`;
+          }
+          
+          // Add event listeners
+          const decreaseBtn = clone.querySelector('.portion-decrease');
+          const increaseBtn = clone.querySelector('.portion-increase');
+          const portionInput = clone.querySelector('.portion-input');
+          const removeBtn = clone.querySelector('.remove-recipe');
+          
+          if (decreaseBtn && portionInput) {
+            decreaseBtn.addEventListener('click', () => {
+              const currentValue = parseInt(portionInput.value);
+              if (currentValue > 1) {
+                portionInput.value = currentValue - 1;
+                updateRecipePortions(portionInput);
+              }
+            });
+          }
+          
+          if (increaseBtn && portionInput) {
+            increaseBtn.addEventListener('click', () => {
+              const currentValue = parseInt(portionInput.value);
+              portionInput.value = currentValue + 1;
+              updateRecipePortions(portionInput);
+            });
+          }
+          
+          if (portionInput) {
+            portionInput.addEventListener('change', (e) => {
+              updateRecipePortions(e.target);
+            });
+          }
+          
+          if (removeBtn) {
+            removeBtn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              if (confirm('Möchten Sie dieses Rezept wirklich aus der Einkaufsliste entfernen?')) {
+                await removeRecipeFromShoppingList(recipe.id);
+              }
+            });
+          }
+          
+          // Add click handler for recipe highlighting
+          recipeElement.addEventListener('click', (e) => {
+            // Don't trigger if clicking on a button or input
+            if (!e.target.closest('.recipe-action')) {
+              toggleRecipeHighlight(recipe.id);
+            }
+          });
+          
+          container.appendChild(clone);
+        });
+      }
+      
+      // Function to update recipe portions and scale ingredients
+      async function updateRecipePortions(input) {
+        const recipeId = input.getAttribute('data-recipe-id');
+        const newServings = parseInt(input.value);
+        
+        if (!recipeId || !newServings || newServings < 1) {
+          console.error('Invalid input for portion update');
+          return;
+        }
+        
+        console.log('Updating portions for recipe:', recipeId, 'to', newServings);
+        
+        try {
+          const response = await fetch(`/api/shopping-lists/${shoppingListData.id}/recipes/${recipeId}/servings`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              servings: newServings
+            })
+          });
+          
+          if (response.ok) {
+            const updatedList = await response.json();
+            
+            // Update local data by copying properties instead of reassignment
+            Object.assign(shoppingListData, updatedList);
+            
+            // Re-render items to show updated quantities
+            renderShoppingItems();
+            renderShoppingRecipes();
+            
+            console.log('Successfully updated portions');
+          } else {
+            console.error('Failed to update portions:', response.statusText);
+            
+            // Reset to original value
+            const recipe = shoppingListData.recipes.find(r => r.id === recipeId);
+            if (recipe) {
+              input.value = recipe.currentServings || recipe.servings;
+            }
+          }
+        } catch (error) {
+          console.error('Error updating portions:', error);
+          
+          // Reset to original value
+          const recipe = shoppingListData.recipes.find(r => r.id === recipeId);
+          if (recipe) {
+            input.value = recipe.currentServings || recipe.servings;
+          }
+        }
+      }
       
       // Setup Server-Sent Events for real-time updates
       let eventSource = null;
@@ -1216,7 +1254,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
               
               if (data.type === 'connected') {
                 console.log('Connected to shopping list updates');
-              } else if (data.type === 'update') {
+              } else if (data.type === 'update' && data.data) {
                 // Update received from another client
                 console.log('📱 Real-time update received');
                 updateFromServer(data.data);
@@ -1249,20 +1287,26 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       }
       
       function updateFromServer(updatedList) {
+        if (!updatedList) return;
+        
         // Only update if data is different
-        const currentItemsJson = JSON.stringify(shoppingListData.items);
-        const newItemsJson = JSON.stringify(updatedList.items);
-        const currentRecipesJson = JSON.stringify(shoppingListData.recipes);
-        const newRecipesJson = JSON.stringify(updatedList.recipes);
+        const currentItemsJson = JSON.stringify(shoppingListData.items || []);
+        const newItemsJson = JSON.stringify(updatedList.items || []);
+        const currentRecipesJson = JSON.stringify(shoppingListData.recipes || []);
+        const newRecipesJson = JSON.stringify(updatedList.recipes || []);
         
         if (currentItemsJson !== newItemsJson || currentRecipesJson !== newRecipesJson) {
-          shoppingListData.items = updatedList.items;
-          shoppingListData.recipes = updatedList.recipes || [];
+          // Update properties individually to avoid reassignment
+          if (updatedList.items) {
+            shoppingListData.items = updatedList.items;
+          }
+          if (updatedList.recipes) {
+            shoppingListData.recipes = updatedList.recipes;
+          }
           
-          // Re-render everything
+          // Re-render the UI
           renderShoppingItems();
           renderShoppingRecipes();
-          updateHeaderCounters();
         }
       }
       
@@ -1322,6 +1366,43 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           clearTimeout(reconnectTimer);
         }
       });
+
+      // Function to remove a recipe from the shopping list
+      async function removeRecipeFromShoppingList(recipeId) {
+        try {
+          const response = await fetch(`/api/shopping-lists/${shoppingListData.id}/recipes`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              recipeId: recipeId
+            })
+          });
+          
+          if (response.ok) {
+            // Update local data
+            shoppingListData.recipes = shoppingListData.recipes.filter(r => r.id !== recipeId);
+            shoppingListData.items = shoppingListData.items.filter(item => item.recipeId !== recipeId);
+            
+            // Clear highlights if this recipe was highlighted
+            if (currentlyHighlightedRecipe === recipeId) {
+              clearRecipeHighlights();
+              currentlyHighlightedRecipe = null;
+            }
+            
+            // Re-render the UI
+            renderShoppingItems();
+            renderShoppingRecipes();
+          } else {
+            console.error('Failed to remove recipe:', response.statusText);
+            alert('Fehler beim Entfernen des Rezepts');
+          }
+        } catch (error) {
+          console.error('Error removing recipe:', error);
+          alert('Fehler beim Entfernen des Rezepts');
+        }
+      }
     });
   </script>
 </Layout> 

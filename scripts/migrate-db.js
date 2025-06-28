@@ -210,6 +210,60 @@ function normalizeType(type) {
 }
 
 function performDataMigrations(db) {
+  // Migrate shopping list items to include originalQuantity
+  const shoppingListsWithItems = db.prepare('SELECT id, items FROM shopping_lists').all();
+  for (const list of shoppingListsWithItems) {
+    if (!list.items) continue;
+
+    let items = JSON.parse(list.items);
+    let needsUpdate = false;
+
+    // Add originalQuantity to items if missing
+    items = items.map(item => {
+      if (item.recipeId && !item.originalQuantity) {
+        needsUpdate = true;
+        return {
+          ...item,
+          originalQuantity: { ...item.quantity }
+        };
+      }
+      return item;
+    });
+
+    if (needsUpdate) {
+      console.log(`📝 Adding originalQuantity to items in shopping list: ${list.id}`);
+      db.prepare('UPDATE shopping_lists SET items = ? WHERE id = ?')
+        .run(JSON.stringify(items), list.id);
+    }
+  }
+
+  // Migrate shopping list recipes to include currentServings
+  const listsWithRecipes = db.prepare('SELECT id, recipes FROM shopping_lists WHERE recipes IS NOT NULL').all();
+  for (const list of listsWithRecipes) {
+    if (!list.recipes) continue;
+
+    let recipes = JSON.parse(list.recipes);
+    let needsUpdate = false;
+
+    // Add currentServings to recipes if missing
+    recipes = recipes.map(recipe => {
+      if (!recipe.currentServings && recipe.servings) {
+        needsUpdate = true;
+        return {
+          ...recipe,
+          currentServings: recipe.servings
+        };
+      }
+      return recipe;
+    });
+
+    if (needsUpdate) {
+      console.log(`📝 Adding currentServings to recipes in shopping list: ${list.id}`);
+      db.prepare('UPDATE shopping_lists SET recipes = ? WHERE id = ?')
+        .run(JSON.stringify(recipes), list.id);
+    }
+  }
+
   // Migration 1: Update existing recipes to have empty images array if they have null
   const updateResult = db.prepare(`
     UPDATE recipes 
