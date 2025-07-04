@@ -1,0 +1,32 @@
+version: "3.9"
+services:
+  cookbook:
+    build: .
+    container_name: cookbook-app
+    ports:
+      - "4321:4321"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - .:/app
+    networks:
+      - cookbook_network
+
+  pinggy_cookbook:
+    image: pinggy/pinggy
+    container_name: pinggy_cookbook
+    network_mode: host
+    stdin_open: true
+    tty: true
+    command: >
+      -p 443
+      -R0:localhost:4321
+      -o StrictHostKeyChecking=no
+      -o ServerAliveInterval=30
+      -t iz9XpZtE6ww+force@eu.pro.pinggy.io
+      "b:GIS:GIS2017!"
+      x:xff
+
+networks:
+  cookbook_network:
+    driver: bridge
