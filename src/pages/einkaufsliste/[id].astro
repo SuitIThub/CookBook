@@ -1403,6 +1403,48 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           alert('Fehler beim Entfernen des Rezepts');
         }
       }
+
+      // Add recipe modal handling
+      const addRecipeBtn = document.getElementById('add-recipe-btn');
+      const addRecipeModal = document.getElementById('add-recipe-modal');
+      const selectAllRecipes = document.getElementById('select-all-recipes');
+      const addSelectedRecipesBtn = document.getElementById('add-selected-recipes');
+
+      // Open recipe modal and load recipes
+      addRecipeBtn?.addEventListener('click', () => {
+        addRecipeModal?.classList.remove('hidden');
+        loadRecipes();
+      });
+
+      // Close recipe modal
+      addRecipeModal?.querySelector('.modal-close')?.addEventListener('click', () => {
+        addRecipeModal?.classList.add('hidden');
+      });
+
+      addRecipeModal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
+        addRecipeModal?.classList.add('hidden');
+      });
+
+      // Handle select all recipes
+      selectAllRecipes?.addEventListener('change', (e) => {
+        const checkboxes = document.querySelectorAll('.recipe-checkbox');
+        checkboxes.forEach(checkbox => {
+          checkbox.checked = e.target.checked;
+        });
+        updateSelectedCount();
+      });
+
+      // Handle add selected recipes
+      addSelectedRecipesBtn?.addEventListener('click', async () => {
+        const selectedRecipes = Array.from(document.querySelectorAll('.recipe-checkbox:checked'))
+          .map(checkbox => checkbox.getAttribute('data-recipe-id'))
+          .filter(Boolean);
+
+        if (selectedRecipes.length > 0) {
+          await addMultipleRecipesToShoppingList(selectedRecipes);
+          addRecipeModal?.classList.add('hidden');
+        }
+      });
     });
   </script>
 </Layout> 
