@@ -23,9 +23,24 @@ export const GET: APIRoute = async ({ url }) => {
       }
 
       if (format === 'json') {
-        // Export as JSON without any image data
+        // Export as JSON, keeping image URLs but removing local image data
         const exportData = recipes.map(recipe => {
-          const { images, imageUrl, ...cleanRecipe } = recipe;
+          const cleanRecipe = { ...recipe };
+          if (cleanRecipe.images) {
+            cleanRecipe.images = cleanRecipe.images.map(img => {
+              // Keep only URL and basic image info for external images
+              if (img.url && !img.url.startsWith('/uploads/')) {
+                return {
+                  id: img.id,
+                  filename: img.filename,
+                  url: img.url,
+                  uploadedAt: img.uploadedAt
+                };
+              }
+              // Remove local images
+              return null;
+            }).filter(Boolean);
+          }
           return cleanRecipe;
         });
         
@@ -101,29 +116,37 @@ export const GET: APIRoute = async ({ url }) => {
 
 async function exportRecipeWithImages(recipes: any[]): Promise<Response> {
   console.log(`Exporting ${recipes.length} recipe(s) with images`);
-  console.log(`Working directory: ${process.cwd()}`);
   
-  // Create export data with base64 encoded images
+  // Create export data with base64 encoded local images and preserved URLs for external images
   const exportData = await Promise.all(recipes.map(async (recipe, recipeIndex) => {
     console.log(`Processing recipe ${recipeIndex + 1}: ${recipe.title}`);
     console.log(`Recipe has ${recipe.images?.length || 0} image(s)`);
     
-    const validImages = [];
+    const processedImages = [];
     
     for (const image of (recipe.images || [])) {
       console.log(`Processing image:`, image);
       
-      // Construct path from URL if available, otherwise use filename
+      // If it's an external URL, keep it as is
+      if (image.url && !image.url.startsWith('/uploads/')) {
+        processedImages.push({
+          ...image,
+          data: null, // No base64 data for external URLs
+          isExternal: true // Mark as external URL
+        });
+        console.log(`Preserved external URL: ${image.url}`);
+        continue;
+      }
+      
+      // Handle local images
       let relativePath = '';
       if (image.url && image.url.startsWith('/uploads/')) {
-        // Remove leading slash and use the URL path directly
-        relativePath = image.url.substring(1); // removes the leading '/'
+        relativePath = image.url.substring(1);
       } else {
-        // Fallback to filename in uploads directory
         relativePath = `uploads/${image.filename}`;
       }
       
-      // Try multiple possible paths
+      // Try multiple possible paths for local images
       const possiblePaths = [
         path.join(process.cwd(), 'public', relativePath),
         path.join(process.cwd(), 'public/uploads', image.filename),
@@ -138,19 +161,13 @@ async function exportRecipeWithImages(recipes: any[]): Promise<Response> {
         if (fs.existsSync(testPath)) {
           imagePath = testPath;
           imageFound = true;
-          console.log(`Found image at: ${testPath}`);
+          console.log(`Found local image at: ${testPath}`);
           break;
         }
       }
       
       if (!imageFound) {
-        console.warn(`Image file not found at any of these paths:`, possiblePaths);
-        // Include the image anyway but without data
-        validImages.push({
-          ...image,
-          url: undefined,
-          data: null
-        });
+        console.warn(`Local image file not found at any of these paths:`, possiblePaths);
         continue;
       }
       
@@ -158,29 +175,23 @@ async function exportRecipeWithImages(recipes: any[]): Promise<Response> {
         const buffer = fs.readFileSync(imagePath!);
         const imageData = buffer.toString('base64');
         
-        // Always include the image, even if data is empty (for debugging)
-        validImages.push({
+        processedImages.push({
           ...image,
           url: undefined,
-          data: imageData
+          data: imageData,
+          isExternal: false
         });
-        console.log(`Successfully exported image: ${image.filename} (${imageData.length} chars)`);
+        console.log(`Successfully exported local image: ${image.filename}`);
       } catch (error) {
-        console.warn(`Failed to read image ${image.filename}:`, error);
-        // Include the image anyway but without data
-        validImages.push({
-          ...image,
-          url: undefined,
-          data: null
-        });
+        console.warn(`Failed to read local image ${image.filename}:`, error);
       }
     }
     
-    console.log(`Recipe ${recipe.title} processed with ${validImages.length} image(s)`);
+    console.log(`Recipe ${recipe.title} processed with ${processedImages.length} image(s)`);
     
     return {
       ...recipe,
-      images: validImages
+      images: processedImages
     };
   }));
 

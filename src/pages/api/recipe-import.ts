@@ -52,6 +52,19 @@ export const POST: APIRoute = async ({ request }) => {
             const processedImages = [];
             
             for (const image of recipe.images) {
+              // Handle external URLs
+              if (image.isExternal && image.url) {
+                processedImages.push({
+                  id: image.id || uuidv4(),
+                  filename: image.filename,
+                  url: image.url,
+                  uploadedAt: image.uploadedAt || new Date()
+                });
+                console.log(`Preserved external image URL: ${image.url}`);
+                continue;
+              }
+
+              // Handle local images with base64 data
               if (image.data && image.data.trim()) {
                 try {
                   // Generate new filename to avoid conflicts
@@ -72,9 +85,9 @@ export const POST: APIRoute = async ({ request }) => {
                   };
                   
                   processedImages.push(processedImage);
-                  console.log(`Successfully imported image: ${newFilename}`);
+                  console.log(`Successfully imported local image: ${newFilename}`);
                 } catch (error) {
-                  console.error(`Failed to import image ${image.filename}:`, error);
+                  console.error(`Failed to import local image ${image.filename}:`, error);
                   // Skip this image but continue with others
                 }
               } else {
