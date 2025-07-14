@@ -39,7 +39,11 @@ const { title } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="description" content="Digitales Kochbuch für Rezepte und Einkaufslisten" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
     
@@ -86,9 +90,7 @@ const { title } = Astro.props;
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <a href="/" class="flex items-center space-x-2">
-              <svg class="w-8 h-8 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
-              </svg>
+              <img src="/icons/icon_alpha_32.svg" alt="Kochbuch Logo" class="w-8 h-8 text-orange-500" />
               <span class="text-xl font-semibold text-gray-900 dark:text-white">Kochbuch</span>
             </a>
           </div>
