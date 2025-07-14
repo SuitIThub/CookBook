@@ -324,7 +324,7 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       btn.addEventListener('click', async (e) => {
         const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
         const format = (e.currentTarget as HTMLElement).classList.contains('export-json') ? 'json' : 'rcb';
-        window.location.href = `/api/recipe-export?id=${recipeId}&format=${format}`;
+        window.location.href = `/api/recipes/export?id=${recipeId}&format=${format}`;
         menu.classList.add('hidden');
       });
     });

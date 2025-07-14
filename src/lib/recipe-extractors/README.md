@@ -161,8 +161,8 @@ Popular recipe websites that could benefit from custom extractors:
 
 ## API Endpoints
 
-- `POST /api/recipe-import-url` - Import recipe from URL
-- `GET /api/recipe-import-url` - Get list of supported sites and extractors
+- `POST /api/recipes/import/url` - Import recipe from URL
+- `GET /api/recipes/import/url` - Get list of supported sites and extractors
 
 ## Error Handling
 

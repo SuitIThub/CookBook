@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { RecipeExtractorFactory } from '../../lib/recipe-extractors/factory';
+import { RecipeExtractorFactory } from '../../../../lib/recipe-extractors/factory';
 
 export const POST: APIRoute = async ({ request }) => {
   try {

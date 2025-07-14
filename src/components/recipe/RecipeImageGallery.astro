@@ -354,7 +354,7 @@ const images = recipe.images || [];
       if (!confirmed) return;
 
       try {
-        const response = await fetch(`/api/recipe-images?recipeId=${targetRecipeId}&imageId=${imageId}`, {
+        const response = await fetch(`/api/recipes/images?recipeId=${targetRecipeId}&imageId=${imageId}`, {
           method: 'DELETE'
         });
 
@@ -648,7 +648,7 @@ const images = recipe.images || [];
       formData.append('image', file);
       formData.append('recipeId', recipeId);
 
-      const response = await fetch('/api/recipe-images', {
+      const response = await fetch('/api/recipes/images', {
         method: 'POST',
         body: formData
       });

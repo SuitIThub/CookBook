@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import type { RecipeImage } from '../../types/recipe';
-import { db } from '../../lib/database';
-import { RecipeExtractorFactory } from '../../lib/recipe-extractors/factory';
+import type { RecipeImage } from '../../../../types/recipe';
+import { db } from '../../../../lib/database';
+import { RecipeExtractorFactory } from '../../../../lib/recipe-extractors/factory';
 import { v4 as uuidv4 } from 'uuid';
 
 export const POST: APIRoute = async ({ request }) => {

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../lib/database';
-import type { Recipe } from '../../types/recipe';
+import { db } from '../../../lib/database';
+import type { Recipe, RecipeImage } from '../../../types/recipe';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -39,7 +39,7 @@ export const GET: APIRoute = async ({ url }) => {
               }
               // Remove local images
               return null;
-            }).filter(Boolean);
+            }).filter(Boolean) as RecipeImage[];
           }
           return cleanRecipe;
         });

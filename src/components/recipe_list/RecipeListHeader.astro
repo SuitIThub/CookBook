@@ -477,13 +477,13 @@ declare global {
   
   bulkExportJsonBtn?.addEventListener('click', () => {
     if (selectedRecipes.size === 0) return;
-    window.location.href = `/api/recipe-export?format=json&ids=${Array.from(selectedRecipes).join(',')}`;
+    window.location.href = `/api/recipes/export?format=json&ids=${Array.from(selectedRecipes).join(',')}`;
     bulkExportMenu?.classList.add('hidden');
   });
   
   bulkExportRcbBtn?.addEventListener('click', () => {
     if (selectedRecipes.size === 0) return;
-    window.location.href = `/api/recipe-export?format=rcb&ids=${Array.from(selectedRecipes).join(',')}`;
+    window.location.href = `/api/recipes/export?format=rcb&ids=${Array.from(selectedRecipes).join(',')}`;
     bulkExportMenu?.classList.add('hidden');
   });
   
@@ -708,7 +708,7 @@ declare global {
 
   async function loadSupportedSites() {
     try {
-      const response = await fetch('/api/recipe-import-url');
+      const response = await fetch('/api/recipes/import/url');
       if (response.ok) {
         const data = await response.json();
         supportedSites = data.supportedSites || [];
@@ -723,7 +723,7 @@ declare global {
       new URL(url); // Validate URL format first
       
       // Get extractor preview information
-      const response = await fetch('/api/recipe-import-preview', {
+      const response = await fetch('/api/recipes/import/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -825,7 +825,7 @@ declare global {
     }
 
     try {
-      const response = await fetch('/api/recipe-import-url', {
+      const response = await fetch('/api/recipes/import/url', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -911,7 +911,7 @@ declare global {
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      const response = await fetch('/api/recipe-import', {
+      const response = await fetch('/api/recipes/import', {
         method: 'POST',
         body: formData
       });
@@ -1019,12 +1019,12 @@ declare global {
 
   // Export handlers
   exportJsonBtn?.addEventListener('click', () => {
-    window.location.href = '/api/recipe-export?format=json';
+    window.location.href = '/api/recipes/export?format=json';
     exportMenu?.classList.add('hidden');
   });
 
   exportRcbBtn?.addEventListener('click', () => {
-    window.location.href = '/api/recipe-export?format=rcb';
+    window.location.href = '/api/recipes/export?format=rcb';
     exportMenu?.classList.add('hidden');
   });
 </script>

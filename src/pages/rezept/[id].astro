@@ -480,26 +480,26 @@ try {
     // Export handlers for desktop
     exportRecipeJsonBtn?.addEventListener('click', () => {
       const recipeId = exportRecipeJsonBtn.getAttribute('data-recipe-id');
-      window.location.href = `/api/recipe-export?id=${recipeId}&format=json`;
+      window.location.href = `/api/recipes/export?id=${recipeId}&format=json`;
       exportRecipeMenu?.classList.add('hidden');
     });
 
     exportRecipeRcbBtn?.addEventListener('click', () => {
       const recipeId = exportRecipeRcbBtn.getAttribute('data-recipe-id');
-      window.location.href = `/api/recipe-export?id=${recipeId}&format=rcb`;
+      window.location.href = `/api/recipes/export?id=${recipeId}&format=rcb`;
       exportRecipeMenu?.classList.add('hidden');
     });
 
     // Export handlers for mobile
     exportRecipeJsonBtnMobile?.addEventListener('click', () => {
       const recipeId = exportRecipeJsonBtnMobile.getAttribute('data-recipe-id');
-      window.location.href = `/api/recipe-export?id=${recipeId}&format=json`;
+      window.location.href = `/api/recipes/export?id=${recipeId}&format=json`;
       exportRecipeMenuMobile?.classList.add('hidden');
     });
 
     exportRecipeRcbBtnMobile?.addEventListener('click', () => {
       const recipeId = exportRecipeRcbBtnMobile.getAttribute('data-recipe-id');
-      window.location.href = `/api/recipe-export?id=${recipeId}&format=rcb`;
+      window.location.href = `/api/recipes/export?id=${recipeId}&format=rcb`;
       exportRecipeMenuMobile?.classList.add('hidden');
     });
 
