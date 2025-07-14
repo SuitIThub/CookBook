@@ -18,17 +18,21 @@ export interface ExtractedRecipeData {
   sourceUrl: string;
 }
 
+export interface Capability {
+  value: boolean | 'experimental';
+  title: string;
+}
+
 export interface ExtractorCapabilities {
   supportsIngredientGroups: boolean;
   supportsPreparationGroups: boolean;
   supportsImages: boolean;
   supportsNutrition: boolean | 'experimental';
   supportsMetadata: boolean;
-  supportsTimeExtraction?: boolean | 'experimental';
-  supportsDifficultyExtraction?: boolean | 'experimental';
-  supportsKeywordExtraction?: boolean | 'experimental';
-  supportsCategoryExtraction?: boolean | 'experimental';
-  description: string;
+  supportsTimeExtraction: boolean | 'experimental';
+  supportsDifficultyExtraction: boolean | 'experimental';
+  supportsKeywordExtraction: boolean | 'experimental';
+  supportsCategoryExtraction: boolean | 'experimental';
 }
 
 export abstract class BaseRecipeExtractor {
@@ -69,8 +73,14 @@ export abstract class BaseRecipeExtractor {
       supportsNutrition: false,
       supportsMetadata: true,
       supportsTimeExtraction: false,
-      description: 'Basis-Extraktor für allgemeine Websites'
+      supportsDifficultyExtraction: false,
+      supportsKeywordExtraction: false,
+      supportsCategoryExtraction: false,
     };
+  }
+
+  getDescription() {
+    return 'Basis-Extraktor für allgemeine Websites';
   }
   
   /**

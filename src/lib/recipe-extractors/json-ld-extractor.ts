@@ -427,7 +427,11 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
       supportsTimeExtraction: 'experimental' as const, // Experimentelle Unterstützung - nicht garantiert
       supportsKeywordExtraction: 'experimental' as const,
       supportsCategoryExtraction: 'experimental' as const,
-      description: 'Allgemeiner JSON-LD Extraktor - Funktioniert als Fallback für die meisten Websites mit strukturierten Daten. Nährwerte, Zeit-, Keyword- und Kategorieextraktion experimentell.'
+      supportsDifficultyExtraction: false,
     };
+  }
+
+  getDescription() {
+    return 'Allgemeiner JSON-LD Extraktor - Funktioniert als Fallback für die meisten Websites mit strukturierten Daten. Nährwerte, Zeit-, Keyword- und Kategorieextraktion experimentell.';
   }
 } 

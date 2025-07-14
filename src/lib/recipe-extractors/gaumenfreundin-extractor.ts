@@ -942,7 +942,11 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
       supportsTimeExtraction: true,
       supportsKeywordExtraction: true,
       supportsCategoryExtraction: true,
-      description: 'Spezialisiert auf Gaumenfreundin.de - Unterstützt strukturierte Rezeptdaten, detaillierte Zubereitungsschritte, Nährwerte, Keyword- und Kategorieextraktion'
+      supportsDifficultyExtraction: true,
     };
+  }
+
+  getDescription() {
+    return 'Spezialisiert auf Gaumenfreundin.de - Unterstützt strukturierte Rezeptdaten, detaillierte Zubereitungsschritte, Nährwerte, Keyword- und Kategorieextraktion';
   }
 } 

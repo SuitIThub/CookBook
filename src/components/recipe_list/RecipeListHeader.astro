@@ -211,39 +211,39 @@ declare global {
               <div class="grid grid-cols-2 gap-2 text-xs">
                 <div class="flex items-center space-x-2">
                   <span id="ingredient-groups-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Zutatengruppen</span>
+                  <span id="ingredient-groups-support-title">Zutatengruppen</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="preparation-groups-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Zubereitungsgruppen</span>
+                  <span id="preparation-groups-support-title">Zubereitungsgruppen</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="images-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Bilder</span>
+                  <span id="images-support-title">Bilder</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="nutrition-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Nährwerte</span>
+                  <span id="nutrition-support-title">Nährwerte</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="metadata-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Metadaten</span>
+                  <span id="metadata-support-title">Metadaten</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="keywords-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Keywords</span>
+                  <span id="keywords-support-title">Keywords</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="category-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Kategorie</span>
+                  <span id="category-support-title">Kategorie</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="difficulty-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Schwierigkeit</span>
+                  <span id="difficulty-support-title">Schwierigkeit</span>
                 </div>
                 <div class="flex items-center space-x-2">
                   <span id="time-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span>Zeit-Extraktion</span>
+                  <span id="time-support-title">Zeit-Extraktion</span>
                 </div>
               </div>
               <div id="extractor-description" class="mt-2 text-xs text-gray-500 dark:text-gray-400 italic"></div>
@@ -315,6 +315,8 @@ declare global {
 </div>
 
 <script>
+import type { Capability } from "../../lib/recipe-extractors/base-extractor";
+
   // Selection state
   let selectedRecipes = new Set();
   let isSelectionMode = false;
@@ -753,7 +755,7 @@ declare global {
         // Update description
         const descriptionElement = document.getElementById('extractor-description');
         if (descriptionElement) {
-          descriptionElement.textContent = data.capabilities.description;
+          descriptionElement.textContent = data.description;
         }
         
         urlPreview?.classList.remove('hidden');
@@ -773,15 +775,15 @@ declare global {
         }
         
         // Set default capabilities for fallback
-        updateCapabilityIndicator('ingredient-groups-support', false);
-        updateCapabilityIndicator('preparation-groups-support', false);
-        updateCapabilityIndicator('images-support', true);
-        updateCapabilityIndicator('nutrition-support', false);
-        updateCapabilityIndicator('metadata-support', true);
-        updateCapabilityIndicator('keywords-support', true);
-        updateCapabilityIndicator('category-support', true);
-        updateCapabilityIndicator('difficulty-support', false);
-        updateCapabilityIndicator('time-support', false);
+        updateCapabilityIndicator('ingredient-groups-support', { value: false, title: 'Zutatengruppen' });
+        updateCapabilityIndicator('preparation-groups-support', { value: false, title: 'Vorbereitungsschritte' });
+        updateCapabilityIndicator('images-support', { value: true, title: 'Bilder' });
+        updateCapabilityIndicator('nutrition-support', { value: false, title: 'Nährwerte' });
+        updateCapabilityIndicator('metadata-support', { value: true, title: 'Metadaten' });
+        updateCapabilityIndicator('keywords-support', { value: true, title: 'Schlüsselwörter' });
+        updateCapabilityIndicator('category-support', { value: true, title: 'Kategorien' });
+        updateCapabilityIndicator('difficulty-support', { value: false, title: 'Schwierigkeit' });
+        updateCapabilityIndicator('time-support', { value: false, title: 'Zeit-Extraktion' });
         
         const descriptionElement = document.getElementById('extractor-description');
         if (descriptionElement) {
@@ -790,23 +792,30 @@ declare global {
         
         urlPreview?.classList.remove('hidden');
       }
-    } catch {
+    } catch (error) {
+      console.error('Error updating URL preview:', error);
       hideUrlPreview();
     }
   }
   
-  function updateCapabilityIndicator(elementId: string, isSupported: boolean | 'experimental') {
+
+
+  function updateCapabilityIndicator(elementId: string, capability: Capability) {
     const element = document.getElementById(elementId);
     if (element) {
-      if (isSupported === 'experimental') {
+      if (capability.value === 'experimental') {
         element.className = 'w-3 h-3 rounded-full bg-yellow-500';
-      } else {
+      } else{
         element.className = `w-3 h-3 rounded-full ${
-          isSupported 
+          capability.value 
             ? 'bg-green-500' 
             : 'bg-gray-400'
         }`;
       }
+    }
+    const titleElement = document.getElementById(`${elementId}-title`);
+    if (titleElement) {
+      titleElement.textContent = capability.title;
     }
   }
 

@@ -854,7 +854,10 @@ export class LeckerExtractor extends BaseRecipeExtractor {
       supportsDifficultyExtraction: true,
       supportsKeywordExtraction: true,
       supportsCategoryExtraction: true,
-      description: 'Spezialisiert auf Lecker.de - Unterstützt strukturierte Rezeptdaten, Nährwerte, Zeit-, Schwierigkeits-, Keyword- und Kategorieextraktion und erweiterte Bildextraktions-Algorithmen'
     };
+  }
+
+  getDescription() {
+    return 'Spezialisiert auf Lecker.de - Unterstützt strukturierte Rezeptdaten, Nährwerte, Zeit-, Schwierigkeits-, Keyword- und Kategorieextraktion und erweiterte Bildextraktions-Algorithmen';
   }
 } 

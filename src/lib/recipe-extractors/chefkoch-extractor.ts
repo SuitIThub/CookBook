@@ -675,7 +675,9 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
       supportsDifficultyExtraction: true,
       supportsKeywordExtraction: true,
       supportsCategoryExtraction: true,
-      description: 'Spezialisiert auf Chefkoch.de - Unterstützt strukturierte Rezeptdaten mit JSON-LD und HTML-Fallback, inklusive Zeit-, Schwierigkeits-, Keyword- und Kategorieextraktion'
     };
+  }
+  getDescription() {
+    return 'Spezialisiert auf Chefkoch.de - Unterstützt strukturierte Rezeptdaten mit JSON-LD und HTML-Fallback, inklusive Zeit-, Schwierigkeits-, Keyword- und Kategorieextraktion';
   }
 } 
