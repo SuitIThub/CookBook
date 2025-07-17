@@ -1,0 +1,169 @@
+---
+import BaseModal from './BaseModal.astro';
+
+interface Props {
+  id?: string;
+}
+
+const { id = 'warning-import-modal' } = Astro.props;
+---
+
+<div id={id} class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+    <div class="flex items-center mb-4">
+      <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+      </svg>
+      <h3 class="text-lg font-medium text-gray-900 dark:text-white">Wichtige Hinweise zum Import</h3>
+    </div>
+    
+    <div id="warning-list" class="space-y-2 mb-6 text-sm text-gray-700 dark:text-gray-300">
+      <!-- Warnings will be inserted here -->
+    </div>
+    
+    <div class="flex justify-end">
+      <button id="continue-to-recipe" class="btn btn-primary">
+        Verstanden, weiter zum Rezept
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  interface WarningImportModalInterface {
+    modal: HTMLElement | null;
+    warningList: HTMLElement | null;
+    continueButton: HTMLElement | null;
+    setupEventListeners(): void;
+    isVisible(): boolean;
+    show(warnings: string[], onContinue?: (() => void) | null): void;
+    hide(): void;
+  }
+
+  // Make TypeScript happy by declaring the global functions
+  declare global {
+    interface Window {
+      warningImportModal: WarningImportModalInterface;
+      showImportWarnings(warnings: string[], onContinue?: () => void): void;
+    }
+  }
+
+  class WarningImportModal implements WarningImportModalInterface {
+    modal: HTMLElement | null;
+    warningList: HTMLElement | null;
+    continueButton: HTMLElement | null;
+    
+    constructor(id = 'warning-import-modal') {
+      console.log(`WarningImportModal constructor called with id: ${id}`);
+      this.modal = document.getElementById(id);
+      this.warningList = document.getElementById('warning-list');
+      this.continueButton = document.getElementById('continue-to-recipe');
+      
+      console.log('Modal element found:', !!this.modal);
+      console.log('Warning list element found:', !!this.warningList);
+      console.log('Continue button element found:', !!this.continueButton);
+      
+      this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+      // Continue button (default behavior is to close)
+      this.continueButton?.addEventListener('click', () => this.hide());
+      
+      // Escape key to close
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.isVisible()) {
+          this.hide();
+        }
+      });
+    }
+    
+    isVisible(): boolean {
+      return Boolean(this.modal && !this.modal.classList.contains('hidden'));
+    }
+    
+    show(warnings: string[] = [], onContinue: (() => void) | null = null) {
+      if (!this.modal || !this.warningList) {
+        console.error('Cannot show warning modal: modal or warning list element not found');
+        if (onContinue) {
+          console.log('Executing onContinue callback directly due to missing modal elements');
+          onContinue();
+        }
+        return;
+      }
+      
+      console.log('WarningImportModal.show called with warnings:', warnings);
+      
+      // Set warnings
+      this.warningList.innerHTML = warnings.map(warning => `
+        <div class="flex items-start p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+          <svg class="w-5 h-5 text-yellow-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          <span class="text-gray-800 dark:text-gray-200">${warning}</span>
+        </div>
+      `).join('');
+      
+      // Set continue button action
+      if (onContinue && this.continueButton) {
+        const btn = this.continueButton;
+        btn.onclick = () => {
+          this.hide();
+          onContinue();
+        };
+      }
+      
+      // Show modal
+      this.modal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+      console.log('WarningImportModal is now visible:', this.isVisible());
+    }
+    
+    hide() {
+      if (!this.modal) return;
+      
+      this.modal.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+      
+      // Reset continue button to default
+      if (this.continueButton) {
+        const btn = this.continueButton;
+        btn.onclick = () => this.hide();
+      }
+    }
+  }
+  
+  // Ensure the function is defined directly in the global scope
+  function initializeWarningImportModal() {
+    console.log('Initializing WarningImportModal');
+    
+    // Initialize and expose globally
+    window.warningImportModal = new WarningImportModal();
+    
+    // Expose a simplified API
+    window.showImportWarnings = function(warnings, onContinue) {
+      console.log('showImportWarnings called with warnings:', warnings);
+      window.warningImportModal.show(warnings, onContinue);
+    };
+    
+    console.log('WarningImportModal initialized, functions exposed to window:', {
+      warningImportModal: typeof window.warningImportModal,
+      showImportWarnings: typeof window.showImportWarnings
+    });
+  }
+  
+  // Initialize immediately
+  initializeWarningImportModal();
+  
+  // Also initialize on DOMContentLoaded for safety
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded event fired, reinitializing WarningImportModal');
+    initializeWarningImportModal();
+  });
+  
+  // Re-initialize after Astro View Transitions
+  document.addEventListener('astro:page-load', () => {
+    console.log('astro:page-load event fired, reinitializing WarningImportModal');
+    initializeWarningImportModal();
+  });
+</script> 

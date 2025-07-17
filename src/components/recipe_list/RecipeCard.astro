@@ -212,17 +212,29 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
 </style>
 
 <script>
-  // Initialize content decoding
-  document.querySelectorAll('[data-content]').forEach(element => {
-    const content = element.getAttribute('data-content');
-    if (content) {
-      const textarea = document.createElement('textarea');
-      textarea.innerHTML = content;
-      element.textContent = textarea.value;
-    }
+  // Function to decode and set content
+  function decodeAndSetContent() {
+    document.querySelectorAll('[data-content]').forEach(element => {
+      const content = element.getAttribute('data-content');
+      if (content) {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = content;
+        element.textContent = textarea.value;
+      }
+    });
+  }
+
+  // Run on initial page load
+  decodeAndSetContent();
+
+  // Run after Astro View Transitions
+  document.addEventListener('astro:page-load', () => {
+    decodeAndSetContent();
+    setupMenuFunctionality();
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
+  // Function to set up menu functionality
+  function setupMenuFunctionality() {
     const menuBtns = document.querySelectorAll('.recipe-menu-btn');
     const menu = document.querySelector('.recipe-menu') as HTMLElement;
     
@@ -390,5 +402,9 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
     menu.addEventListener('click', (e) => {
       e.stopPropagation();
     });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setupMenuFunctionality();
   });
 </script> 

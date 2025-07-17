@@ -1,0 +1,248 @@
+---
+import BaseModal from './BaseModal.astro';
+
+interface Props {
+  id?: string;
+}
+
+const { id = 'timer-expired-modal' } = Astro.props;
+---
+
+<div id={id} class="fixed inset-0 z-50 hidden">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-black/50 backdrop-blur-sm"></div>
+  
+  <!-- Modal Container -->
+  <div class="fixed inset-0 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+          <svg class="w-6 h-6 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span id="timer-expired-title">Timer abgelaufen</span>
+        </h3>
+        <button class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" id="close-timer-expired-modal">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Content -->
+      <div class="p-6 flex-1 overflow-y-auto">
+        <div class="flex flex-col items-center text-center space-y-4">
+          <div class="w-24 h-24 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-2">
+            <svg class="w-14 h-14 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          
+          <div>
+            <h4 id="timer-expired-name" class="text-xl font-bold text-gray-900 dark:text-white mb-1"></h4>
+            <p id="timer-expired-description" class="text-gray-600 dark:text-gray-300 mb-3"></p>
+            <p class="text-gray-500 dark:text-gray-400 text-sm">
+              <span id="timer-expired-time"></span>
+            </p>
+          </div>
+          
+          <div id="timer-expired-recipe-info" class="hidden mt-2 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg w-full text-left">
+            <div class="flex items-start">
+              <svg class="w-5 h-5 text-orange-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+              </svg>
+              <div>
+                <p class="font-medium text-gray-800 dark:text-gray-200" id="timer-expired-recipe-name"></p>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1" id="timer-expired-step"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <div class="flex justify-between gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+        <button id="remove-timer-btn" class="btn btn-secondary">
+          Timer entfernen
+        </button>
+        <button id="continue-timer-btn" class="btn btn-primary">
+          Verstanden
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  interface TimerExpiredData {
+    id: string;
+    label: string;
+    description?: string;
+    expiredDuration?: number;
+    recipeName?: string;
+    stepDescription?: string;
+    recipeId?: string;
+    stepId?: string;
+  }
+  
+  interface CustomWindow extends Window {
+    timerExpiredModal: TimerExpiredModal;
+    showTimerExpired(timerData: TimerExpiredData): void;
+  }
+  
+  declare const window: CustomWindow;
+  
+  class TimerExpiredModal {
+    private modal: HTMLElement | null;
+    private closeButton: HTMLElement | null;
+    private removeButton: HTMLElement | null;
+    private continueButton: HTMLElement | null;
+    private titleElement: HTMLElement | null;
+    private nameElement: HTMLElement | null;
+    private descriptionElement: HTMLElement | null;
+    private timeElement: HTMLElement | null;
+    private recipeInfoElement: HTMLElement | null;
+    private recipeNameElement: HTMLElement | null;
+    private stepElement: HTMLElement | null;
+    private currentTimerId: string | null = null;
+    
+    constructor(id = 'timer-expired-modal') {
+      this.modal = document.getElementById(id);
+      this.closeButton = document.getElementById('close-timer-expired-modal');
+      this.removeButton = document.getElementById('remove-timer-btn');
+      this.continueButton = document.getElementById('continue-timer-btn');
+      this.titleElement = document.getElementById('timer-expired-title');
+      this.nameElement = document.getElementById('timer-expired-name');
+      this.descriptionElement = document.getElementById('timer-expired-description');
+      this.timeElement = document.getElementById('timer-expired-time');
+      this.recipeInfoElement = document.getElementById('timer-expired-recipe-info');
+      this.recipeNameElement = document.getElementById('timer-expired-recipe-name');
+      this.stepElement = document.getElementById('timer-expired-step');
+      
+      this.setupEventListeners();
+    }
+    
+    private setupEventListeners() {
+      // Close button
+      this.closeButton?.addEventListener('click', () => this.hide());
+      
+      // Remove timer button
+      this.removeButton?.addEventListener('click', () => {
+        if (this.currentTimerId) {
+          // Dispatch event to remove timer
+          const event = new CustomEvent('removeTimer', {
+            detail: { id: this.currentTimerId }
+          });
+          document.dispatchEvent(event);
+        }
+        this.hide();
+      });
+      
+      // Continue button
+      this.continueButton?.addEventListener('click', () => {
+        this.hide();
+      });
+      
+      // Escape key to close
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.isVisible()) {
+          this.hide();
+        }
+      });
+    }
+    
+    isVisible() {
+      return this.modal && !this.modal.classList.contains('hidden');
+    }
+    
+    show(timerData: TimerExpiredData) {
+      if (!this.modal) return;
+      
+      this.currentTimerId = timerData.id;
+      
+      // Set timer name
+      if (this.nameElement) {
+        this.nameElement.textContent = timerData.label || 'Timer';
+      }
+      
+      // Set description if available
+      if (this.descriptionElement) {
+        this.descriptionElement.textContent = timerData.description || '';
+        this.descriptionElement.style.display = timerData.description ? 'block' : 'none';
+      }
+      
+      // Set expired time if available
+      if (this.timeElement && timerData.expiredDuration !== undefined) {
+        const expiredMinutes = Math.floor(timerData.expiredDuration / 60);
+        const expiredSeconds = timerData.expiredDuration % 60;
+        
+        let expiredTimeText = '';
+        if (expiredMinutes > 0) {
+          expiredTimeText = `vor ${expiredMinutes} Min ${expiredSeconds} Sek abgelaufen`;
+        } else {
+          expiredTimeText = `vor ${expiredSeconds} Sek abgelaufen`;
+        }
+        
+        this.timeElement.textContent = expiredTimeText;
+      } else if (this.timeElement) {
+        this.timeElement.textContent = 'Gerade abgelaufen';
+      }
+      
+      // Set recipe info if available
+      if (this.recipeInfoElement && this.recipeNameElement && this.stepElement) {
+        if (timerData.recipeName) {
+          this.recipeInfoElement.classList.remove('hidden');
+          this.recipeNameElement.textContent = timerData.recipeName;
+          this.stepElement.textContent = timerData.stepDescription || '';
+          
+          // Make recipe info clickable if recipeId is available
+          if (timerData.recipeId) {
+            this.recipeInfoElement.classList.add('cursor-pointer');
+            this.recipeInfoElement.onclick = () => {
+              window.location.href = `/rezept/${timerData.recipeId}${timerData.stepId ? `#step-${timerData.stepId}` : ''}`;
+            };
+          } else {
+            this.recipeInfoElement.classList.remove('cursor-pointer');
+            this.recipeInfoElement.onclick = null;
+          }
+        } else {
+          this.recipeInfoElement.classList.add('hidden');
+        }
+      }
+      
+      // Show modal
+      this.modal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+      
+      // Play notification sound
+      this.playNotificationSound();
+    }
+    
+    hide() {
+      if (!this.modal) return;
+      
+      this.modal.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+      this.currentTimerId = null;
+    }
+    
+    private playNotificationSound() {
+      try {
+        const audio = new Audio('/timer-alarm.mp3');
+        audio.volume = 0.7;
+        audio.play().catch(e => console.log('Could not play notification sound:', e));
+      } catch (e) {
+        console.log('Error playing notification sound:', e);
+      }
+    }
+  }
+  
+  // Initialize and expose globally
+  (window as any).timerExpiredModal = new TimerExpiredModal();
+  
+  // Expose a simplified API
+  (window as any).showTimerExpired = function(timerData: TimerExpiredData) {
+    (window as any).timerExpiredModal.show(timerData);
+  };
+</script> 

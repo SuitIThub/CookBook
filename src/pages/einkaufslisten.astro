@@ -1,204 +1,30 @@
 ---
-export const prerender = false;
 import Layout from '../layouts/Layout.astro';
-import { db } from '../lib/database';
-import type { ShoppingList } from '../types/recipe';
 import ShoppingListsHeader from '../components/shopping_list/ShoppingListsHeader.astro';
 import ShoppingListCard from '../components/shopping_list/ShoppingListCard.astro';
 import EmptyShoppingListsState from '../components/shopping_list/EmptyShoppingListsState.astro';
+import { ShoppingListCreateModal } from '../components/modals';
+import { db } from '../lib/database';
 
-// Einkaufslisten aus der Datenbank laden
-let shoppingLists: ShoppingList[] = [];
-try {
-  shoppingLists = db.getAllShoppingLists();
-} catch (error) {
-  console.error('Error loading shopping lists from database:', error);
-  shoppingLists = [];
-}
+// Fetch shopping lists from the database
+const shoppingLists = db.getAllShoppingLists();
 ---
 
 <Layout title="Einkaufslisten - Kochbuch">
   <div class="space-y-6">
-    <!-- Header -->
     <ShoppingListsHeader listCount={shoppingLists.length} />
-
+    
     {shoppingLists.length > 0 ? (
-      <!-- Shopping Lists Grid -->
-      <div id="shopping-lists-grid" class="grid-responsive">
-        {shoppingLists.map((shoppingList) => (
+      <div class="grid-responsive">
+        {shoppingLists.map(shoppingList => (
           <ShoppingListCard shoppingList={shoppingList} />
         ))}
       </div>
     ) : (
-      <!-- Empty State -->
-      <div id="empty-state">
-        <EmptyShoppingListsState />
-      </div>
+      <EmptyShoppingListsState />
     )}
   </div>
-
-  <script>
-    interface ListInfo {
-      id: string;
-      title: string;
-    }
-
-    interface ListUpdate {
-      type: 'created' | 'deleted';
-      list?: {
-        id: string;
-        title: string;
-      };
-      listId?: string;
-    }
-
-    // Initialize state
-    let lists: Array<ListInfo> = [];
-    let eventSource: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let isOnline = navigator.onLine;
-    
-    document.addEventListener('DOMContentLoaded', () => {
-      // Get initial lists from the grid
-      const gridContainer = document.getElementById('shopping-lists-grid');
-      if (gridContainer) {
-        lists = Array.from(gridContainer.querySelectorAll('.card')).map(card => ({
-          id: (card.querySelector('.delete-list-btn') as HTMLElement)?.dataset?.listId || '',
-          title: card.querySelector('.heading-card')?.textContent?.trim() || ''
-        })).filter(list => list.id && list.title);
-      }
-      
-      function connectSSE() {
-        if (eventSource) {
-          eventSource.close();
-        }
-        
-        try {
-          eventSource = new EventSource('/api/shopping-lists/stream?listId=all');
-          
-          eventSource.onopen = () => {
-            console.log('✅ Shopping lists real-time sync connected');
-            if (reconnectTimer) {
-              clearTimeout(reconnectTimer);
-              reconnectTimer = null;
-            }
-            showSyncStatus('online');
-          };
-          
-          eventSource.onmessage = (event) => {
-            try {
-              const data = JSON.parse(event.data);
-              
-              if (data.type === 'lists-update') {
-                console.log('📱 Shopping lists update received');
-                handleListsUpdate(data.data);
-                showSyncStatus('synced');
-              }
-            } catch (error) {
-              console.error('Error parsing SSE message:', error);
-            }
-          };
-          
-          eventSource.onerror = (error) => {
-            console.log('❌ Shopping lists sync disconnected');
-            showSyncStatus('offline');
-            
-            if (!reconnectTimer) {
-              reconnectTimer = setTimeout(() => {
-                if (isOnline) {
-                  console.log('🔄 Attempting to reconnect...');
-                  connectSSE();
-                }
-              }, 3000);
-            }
-          };
-          
-        } catch (error) {
-          console.error('Error setting up SSE:', error);
-          showSyncStatus('offline');
-        }
-      }
-      
-      function handleListsUpdate(updateData: ListUpdate) {
-        if (updateData.type === 'created' && updateData.list) {
-          // Add new shopping list
-          lists.unshift({
-            id: updateData.list.id,
-            title: updateData.list.title
-          });
-          renderShoppingLists();
-        } else if (updateData.type === 'deleted' && updateData.listId) {
-          // Remove shopping list
-          lists = lists.filter(list => list.id !== updateData.listId);
-          renderShoppingLists();
-        }
-      }
-      
-      function renderShoppingLists() {
-        const gridContainer = document.getElementById('shopping-lists-grid');
-        const emptyState = document.getElementById('empty-state');
-        
-        if (lists.length === 0) {
-          if (gridContainer) {
-            gridContainer.style.display = 'none';
-          }
-          if (emptyState) {
-            emptyState.style.display = 'block';
-          }
-          return;
-        }
-        
-        if (emptyState) {
-          emptyState.style.display = 'none';
-        }
-        
-        if (gridContainer) {
-          gridContainer.style.display = 'grid';
-          window.location.reload(); // Reload the page to get fresh components
-        }
-      }
-
-      // Start SSE connection
-      connectSSE();
-
-      // Handle online/offline status
-      window.addEventListener('online', () => {
-        isOnline = true;
-        connectSSE();
-      });
-
-      window.addEventListener('offline', () => {
-        isOnline = false;
-        if (eventSource) {
-          eventSource.close();
-        }
-        showSyncStatus('offline');
-      });
-
-      // Cleanup on page unload
-      window.addEventListener('beforeunload', () => {
-        if (eventSource) {
-          eventSource.close();
-        }
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-        }
-      });
-
-      // Cleanup on navigation
-      document.addEventListener('astro:before-swap', () => {
-        if (eventSource) {
-          eventSource.close();
-        }
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-        }
-      });
-
-      function showSyncStatus(status: 'online' | 'offline' | 'synced') {
-        // You can implement this to show a sync status indicator if needed
-        console.log('Sync status:', status);
-      }
-    });
-  </script>
+  
+  <!-- Create Shopping List Modal -->
+  <ShoppingListCreateModal id="create-shopping-list-modal" />
 </Layout> 

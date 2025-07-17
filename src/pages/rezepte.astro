@@ -1,20 +1,14 @@
 ---
-export const prerender = false;
 import Layout from '../layouts/Layout.astro';
-import SearchBar from '../components/recipe_list/SearchBar.astro';
-import RecipeCard from '../components/recipe_list/RecipeCard.astro';
 import RecipeListHeader from '../components/recipe_list/RecipeListHeader.astro';
+import RecipeCard from '../components/recipe_list/RecipeCard.astro';
 import EmptyState from '../components/recipe_list/EmptyState.astro';
+import SearchBar from '../components/recipe_list/SearchBar.astro';
+import { ImportModal } from '../components/modals';
 import { db } from '../lib/database';
-import type { Recipe } from '../types/recipe';
 
-// Load recipes from database
-let recipes: Recipe[] = [];
-try {
-  recipes = db.getAllRecipes();
-} catch (error) {
-  console.error('Error loading recipes:', error);
-}
+// Fetch recipes from the database
+const recipes = db.getAllRecipes();
 
 // Extract unique categories and remove undefined/null
 const categories = Array.from(new Set(
@@ -28,8 +22,8 @@ const searchQuery = Astro.url.searchParams.get('search') || '';
 const selectedCategory = Astro.url.searchParams.get('category') || '';
 ---
 
-<Layout title="Rezepte">
-  <div class="container mx-auto px-4 py-8">
+<Layout title="Rezepte - Kochbuch">
+  <div class="space-y-6">
     <RecipeListHeader recipeCount={recipes.length} />
     <SearchBar 
       categories={categories}
@@ -37,30 +31,27 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
       initialCategory={selectedCategory}
     />
     
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-8">
-      {recipes.map(recipe => (
-        <RecipeCard recipe={recipe} />
-      ))}
-    </div>
-
-    {recipes.length === 0 && <EmptyState />}
+    {recipes.length > 0 ? (
+      <div class="grid-responsive">
+        {recipes.map(recipe => (
+          <RecipeCard recipe={recipe} />
+        ))}
+      </div>
+    ) : (
+      <EmptyState />
+    )}
   </div>
+  
+  <!-- Import Modal -->
+  <ImportModal id="import-modal" />
+  
+  <!-- Hidden file input for import -->
+  <input type="file" id="import-file" accept=".json,.rcb" style="display: none;">
 </Layout>
 
 <script>
-  // Clear URL parameters when leaving the page
-  window.addEventListener('beforeunload', () => {
-    // Only clear if we're navigating away from the recipe list
-    if (window.location.pathname === '/rezepte') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('search');
-      url.searchParams.delete('category');
-      window.history.replaceState({}, '', url);
-    }
-  });
-  
-  // Initialize create recipe button when DOM is loaded
-  document.addEventListener('DOMContentLoaded', () => {
+  // Function to initialize page functionality
+  function initializePageFunctionality() {
     // Button in RecipeListHeader
     const createBtn = document.getElementById('create-recipe-btn');
     if (createBtn) {
@@ -97,5 +88,22 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
         }
       });
     }
+  }
+
+  // Clear URL parameters when leaving the page
+  window.addEventListener('beforeunload', () => {
+    // Only clear if we're navigating away from the recipe list
+    if (window.location.pathname === '/rezepte') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('search');
+      url.searchParams.delete('category');
+      window.history.replaceState({}, '', url);
+    }
   });
+  
+  // Initialize on DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', initializePageFunctionality);
+  
+  // Initialize after Astro View Transitions
+  document.addEventListener('astro:page-load', initializePageFunctionality);
 </script> 

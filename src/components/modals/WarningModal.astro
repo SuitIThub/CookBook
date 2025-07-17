@@ -1,0 +1,154 @@
+---
+import BaseModal from './BaseModal.astro';
+
+interface Props {
+  id?: string;
+}
+
+const { id = 'warning-modal' } = Astro.props;
+---
+
+<div id={id} class="fixed inset-0 z-50 hidden">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-black/50 backdrop-blur-sm"></div>
+  
+  <!-- Modal Container -->
+  <div class="fixed inset-0 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+          <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          Wichtige Hinweise
+        </h3>
+        <button class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" id="close-warning-modal">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Content -->
+      <div class="p-4 overflow-y-auto flex-1">
+        <div class="space-y-3" id="warning-list">
+          <!-- Warnings will be inserted here -->
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <div class="flex justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+        <button id="continue-warning" class="btn btn-primary">
+          Verstanden, fortfahren
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  interface WarningModalInterface {
+    modalId: string;
+    modal: HTMLElement | null;
+    warningList: HTMLElement | null;
+    closeButton: HTMLElement | null;
+    continueButton: HTMLElement | null;
+    setupEventListeners(): void;
+    isVisible(): boolean;
+    show(warnings: string[], onContinue?: (() => void) | null): void;
+    hide(): void;
+  }
+
+  interface CustomWindow extends Window {
+    warningModal: WarningModalInterface;
+    showWarnings(warnings: string[], onContinue?: (() => void) | null): void;
+  }
+
+  declare const window: CustomWindow;
+
+  class WarningModal implements WarningModalInterface {
+    modalId: string;
+    modal: HTMLElement | null;
+    warningList: HTMLElement | null;
+    closeButton: HTMLElement | null;
+    continueButton: HTMLElement | null;
+    
+    constructor(id = 'warning-modal') {
+      this.modalId = id;
+      this.modal = document.getElementById(id);
+      this.warningList = document.getElementById('warning-list');
+      this.closeButton = document.getElementById('close-warning-modal');
+      this.continueButton = document.getElementById('continue-warning');
+      
+      this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+      // Close button
+      this.closeButton?.addEventListener('click', () => this.hide());
+      
+      // Continue button (default behavior is to close)
+      this.continueButton?.addEventListener('click', () => this.hide());
+      
+      // Escape key to close
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.isVisible()) {
+          this.hide();
+        }
+      });
+    }
+    
+    isVisible(): boolean {
+      return Boolean(this.modal && !this.modal.classList.contains('hidden'));
+    }
+    
+    show(warnings: string[] = [], onContinue: (() => void) | null = null) {
+      if (!this.modal || !this.warningList) return;
+      
+      // Set warnings
+      this.warningList.innerHTML = warnings.map(warning => `
+        <div class="flex items-start p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+          <svg class="w-5 h-5 text-yellow-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          <span class="text-gray-800 dark:text-gray-200">${warning}</span>
+        </div>
+      `).join('');
+      
+      // Set continue button action
+      if (onContinue && this.continueButton) {
+        const btn = this.continueButton;
+        btn.onclick = () => {
+          this.hide();
+          onContinue();
+        };
+      }
+      
+      // Show modal
+      this.modal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+    }
+    
+    hide() {
+      if (!this.modal) return;
+      
+      this.modal.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+      
+      // Reset continue button to default
+      if (this.continueButton) {
+        const btn = this.continueButton;
+        btn.onclick = () => this.hide();
+      }
+    }
+  }
+  
+  // Initialize and expose globally
+  (window as any).warningModal = new WarningModal();
+  
+  // Expose a simplified API
+  (window as any).showWarnings = function(warnings: string[], onContinue?: () => void) {
+    (window as any).warningModal.show(warnings, onContinue);
+  };
+</script> 

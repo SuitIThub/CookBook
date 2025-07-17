@@ -1,0 +1,220 @@
+---
+import BaseModal from './BaseModal.astro';
+
+interface Props {
+  id?: string;
+}
+
+const { id = 'add-timer-modal' } = Astro.props;
+---
+
+<BaseModal id={id} title="Neuer Timer">
+  <div class="space-y-4">
+    <!-- Timer Title -->
+    <div>
+      <label for="timer-title-input" class="form-label">
+        Titel
+      </label>
+      <input 
+        type="text" 
+        id="timer-title-input"
+        placeholder="z.B. Nudeln kochen"
+        class="form-input"
+        value="Timer"
+      />
+    </div>
+    
+    <!-- Timer Description -->
+    <div>
+      <label for="timer-description-input" class="form-label">
+        Beschreibung (optional)
+      </label>
+      <textarea 
+        id="timer-description-input"
+        placeholder="z.B. Al dente kochen und dann abgießen"
+        rows="3"
+        class="form-textarea"
+      ></textarea>
+    </div>
+    
+    <!-- Time Presets -->
+    <div>
+      <label class="form-label">Voreinstellungen</label>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <button type="button" class="time-preset-btn btn btn-secondary" data-minutes="1">1 Min</button>
+        <button type="button" class="time-preset-btn btn btn-secondary" data-minutes="3">3 Min</button>
+        <button type="button" class="time-preset-btn btn btn-secondary" data-minutes="5">5 Min</button>
+        <button type="button" class="time-preset-btn btn btn-secondary" data-minutes="10">10 Min</button>
+        <button type="button" class="time-preset-btn btn btn-secondary" data-minutes="15">15 Min</button>
+        <button type="button" class="time-preset-btn btn btn-secondary" data-minutes="20">20 Min</button>
+      </div>
+    </div>
+    
+    <!-- Custom Time Input -->
+    <div>
+      <label class="form-label">Benutzerdefinierte Zeit</label>
+      <div class="flex items-center space-x-2">
+        <div class="relative flex-1">
+          <input 
+            type="number" 
+            id="timer-minutes-input"
+            min="0"
+            max="999"
+            value="0"
+            class="form-input pr-10"
+          />
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+            <span class="text-gray-500 dark:text-gray-400">Min</span>
+          </div>
+          <div class="absolute inset-y-0 right-10 flex">
+            <button type="button" id="minutes-increment" class="h-1/2 px-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+            <button type="button" id="minutes-decrement" class="h-1/2 px-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div class="relative flex-1">
+          <input 
+            type="number" 
+            id="timer-seconds-input"
+            min="0"
+            max="59"
+            value="0"
+            class="form-input pr-10"
+          />
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+            <span class="text-gray-500 dark:text-gray-400">Sek</span>
+          </div>
+          <div class="absolute inset-y-0 right-10 flex">
+            <button type="button" id="seconds-increment" class="h-1/2 px-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+            <button type="button" id="seconds-decrement" class="h-1/2 px-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 flex items-center justify-center">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div slot="footer" class="flex justify-end space-x-3">
+    <button id="cancel-timer-btn" class="btn btn-secondary">
+      Abbrechen
+    </button>
+    <button id="create-timer-btn" class="btn btn-primary">
+      Timer erstellen
+    </button>
+  </div>
+</BaseModal>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('add-timer-modal');
+    const titleInput = document.getElementById('timer-title-input') as HTMLInputElement;
+    const descriptionInput = document.getElementById('timer-description-input') as HTMLTextAreaElement;
+    const minutesInput = document.getElementById('timer-minutes-input') as HTMLInputElement;
+    const secondsInput = document.getElementById('timer-seconds-input') as HTMLInputElement;
+    const cancelBtn = document.getElementById('cancel-timer-btn');
+    const createBtn = document.getElementById('create-timer-btn');
+    
+    // Time preset buttons
+    document.querySelectorAll('.time-preset-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const minutes = parseInt((e.currentTarget as HTMLElement).getAttribute('data-minutes') || '0');
+        minutesInput.value = minutes.toString();
+        secondsInput.value = '0';
+      });
+    });
+    
+    // Increment/decrement buttons
+    document.getElementById('minutes-increment')?.addEventListener('click', () => {
+      const current = parseInt(minutesInput.value) || 0;
+      minutesInput.value = (current + 1).toString();
+    });
+    
+    document.getElementById('minutes-decrement')?.addEventListener('click', () => {
+      const current = parseInt(minutesInput.value) || 0;
+      if (current > 0) {
+        minutesInput.value = (current - 1).toString();
+      }
+    });
+    
+    document.getElementById('seconds-increment')?.addEventListener('click', () => {
+      const current = parseInt(secondsInput.value) || 0;
+      if (current < 59) {
+        secondsInput.value = (current + 1).toString();
+      } else {
+        secondsInput.value = '0';
+        const minutes = parseInt(minutesInput.value) || 0;
+        minutesInput.value = (minutes + 1).toString();
+      }
+    });
+    
+    document.getElementById('seconds-decrement')?.addEventListener('click', () => {
+      const current = parseInt(secondsInput.value) || 0;
+      if (current > 0) {
+        secondsInput.value = (current - 1).toString();
+      } else {
+        const minutes = parseInt(minutesInput.value) || 0;
+        if (minutes > 0) {
+          secondsInput.value = '59';
+          minutesInput.value = (minutes - 1).toString();
+        }
+      }
+    });
+    
+    // Cancel button
+    cancelBtn?.addEventListener('click', () => {
+      modal?.classList.add('hidden');
+      resetForm();
+    });
+    
+    // Create timer button
+    createBtn?.addEventListener('click', () => {
+      const title = titleInput.value.trim() || 'Timer';
+      const description = descriptionInput.value.trim();
+      const minutes = parseInt(minutesInput.value) || 0;
+      const seconds = parseInt(secondsInput.value) || 0;
+      const totalSeconds = (minutes * 60) + seconds;
+      
+      if (totalSeconds > 0) {
+        // Dispatch event to create timer
+        const event = new CustomEvent('createTimer', {
+          detail: {
+            title,
+            description,
+            duration: totalSeconds
+          }
+        });
+        document.dispatchEvent(event);
+        
+        // Hide modal and reset form
+        modal?.classList.add('hidden');
+        resetForm();
+      } else {
+        // Show error for invalid time
+        alert('Bitte geben Sie eine gültige Zeit ein.');
+      }
+    });
+    
+    // Reset form
+    function resetForm() {
+      titleInput.value = 'Timer';
+      descriptionInput.value = '';
+      minutesInput.value = '0';
+      secondsInput.value = '0';
+    }
+  });
+</script> 

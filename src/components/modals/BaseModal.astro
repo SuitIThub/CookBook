@@ -1,0 +1,144 @@
+---
+interface Props {
+  id?: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  title?: string;
+  showCloseButton?: boolean;
+}
+
+const { 
+  id = 'modal', 
+  size = 'md', 
+  title = '',
+  showCloseButton = true
+} = Astro.props;
+
+const sizeClasses = {
+  sm: 'max-w-sm',
+  md: 'max-w-md', 
+  lg: 'max-w-lg',
+  xl: 'max-w-2xl'
+};
+---
+
+<!-- Modal Backdrop -->
+<div id={id} class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 transition-all duration-200">
+  <div class={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full mx-4 transition-all duration-200 ${sizeClasses[size]}`}>
+    <!-- Modal Header -->
+    {(title || showCloseButton) && (
+      <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        {title && (
+          <h3 id={`${id}-title`} class="text-lg font-medium text-gray-900 dark:text-white">
+            {title}
+          </h3>
+        )}
+        {!title && <div></div>}
+        {showCloseButton && (
+          <button id={`${id}-close`} class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        )}
+      </div>
+    )}
+    
+    <!-- Modal Body -->
+    <div class="p-6">
+      <slot />
+    </div>
+    
+    <!-- Modal Footer -->
+    <div id={`${id}-footer`} class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
+      <slot name="footer" />
+    </div>
+  </div>
+</div>
+
+<script define:vars={{ id }}>
+  // Modal functionality
+  class Modal {
+    constructor(modalId) {
+      this.modalId = modalId;
+      this.modal = document.getElementById(modalId);
+      this.closeButton = document.getElementById(`${modalId}-close`);
+      
+      this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+      // Close button
+      this.closeButton?.addEventListener('click', () => this.hide());
+      
+      // Click outside to close
+      this.modal?.addEventListener('click', (e) => {
+        if (e.target === this.modal) {
+          this.hide();
+        }
+      });
+      
+      // Escape key to close
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !this.modal?.classList.contains('hidden')) {
+          this.hide();
+        }
+      });
+      
+      // Listen for theme changes (localStorage event)
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'color-theme') {
+          // Theme has changed in another tab, update our modal if visible
+          if (!this.modal?.classList.contains('hidden')) {
+            // Force a repaint to apply the new theme
+            this.modal.style.opacity = '0.99';
+            setTimeout(() => {
+              this.modal.style.opacity = '1';
+            }, 10);
+          }
+        }
+      });
+      
+      // Listen for theme changes within the same page
+      document.addEventListener('themeChanged', () => {
+        // Update our modal if visible
+        if (!this.modal?.classList.contains('hidden')) {
+          // Force a repaint to apply the new theme
+          this.modal.style.opacity = '0.99';
+          setTimeout(() => {
+            this.modal.style.opacity = '1';
+          }, 10);
+        }
+      });
+    }
+    
+    show() {
+      // Show modal
+      this.modal?.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    
+    hide() {
+      this.modal?.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+  }
+  
+  // Initialize modal
+  window[`modal_${id}`] = new Modal(id);
+</script>
+
+<style>
+  /* Smooth transitions */
+  #modal {
+    transition: opacity 0.2s ease-out;
+  }
+  
+  #modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  
+  #modal:not(.hidden) {
+    opacity: 1;
+  }
+</style> 

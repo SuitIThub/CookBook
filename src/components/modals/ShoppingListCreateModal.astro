@@ -1,0 +1,100 @@
+---
+import BaseModal from './BaseModal.astro';
+
+interface Props {
+  id?: string;
+}
+
+const { id = 'create-shopping-list-modal' } = Astro.props;
+---
+
+<BaseModal id={id} title="Neue Einkaufsliste erstellen">
+  <form id="create-shopping-list-form" class="space-y-4">
+    <div>
+      <label for="shopping-list-title" class="form-label">Titel</label>
+      <input 
+        type="text" 
+        id="shopping-list-title" 
+        name="title"
+        class="form-input" 
+        placeholder="z.B. Wocheneinkauf, Grillparty, ..."
+        required
+      />
+    </div>
+    
+    <div>
+      <label for="shopping-list-description" class="form-label">Beschreibung (optional)</label>
+      <textarea 
+        id="shopping-list-description" 
+        name="description"
+        class="form-textarea" 
+        rows="3"
+        placeholder="Kurze Beschreibung der Einkaufsliste..."
+      ></textarea>
+    </div>
+  </form>
+  
+  <div slot="footer" class="flex justify-end space-x-3">
+    <button type="button" id={`${id}-cancel`} class="btn btn-secondary">Abbrechen</button>
+    <button type="submit" form="create-shopping-list-form" class="btn btn-success">
+      Erstellen
+    </button>
+  </div>
+</BaseModal>
+
+<script define:vars={{ id }}>
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById(id);
+  const form = document.getElementById('create-shopping-list-form');
+  const cancelButton = document.getElementById(`${id}-cancel`);
+  
+  // Close modal on cancel
+  cancelButton?.addEventListener('click', () => {
+    modal?.classList.add('hidden');
+    form?.reset();
+  });
+  
+  // Handle form submission
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(form);
+    const title = formData.get('title');
+    const description = formData.get('description');
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      window.showError('Bitte geben Sie einen Titel ein.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/shopping-lists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: typeof description === 'string' ? description.trim() || undefined : undefined
+        }),
+      });
+
+      if (response.ok) {
+        const newList = await response.json();
+        // Hide modal
+        modal?.classList.add('hidden');
+        // Show success message
+        window.showSuccess('Einkaufsliste erfolgreich erstellt');
+        // Redirect to the new list
+        window.location.href = `/einkaufsliste/${newList.id}`;
+      } else {
+        const error = await response.json();
+        window.showError(error.error || 'Fehler beim Erstellen der Einkaufsliste');
+      }
+    } catch (error) {
+      console.error('Error creating shopping list:', error);
+      window.showError('Fehler beim Erstellen der Einkaufsliste');
+    }
+  });
+});
+</script> 

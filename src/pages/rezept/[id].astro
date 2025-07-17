@@ -12,6 +12,7 @@ import PreparationSteps from '../../components/recipe/details/PreparationSteps.a
 import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
 import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro';
 import EditFormActions from '../../components/recipe/edit/EditFormActions.astro';
+import { ShoppingListModal } from '../../components/modals';
 
 const { id } = Astro.params;
 
@@ -61,61 +62,94 @@ try {
   </div>
 
   <!-- Add to Shopping List Modal -->
-  <div id="shopping-list-modal" class="modal hidden">
-    <div class="modal-overlay"></div>
-    <div class="modal-content modal-lg">
-      <div class="modal-header">
-        <h2 class="modal-title">Zu Einkaufsliste hinzufügen</h2>
-        <button class="modal-close">&times;</button>
-      </div>
+  <ShoppingListModal recipeId={recipe.id} />
+
+  <!-- Dark Mode Fix Script -->
+  <script is:inline>
+    // Stellt sicher, dass der Dark Mode korrekt angewendet wird
+    document.addEventListener('DOMContentLoaded', () => {
+      // Prüfen, ob Dark Mode aktiv sein sollte
+      const theme = localStorage.getItem('color-theme');
+      if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
       
-      <div class="modal-body">
-        <div id="shopping-lists-loading" class="text-center py-8">
-          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-          <p class="text-muted mt-2">Einkaufslisten werden geladen...</p>
-        </div>
+      // Icons aktualisieren
+      const isDark = document.documentElement.classList.contains('dark');
+      const lightIcon = document.getElementById('theme-toggle-light-icon');
+      const darkIcon = document.getElementById('theme-toggle-dark-icon');
+      
+      if (lightIcon && darkIcon) {
+        lightIcon.classList.toggle('hidden', !isDark);
+        darkIcon.classList.toggle('hidden', isDark);
+      }
+      
+      // Event-Listener für den Dark Mode Toggle-Button hinzufügen
+      const themeToggleBtn = document.getElementById('theme-toggle');
+      themeToggleBtn?.addEventListener('click', function() {
+        // Toggle dark mode class
+        document.documentElement.classList.toggle('dark');
         
-        <div id="shopping-lists-content" class="hidden">
-          <div class="mb-4">
-            <p class="text-gray-700 dark:text-gray-300 mb-4">
-              Wählen Sie eine oder mehrere Einkaufslisten aus, zu denen das Rezept "<strong>{recipe.title}</strong>" hinzugefügt werden soll:
-            </p>
-            
-            <div class="mb-4 flex items-center justify-between">
-              <div class="flex items-center space-x-4">
-                <label class="flex items-center space-x-2">
-                  <input type="checkbox" id="select-all-lists" class="form-checkbox" />
-                  <span class="text-sm font-medium">Alle auswählen</span>
-                </label>
-                <span id="selected-lists-count" class="text-sm text-muted">0 Listen ausgewählt</span>
-              </div>
-              <button id="add-to-selected-lists" class="btn btn-success btn-sm" disabled>
-                Zu ausgewählten Listen hinzufügen
-              </button>
-            </div>
-          </div>
-          
-          <div id="available-shopping-lists" class="space-y-3 max-h-80 overflow-y-auto">
-            <!-- Shopping lists will be populated by JavaScript -->
-          </div>
-          
-          <div id="no-shopping-lists" class="hidden text-center py-8">
-            <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v11a2 2 0 002 2h5.586a1 1 0 00.707-.293l5.414-5.414a1 1 0 00.293-.707V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-            </svg>
-            <p class="text-muted mb-4">Keine Einkaufslisten gefunden</p>
-            <a href="/einkaufslisten" class="btn btn-primary">
-              Neue Einkaufsliste erstellen
-            </a>
-          </div>
-        </div>
-      </div>
+        // Update localStorage
+        if (document.documentElement.classList.contains('dark')) {
+          localStorage.setItem('color-theme', 'dark');
+        } else {
+          localStorage.setItem('color-theme', 'light');
+        }
+        
+        // Update icons
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        if (lightIcon && darkIcon) {
+          lightIcon.classList.toggle('hidden', !isDarkMode);
+          darkIcon.classList.toggle('hidden', isDarkMode);
+        }
+      });
+    });
+    
+    // Auch nach Astro View Transitions aktualisieren
+    document.addEventListener('astro:page-load', () => {
+      // Prüfen, ob Dark Mode aktiv sein sollte
+      const theme = localStorage.getItem('color-theme');
+      if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
       
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary modal-close">Schließen</button>
-      </div>
-    </div>
-  </div>
+      // Icons aktualisieren
+      const isDark = document.documentElement.classList.contains('dark');
+      const lightIcon = document.getElementById('theme-toggle-light-icon');
+      const darkIcon = document.getElementById('theme-toggle-dark-icon');
+      
+      if (lightIcon && darkIcon) {
+        lightIcon.classList.toggle('hidden', !isDark);
+        darkIcon.classList.toggle('hidden', isDark);
+      }
+      
+      // Event-Listener für den Dark Mode Toggle-Button hinzufügen
+      const themeToggleBtn = document.getElementById('theme-toggle');
+      themeToggleBtn?.addEventListener('click', function() {
+        // Toggle dark mode class
+        document.documentElement.classList.toggle('dark');
+        
+        // Update localStorage
+        if (document.documentElement.classList.contains('dark')) {
+          localStorage.setItem('color-theme', 'dark');
+        } else {
+          localStorage.setItem('color-theme', 'light');
+        }
+        
+        // Update icons
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        if (lightIcon && darkIcon) {
+          lightIcon.classList.toggle('hidden', !isDarkMode);
+          darkIcon.classList.toggle('hidden', isDarkMode);
+        }
+      });
+    });
+  </script>
 
   <script define:vars={{ recipe }}>
     // Timer functionality

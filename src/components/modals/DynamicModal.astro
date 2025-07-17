@@ -4,7 +4,7 @@ interface Props {
   size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
-const { id = 'modal', size = 'md' } = Astro.props;
+const { id = 'dynamic-modal', size = 'md' } = Astro.props;
 
 const sizeClasses = {
   sm: 'max-w-sm',
@@ -45,7 +45,7 @@ const sizeClasses = {
 
 <script define:vars={{ id }}>
   // Modal functionality
-  class Modal {
+  class DynamicModal {
     constructor(modalId) {
       this.modalId = modalId;
       this.modal = document.getElementById(modalId);
@@ -72,6 +72,32 @@ const sizeClasses = {
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !this.modal?.classList.contains('hidden')) {
           this.hide();
+        }
+      });
+      
+      // Listen for theme changes (localStorage event)
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'color-theme') {
+          // Theme has changed in another tab, update our modal if visible
+          if (!this.modal?.classList.contains('hidden')) {
+            // Force a repaint to apply the new theme
+            this.modal.style.opacity = '0.99';
+            setTimeout(() => {
+              this.modal.style.opacity = '1';
+            }, 10);
+          }
+        }
+      });
+      
+      // Listen for theme changes within the same page
+      document.addEventListener('themeChanged', () => {
+        // Update our modal if visible
+        if (!this.modal?.classList.contains('hidden')) {
+          // Force a repaint to apply the new theme
+          this.modal.style.opacity = '0.99';
+          setTimeout(() => {
+            this.modal.style.opacity = '1';
+          }, 10);
         }
       });
     }
@@ -126,38 +152,38 @@ const sizeClasses = {
     }
     
     getButtonClasses(type) {
-      const baseClasses = 'px-4 py-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2';
+      const baseClasses = 'btn';
       
       switch (type) {
         case 'primary':
-          return `${baseClasses} bg-orange-600 text-white hover:bg-orange-700 focus:ring-orange-500`;
+          return `${baseClasses} btn-primary`;
         case 'success':
-          return `${baseClasses} bg-green-600 text-white hover:bg-green-700 focus:ring-green-500`;
+          return `${baseClasses} btn-success`;
         case 'danger':
-          return `${baseClasses} bg-red-600 text-white hover:bg-red-700 focus:ring-red-500`;
+          return `${baseClasses} btn-danger`;
         case 'secondary':
         default:
-          return `${baseClasses} bg-gray-300 text-gray-700 hover:bg-gray-400 focus:ring-gray-500 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500`;
+          return `${baseClasses} btn-secondary`;
       }
     }
   }
   
   // Initialize modal
-  window[`modal_${id}`] = new Modal(id);
+  window[`modal_${id}`] = new DynamicModal(id);
 </script>
 
 <style>
   /* Smooth transitions */
-  #modal {
+  #dynamic-modal {
     transition: opacity 0.2s ease-out;
   }
   
-  #modal.hidden {
+  #dynamic-modal.hidden {
     opacity: 0;
     pointer-events: none;
   }
   
-  #modal:not(.hidden) {
+  #dynamic-modal:not(.hidden) {
     opacity: 1;
   }
 </style> 

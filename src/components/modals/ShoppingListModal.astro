@@ -1,0 +1,340 @@
+---
+import BaseModal from './BaseModal.astro';
+
+interface Props {
+  recipeId?: string;
+}
+
+const { recipeId } = Astro.props;
+---
+
+<BaseModal id="shopping-list-modal" size="lg" title="Zu Einkaufsliste hinzufügen">
+  <!-- Create New List Button -->
+  <button id="create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2 mb-4">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+    </svg>
+    <span>Neue Einkaufsliste erstellen</span>
+  </button>
+
+  <!-- Existing Lists -->
+  <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Oder zu bestehender Liste hinzufügen:</h4>
+    <div id="shopping-lists-loading" class="text-center py-8">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+      <p class="text-muted mt-2">Einkaufslisten werden geladen...</p>
+    </div>
+    <div id="existing-lists" class="space-y-2 max-h-60 overflow-y-auto hidden">
+      <!-- Lists will be inserted here -->
+    </div>
+    
+    <!-- Multiple selection mode (hidden initially) -->
+    <div id="multi-select-mode" class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 hidden">
+      <div class="flex items-center justify-between">
+        <label class="flex items-center space-x-2 text-sm">
+          <input type="checkbox" id="select-all-lists" class="form-checkbox h-4 w-4 text-green-500">
+          <span>Alle auswählen</span>
+        </label>
+        <span id="selected-lists-count" class="text-sm text-gray-500 dark:text-gray-400">0 ausgewählt</span>
+      </div>
+      <button id="add-to-selected-lists" class="w-full btn btn-success mt-4 flex items-center justify-center space-x-2" disabled>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        <span>Zu ausgewählten Listen hinzufügen</span>
+      </button>
+    </div>
+  </div>
+</BaseModal>
+
+<script define:vars={{ recipeId }}>
+  let availableShoppingLists = [];
+  const currentRecipeId = recipeId;
+  
+  document.addEventListener('DOMContentLoaded', () => {
+    // Initialize shopping list modal functionality
+    initShoppingListModal();
+  });
+  
+  function initShoppingListModal() {
+    // Create new list button
+    const createNewListBtn = document.getElementById('create-new-list');
+    createNewListBtn?.addEventListener('click', async () => {
+      try {
+        // Create a new list with a default name
+        const response = await fetch('/api/shopping-lists', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: 'Neue Einkaufsliste',
+            description: ''
+          })
+        });
+        
+        if (response.ok) {
+          const newList = await response.json();
+          
+          // Add the recipe to the new list
+          if (currentRecipeId) {
+            await addRecipeToShoppingList(newList.id);
+            
+            // Show success message
+            window.showSuccess('Rezept zur Einkaufsliste hinzugefügt');
+            
+            // Redirect to the new shopping list
+            window.location.href = `/einkaufsliste/${newList.id}`;
+          } else {
+            // Just refresh the lists if no recipe to add
+            await loadShoppingLists();
+            
+            // Show success message
+            window.showSuccess('Neue Einkaufsliste erstellt');
+          }
+        } else {
+          window.showError('Fehler beim Erstellen der Einkaufsliste');
+        }
+      } catch (error) {
+        console.error('Error creating shopping list:', error);
+        window.showError('Fehler beim Erstellen der Einkaufsliste');
+      }
+    });
+    
+    // Select all checkbox
+    const selectAllCheckbox = document.getElementById('select-all-lists');
+    selectAllCheckbox?.addEventListener('change', (e) => {
+      const checkboxes = document.querySelectorAll('.list-checkbox');
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = e.target.checked;
+      });
+      updateSelectedListsCount();
+    });
+    
+    // Add to selected lists button
+    const addSelectedButton = document.getElementById('add-to-selected-lists');
+    addSelectedButton?.addEventListener('click', async () => {
+      const selectedCheckboxes = document.querySelectorAll('.list-checkbox:checked');
+      const selectedListIds = Array.from(selectedCheckboxes).map(checkbox => 
+        checkbox.getAttribute('data-list-id')
+      );
+      
+      if (selectedListIds.length > 0 && currentRecipeId) {
+        await addRecipeToMultipleShoppingLists(selectedListIds);
+      }
+    });
+  }
+  
+  // Load shopping lists
+  async function loadShoppingLists() {
+    try {
+      const response = await fetch('/api/shopping-lists');
+      if (response.ok) {
+        availableShoppingLists = await response.json();
+        populateShoppingListModal();
+      }
+    } catch (error) {
+      console.error('Error loading shopping lists:', error);
+    }
+  }
+  
+  // Populate shopping list modal with available lists
+  function populateShoppingListModal() {
+    const loadingElement = document.getElementById('shopping-lists-loading');
+    const existingListsElement = document.getElementById('existing-lists');
+    
+    if (!existingListsElement || !loadingElement) return;
+    
+    // Hide loading indicator and show lists
+    loadingElement.classList.add('hidden');
+    existingListsElement.classList.remove('hidden');
+    
+    // Clear existing lists
+    existingListsElement.innerHTML = '';
+    
+    // Show multi-select mode if there are multiple lists
+    const multiSelectMode = document.getElementById('multi-select-mode');
+    if (multiSelectMode) {
+      if (availableShoppingLists.length > 1) {
+        multiSelectMode.classList.remove('hidden');
+      } else {
+        multiSelectMode.classList.add('hidden');
+      }
+    }
+    
+    if (availableShoppingLists.length === 0) {
+      existingListsElement.innerHTML = `
+        <div class="text-center py-4">
+          <p class="text-muted">Keine Einkaufslisten vorhanden</p>
+        </div>
+      `;
+      return;
+    }
+    
+    // Add lists to modal
+    availableShoppingLists.forEach(list => {
+      const listElement = document.createElement('div');
+      listElement.className = 'flex items-center justify-between p-3 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors';
+      
+      // Multi-select checkbox
+      const checkboxContainer = document.createElement('div');
+      checkboxContainer.className = 'flex items-center space-x-3 flex-1';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'list-checkbox h-4 w-4 text-green-500';
+      checkbox.setAttribute('data-list-id', list.id);
+      checkbox.addEventListener('change', updateSelectedListsCount);
+      
+      // List info
+      const listInfo = document.createElement('div');
+      listInfo.className = 'flex-1';
+      
+      const listTitle = document.createElement('div');
+      listTitle.className = 'font-medium text-gray-900 dark:text-white';
+      listTitle.textContent = list.title;
+      
+      const listMeta = document.createElement('div');
+      listMeta.className = 'text-xs text-gray-500 dark:text-gray-400';
+      listMeta.textContent = `${list.items.length} Artikel`;
+      
+      listInfo.appendChild(listTitle);
+      listInfo.appendChild(listMeta);
+      
+      checkboxContainer.appendChild(checkbox);
+      checkboxContainer.appendChild(listInfo);
+      
+      // Add button
+      const addButton = document.createElement('button');
+      addButton.className = 'btn btn-sm btn-success';
+      addButton.textContent = 'Hinzufügen';
+      addButton.setAttribute('data-list-id', list.id);
+      addButton.addEventListener('click', () => {
+        if (currentRecipeId) {
+          addRecipeToShoppingList(list.id);
+        }
+      });
+      
+      listElement.appendChild(checkboxContainer);
+      listElement.appendChild(addButton);
+      
+      existingListsElement.appendChild(listElement);
+    });
+  }
+  
+  // Update the selected lists count
+  function updateSelectedListsCount() {
+    const selectedCount = document.querySelectorAll('.list-checkbox:checked').length;
+    const countElement = document.getElementById('selected-lists-count');
+    const addSelectedButton = document.getElementById('add-to-selected-lists');
+    
+    if (countElement) {
+      countElement.textContent = `${selectedCount} ausgewählt`;
+    }
+    
+    if (addSelectedButton) {
+      if (selectedCount > 0) {
+        addSelectedButton.removeAttribute('disabled');
+      } else {
+        addSelectedButton.setAttribute('disabled', 'disabled');
+      }
+    }
+  }
+  
+  // Add recipe to a shopping list
+  async function addRecipeToShoppingList(listId) {
+    if (!currentRecipeId) return;
+    
+    try {
+      const response = await fetch(`/api/shopping-lists/${listId}/recipes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          recipeIds: [currentRecipeId]
+        })
+      });
+      
+      if (response.ok) {
+        window.showSuccess('Rezept zur Einkaufsliste hinzugefügt');
+        
+        // Hide modal
+        const modal = document.getElementById('shopping-list-modal');
+        if (modal) {
+          modal.classList.add('hidden');
+        }
+        
+        // Redirect to the shopping list
+        window.location.href = `/einkaufsliste/${listId}`;
+      } else {
+        window.showError('Fehler beim Hinzufügen zur Einkaufsliste');
+      }
+    } catch (error) {
+      console.error('Error adding recipe to shopping list:', error);
+      window.showError('Fehler beim Hinzufügen zur Einkaufsliste');
+    }
+  }
+  
+  // Add recipe to multiple shopping lists
+  async function addRecipeToMultipleShoppingLists(listIds) {
+    if (!currentRecipeId || !listIds.length) return;
+    
+    try {
+      const promises = listIds.map(listId => 
+        fetch(`/api/shopping-lists/${listId}/recipes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            recipeIds: [currentRecipeId]
+          })
+        })
+      );
+      
+      const results = await Promise.all(promises);
+      const successCount = results.filter(result => result.ok).length;
+      
+      if (successCount === listIds.length) {
+        window.showSuccess(`Rezept zu ${successCount} Einkaufslisten hinzugefügt`);
+      } else if (successCount > 0) {
+        window.showWarning(`Rezept zu ${successCount} von ${listIds.length} Einkaufslisten hinzugefügt`);
+      } else {
+        window.showError('Fehler beim Hinzufügen zur Einkaufsliste');
+      }
+      
+      // Hide modal
+      const modal = document.getElementById('shopping-list-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+      }
+      
+      // Redirect to the first successful shopping list if any were successful
+      if (successCount > 0) {
+        window.location.href = `/einkaufsliste/${listIds[0]}`;
+      }
+    } catch (error) {
+      console.error('Error adding recipe to shopping lists:', error);
+      window.showError('Fehler beim Hinzufügen zur Einkaufsliste');
+    }
+  }
+  
+  // Load lists when the modal is shown
+  const shoppingListModal = document.getElementById('shopping-list-modal');
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.attributeName === 'class') {
+        const modalElement = mutation.target;
+        if (!modalElement.classList.contains('hidden')) {
+          // Modal is shown, load lists
+          loadShoppingLists();
+        }
+      }
+    });
+  });
+  
+  if (shoppingListModal) {
+    observer.observe(shoppingListModal, { attributes: true });
+  }
+</script> 

@@ -37,296 +37,308 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
 </div>
 
 <script>
-  const searchInput = document.getElementById('recipe-search') as HTMLInputElement;
-  const categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
-  const recipeCards = document.querySelectorAll('.recipe-card');
-  const recipeCountElement = document.getElementById('recipe-count');
+  // Function to initialize search functionality
+  function initializeSearch() {
+    const searchInput = document.getElementById('recipe-search') as HTMLInputElement;
+    const categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
+    const recipeCards = document.querySelectorAll('.recipe-card');
+    const recipeCountElement = document.getElementById('recipe-count');
 
-  // Add styles for search highlights and tags
-  const style = document.createElement('style');
-  style.textContent = `
-    .search-highlight {
-      animation: fadeIn 0.3s ease-in-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    /* Tag styles are already defined in the RecipeCard component */
-  `;
-  document.head.appendChild(style);
-
-  // Function to decode HTML entities
-  function decodeHtml(html: string): string {
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = html;
-    return textarea.value;
-  }
-
-  // Function to highlight text while preserving HTML entities
-  function highlightText(text: string, searchTerms: string[]): string {
-    let result = text;
-    
-    // First decode the HTML entities in the text
-    result = decodeHtml(result);
-    
-    // Escape special characters in the text for regex
-    result = result.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
-    // Apply highlighting for each search term
-    searchTerms.forEach(term => {
-      // Remove quotes for quoted terms
-      const searchTerm = term.startsWith('"') && term.endsWith('"') 
-        ? term.slice(1, -1) 
-        : term;
-      
-      // Escape special characters in the search term
-      const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      
-      // Create regex that ignores HTML tags
-      const regex = new RegExp(`(?![^<]*>)(${escapedTerm})`, 'gi');
-      result = result.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-700">$1</mark>');
-    });
-    
-    return result;
-  }
-
-  // Function to filter recipes
-  function filterRecipes() {
-    // Parse search terms, handling quoted phrases and special tag search
-    function parseSearchTerms(input: string): { regular: string[]; tagOnly: string[] } {
-      const terms = {
-        regular: [] as string[],
-        tagOnly: [] as string[]
-      };
-      let currentTerm = '';
-      let inQuotes = false;
-      
-      // Helper to add a term if it's not empty
-      const addTerm = (term: string) => {
-        const trimmed = term.trim().toLowerCase();
-        if (trimmed) {
-          // Check if this is a tag-specific search
-          if (inQuotes && trimmed.startsWith('tag:')) {
-            terms.tagOnly.push(trimmed.slice(4)); // Remove 'tag:' prefix
-          } else {
-            terms.regular.push(trimmed);
-          }
+    // Add styles for search highlights and tags if not already added
+    if (!document.getElementById('search-highlight-styles')) {
+      const style = document.createElement('style');
+      style.id = 'search-highlight-styles';
+      style.textContent = `
+        .search-highlight {
+          animation: fadeIn 0.3s ease-in-out;
         }
-      };
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        /* Tag styles are already defined in the RecipeCard component */
+      `;
+      document.head.appendChild(style);
+    }
 
-      for (let i = 0; i < input.length; i++) {
-        const char = input[i];
+    // Function to decode HTML entities
+    function decodeHtml(html: string): string {
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = html;
+      return textarea.value;
+    }
+
+    // Function to highlight text while preserving HTML entities
+    function highlightText(text: string, searchTerms: string[]): string {
+      let result = text;
+      
+      // First decode the HTML entities in the text
+      result = decodeHtml(result);
+      
+      // Escape special characters in the text for regex
+      result = result.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // Apply highlighting for each search term
+      searchTerms.forEach(term => {
+        // Remove quotes for quoted terms
+        const searchTerm = term.startsWith('"') && term.endsWith('"') 
+          ? term.slice(1, -1) 
+          : term;
         
-        if (char === '"') {
-          if (inQuotes) {
-            // End of quoted phrase
+        // Escape special characters in the search term
+        const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Create regex that ignores HTML tags
+        const regex = new RegExp(`(?![^<]*>)(${escapedTerm})`, 'gi');
+        result = result.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-700">$1</mark>');
+      });
+      
+      return result;
+    }
+
+    // Function to filter recipes
+    function filterRecipes() {
+      // Parse search terms, handling quoted phrases and special tag search
+      function parseSearchTerms(input: string): { regular: string[]; tagOnly: string[] } {
+        const terms = {
+          regular: [] as string[],
+          tagOnly: [] as string[]
+        };
+        let currentTerm = '';
+        let inQuotes = false;
+        
+        // Helper to add a term if it's not empty
+        const addTerm = (term: string) => {
+          const trimmed = term.trim().toLowerCase();
+          if (trimmed) {
+            // Check if this is a tag-specific search
+            if (inQuotes && trimmed.startsWith('tag:')) {
+              terms.tagOnly.push(trimmed.slice(4)); // Remove 'tag:' prefix
+            } else {
+              terms.regular.push(trimmed);
+            }
+          }
+        };
+
+        for (let i = 0; i < input.length; i++) {
+          const char = input[i];
+          
+          if (char === '"') {
+            if (inQuotes) {
+              // End of quoted phrase
+              addTerm(currentTerm);
+              currentTerm = '';
+            }
+            inQuotes = !inQuotes;
+          } else if (char === ' ' && !inQuotes) {
+            // Space outside quotes - end current term
             addTerm(currentTerm);
             currentTerm = '';
+          } else {
+            currentTerm += char;
           }
-          inQuotes = !inQuotes;
-        } else if (char === ' ' && !inQuotes) {
-          // Space outside quotes - end current term
-          addTerm(currentTerm);
-          currentTerm = '';
-        } else {
-          currentTerm += char;
-        }
-      }
-      
-      // Add any remaining term
-      addTerm(currentTerm);
-      
-      return terms;
-    }
-
-    // Check if text matches search terms
-    function matchesSearchTerms(text: string, terms: string[]): boolean {
-      // Decode HTML entities before matching
-      const normalizedText = decodeHtml(text).toLowerCase();
-      
-      return terms.every(term => {
-        if (term.startsWith('"') && term.endsWith('"')) {
-          // Exact phrase match for quoted terms
-          const phrase = term.slice(1, -1);
-          return normalizedText.includes(phrase);
-        } else {
-          // Individual word match for unquoted terms
-          return normalizedText.includes(term);
-        }
-      });
-    }
-
-    const searchTerms = parseSearchTerms(searchInput.value);
-    const selectedCategory = categoryFilter.value.toLowerCase();
-    let visibleCount = 0;
-
-    recipeCards.forEach((card) => {
-      // Store original tag structure if not already stored
-      if (!card.hasAttribute('data-original-tags')) {
-        const tagsContainer = card.querySelector('.flex.flex-wrap.gap-1\\.5');
-        if (tagsContainer) {
-          card.setAttribute('data-original-tags', tagsContainer.innerHTML);
-        }
-      }
-
-      const titleElement = card.querySelector('.heading-tertiary');
-      const descriptionElement = card.querySelector('.text-body');
-      const title = titleElement?.textContent?.toLowerCase() || '';
-      const description = descriptionElement?.textContent?.toLowerCase() || '';
-      const category = card.getAttribute('data-category')?.toLowerCase() || '';
-      
-      // Get all tags, including hidden ones
-      const tagsContainer = card.querySelector('.flex.flex-wrap.gap-1\\.5');
-      const visibleTags = Array.from(card.querySelectorAll('.tag')).map(tag => tag.textContent?.toLowerCase() || '');
-      const hiddenTags = card.querySelector('.tag-more')?.getAttribute('title')?.split(', ').map(tag => tag.toLowerCase()) || [];
-      const allTagTexts = [...visibleTags, ...hiddenTags];
-
-      // Check if all tag-specific terms match
-      const matchesTags = searchTerms.tagOnly.length === 0 || 
-        searchTerms.tagOnly.every(tagTerm => 
-          allTagTexts.some(tag => tag.includes(tagTerm))
-        );
-
-      // Check if regular terms match in title, description, or tags
-      const matchesRegular = searchTerms.regular.length === 0 || (
-        matchesSearchTerms(title, searchTerms.regular) || 
-        matchesSearchTerms(description, searchTerms.regular) ||
-        allTagTexts.some(tag => matchesSearchTerms(tag, searchTerms.regular))
-      );
-      
-      const matchesCategory = selectedCategory === '' || category === selectedCategory;
-      const isVisible = matchesTags && matchesRegular && matchesCategory;
-      
-      if (isVisible && (searchTerms.regular.length > 0 || searchTerms.tagOnly.length > 0)) {
-        // Highlight matches in title and description only for regular terms
-        if (titleElement && titleElement.textContent && searchTerms.regular.length > 0) {
-          titleElement.innerHTML = highlightText(titleElement.textContent, searchTerms.regular);
         }
         
-        if (descriptionElement && descriptionElement.textContent && searchTerms.regular.length > 0) {
-          descriptionElement.innerHTML = highlightText(descriptionElement.textContent, searchTerms.regular);
+        // Add any remaining term
+        addTerm(currentTerm);
+        
+        return terms;
+      }
+
+      // Check if text matches search terms
+      function matchesSearchTerms(text: string, terms: string[]): boolean {
+        // Decode HTML entities before matching
+        const normalizedText = decodeHtml(text).toLowerCase();
+        
+        return terms.every(term => {
+          if (term.startsWith('"') && term.endsWith('"')) {
+            // Exact phrase match for quoted terms
+            const phrase = term.slice(1, -1);
+            return normalizedText.includes(phrase);
+          } else {
+            // Individual word match for unquoted terms
+            return normalizedText.includes(term);
+          }
+        });
+      }
+
+      const searchTerms = parseSearchTerms(searchInput.value);
+      const selectedCategory = categoryFilter.value.toLowerCase();
+      let visibleCount = 0;
+
+      recipeCards.forEach((card) => {
+        // Store original tag structure if not already stored
+        if (!card.hasAttribute('data-original-tags')) {
+          const tagsContainer = card.querySelector('.flex.flex-wrap.gap-1\\.5');
+          if (tagsContainer) {
+            card.setAttribute('data-original-tags', tagsContainer.innerHTML);
+          }
         }
 
-        // Handle tags - highlight for both regular and tag-specific terms
-        if (tagsContainer) {
-          // Get the first 3 visible tags and remaining hidden tags
-          const displayTags = visibleTags.slice(0, 3);
-          const remainingTags = [...visibleTags.slice(3), ...hiddenTags];
-          
-          // Clear current tags
-          tagsContainer.innerHTML = '';
-          
-          // Add visible tags with highlights if they match
-          displayTags.forEach(tag => {
-            if (!tag) return;
-            const tagElement = document.createElement('span');
-            tagElement.className = 'tag text-xs py-0.5 px-2 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300';
-            
-            // Check if tag matches any search term (regular or tag-specific)
-            const matchesAnyTerm = 
-              searchTerms.regular.some(term => matchesSearchTerms(tag, [term])) ||
-              searchTerms.tagOnly.some(tagTerm => tag.includes(tagTerm));
-            
-            tagElement.innerHTML = matchesAnyTerm
-              ? highlightText(tag, [...searchTerms.regular, ...searchTerms.tagOnly.map(t => `"${t}"`)])
-              : decodeHtml(tag);
-            tagsContainer.appendChild(tagElement);
-          });
-          
-          // Add matching tags from remaining tags
-          const matchingRemainingTags = remainingTags.filter(tag => 
-            tag && (
-              searchTerms.regular.some(term => matchesSearchTerms(tag, [term])) ||
-              searchTerms.tagOnly.some(tagTerm => tag.includes(tagTerm))
-            )
+        const titleElement = card.querySelector('.heading-tertiary');
+        const descriptionElement = card.querySelector('.text-body');
+        const title = titleElement?.textContent?.toLowerCase() || '';
+        const description = descriptionElement?.textContent?.toLowerCase() || '';
+        const category = card.getAttribute('data-category')?.toLowerCase() || '';
+        
+        // Get all tags, including hidden ones
+        const tagsContainer = card.querySelector('.flex.flex-wrap.gap-1\\.5');
+        const visibleTags = Array.from(card.querySelectorAll('.tag')).map(tag => tag.textContent?.toLowerCase() || '');
+        const hiddenTags = card.querySelector('.tag-more')?.getAttribute('title')?.split(', ').map(tag => tag.toLowerCase()) || [];
+        const allTagTexts = [...visibleTags, ...hiddenTags];
+
+        // Check if all tag-specific terms match
+        const matchesTags = searchTerms.tagOnly.length === 0 || 
+          searchTerms.tagOnly.every(tagTerm => 
+            allTagTexts.some(tag => tag.includes(tagTerm))
           );
+
+        // Check if regular terms match in title, description, or tags
+        const matchesRegular = searchTerms.regular.length === 0 || (
+          matchesSearchTerms(title, searchTerms.regular) || 
+          matchesSearchTerms(description, searchTerms.regular) ||
+          allTagTexts.some(tag => matchesSearchTerms(tag, searchTerms.regular))
+        );
+        
+        const matchesCategory = selectedCategory === '' || category === selectedCategory;
+        const isVisible = matchesTags && matchesRegular && matchesCategory;
+        
+        if (isVisible && (searchTerms.regular.length > 0 || searchTerms.tagOnly.length > 0)) {
+          // Highlight matches in title and description only for regular terms
+          if (titleElement && titleElement.textContent && searchTerms.regular.length > 0) {
+            titleElement.innerHTML = highlightText(titleElement.textContent, searchTerms.regular);
+          }
           
-          matchingRemainingTags.forEach(tag => {
-            if (!tag) return;
-            const tagElement = document.createElement('span');
-            tagElement.className = 'tag text-xs py-0.5 px-2 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 search-highlight';
-            tagElement.innerHTML = highlightText(tag, [...searchTerms.regular, ...searchTerms.tagOnly.map(t => `"${t}"`)])
-            tagsContainer.appendChild(tagElement);
-          });
-          
-          // Add overflow indicator for non-matching remaining tags
-          const nonMatchingCount = remainingTags.length - matchingRemainingTags.length;
-          if (nonMatchingCount > 0) {
-            const moreTag = document.createElement('span');
-            moreTag.className = 'tag-more text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400';
-            moreTag.title = remainingTags.filter(tag => 
-              tag && !(
+          if (descriptionElement && descriptionElement.textContent && searchTerms.regular.length > 0) {
+            descriptionElement.innerHTML = highlightText(descriptionElement.textContent, searchTerms.regular);
+          }
+
+          // Handle tags - highlight for both regular and tag-specific terms
+          if (tagsContainer) {
+            // Get the first 3 visible tags and remaining hidden tags
+            const displayTags = visibleTags.slice(0, 3);
+            const remainingTags = [...visibleTags.slice(3), ...hiddenTags];
+            
+            // Clear current tags
+            tagsContainer.innerHTML = '';
+            
+            // Add visible tags with highlights if they match
+            displayTags.forEach(tag => {
+              if (!tag) return;
+              const tagElement = document.createElement('span');
+              tagElement.className = 'tag text-xs py-0.5 px-2 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300';
+              
+              // Check if tag matches any search term (regular or tag-specific)
+              const matchesAnyTerm = 
+                searchTerms.regular.some(term => matchesSearchTerms(tag, [term])) ||
+                searchTerms.tagOnly.some(tagTerm => tag.includes(tagTerm));
+              
+              tagElement.innerHTML = matchesAnyTerm
+                ? highlightText(tag, [...searchTerms.regular, ...searchTerms.tagOnly.map(t => `"${t}"`)])
+                : decodeHtml(tag);
+              tagsContainer.appendChild(tagElement);
+            });
+            
+            // Add matching tags from remaining tags
+            const matchingRemainingTags = remainingTags.filter(tag => 
+              tag && (
                 searchTerms.regular.some(term => matchesSearchTerms(tag, [term])) ||
                 searchTerms.tagOnly.some(tagTerm => tag.includes(tagTerm))
               )
-            ).map(tag => decodeHtml(tag || '')).join(', ');
-            moreTag.textContent = `+${nonMatchingCount} weitere`;
-            tagsContainer.appendChild(moreTag);
+            );
+            
+            matchingRemainingTags.forEach(tag => {
+              if (!tag) return;
+              const tagElement = document.createElement('span');
+              tagElement.className = 'tag text-xs py-0.5 px-2 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 search-highlight';
+              tagElement.innerHTML = highlightText(tag, [...searchTerms.regular, ...searchTerms.tagOnly.map(t => `"${t}"`)])
+              tagsContainer.appendChild(tagElement);
+            });
+            
+            // Add overflow indicator for non-matching remaining tags
+            const nonMatchingCount = remainingTags.length - matchingRemainingTags.length;
+            if (nonMatchingCount > 0) {
+              const moreTag = document.createElement('span');
+              moreTag.className = 'tag-more text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400';
+              moreTag.title = remainingTags.filter(tag => 
+                tag && !(
+                  searchTerms.regular.some(term => matchesSearchTerms(tag, [term])) ||
+                  searchTerms.tagOnly.some(tagTerm => tag.includes(tagTerm))
+                )
+              ).map(tag => decodeHtml(tag || '')).join(', ');
+              moreTag.textContent = `+${nonMatchingCount} weitere`;
+              tagsContainer.appendChild(moreTag);
+            }
+          }
+        } else {
+          // Reset highlights and restore original content
+          if (titleElement && titleElement.textContent) {
+            titleElement.textContent = decodeHtml(titleElement.textContent);
+          }
+          if (descriptionElement && descriptionElement.textContent) {
+            descriptionElement.textContent = decodeHtml(descriptionElement.textContent);
+          }
+          
+          // Restore original tag structure from stored HTML
+          if (tagsContainer && card.hasAttribute('data-original-tags')) {
+            tagsContainer.innerHTML = card.getAttribute('data-original-tags') || '';
           }
         }
-      } else {
-        // Reset highlights and restore original content
-        if (titleElement && titleElement.textContent) {
-          titleElement.textContent = decodeHtml(titleElement.textContent);
-        }
-        if (descriptionElement && descriptionElement.textContent) {
-          descriptionElement.textContent = decodeHtml(descriptionElement.textContent);
-        }
-        
-        // Restore original tag structure from stored HTML
-        if (tagsContainer && card.hasAttribute('data-original-tags')) {
-          tagsContainer.innerHTML = card.getAttribute('data-original-tags') || '';
-        }
-      }
 
-      card.classList.toggle('hidden', !isVisible);
-      if (isVisible) visibleCount++;
+        card.classList.toggle('hidden', !isVisible);
+        if (isVisible) visibleCount++;
+      });
+
+      // Update recipe count
+      if (recipeCountElement) {
+        recipeCountElement.textContent = visibleCount.toString();
+      }
+    }
+
+    // Update URL when search or category changes
+    function updateURL() {
+      const url = new URL(window.location.href);
+      
+      if (searchInput.value) {
+        url.searchParams.set('search', searchInput.value);
+      } else {
+        url.searchParams.delete('search');
+      }
+      
+      if (categoryFilter.value) {
+        url.searchParams.set('category', categoryFilter.value);
+      } else {
+        url.searchParams.delete('category');
+      }
+      
+      window.history.replaceState({}, '', url);
+    }
+
+    // Add event listeners with URL updates
+    searchInput.addEventListener('input', () => {
+      filterRecipes();
+      updateURL();
     });
 
-    // Update recipe count
-    if (recipeCountElement) {
-      recipeCountElement.textContent = visibleCount.toString();
-    }
-  }
+    categoryFilter.addEventListener('change', () => {
+      filterRecipes();
+      updateURL();
+    });
 
-  // Update URL when search or category changes
-  function updateURL() {
-    const url = new URL(window.location.href);
-    
-    if (searchInput.value) {
-      url.searchParams.set('search', searchInput.value);
-    } else {
-      url.searchParams.delete('search');
+    // Initial filter if we have URL parameters
+    if (searchInput.value || categoryFilter.value) {
+      filterRecipes();
     }
-    
+
+    // Trigger initial filter if we have a category selected
     if (categoryFilter.value) {
-      url.searchParams.set('category', categoryFilter.value);
-    } else {
-      url.searchParams.delete('category');
+      filterRecipes();
     }
-    
-    window.history.replaceState({}, '', url);
   }
 
-  // Add event listeners with URL updates
-  searchInput.addEventListener('input', () => {
-    filterRecipes();
-    updateURL();
-  });
+  // Initialize on DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', initializeSearch);
 
-  categoryFilter.addEventListener('change', () => {
-    filterRecipes();
-    updateURL();
-  });
-
-  // Initial filter if we have URL parameters
-  if (searchInput.value || categoryFilter.value) {
-    filterRecipes();
-  }
-
-  // Trigger initial filter if we have a category selected
-  if (categoryFilter.value) {
-    filterRecipes();
-  }
+  // Initialize after Astro View Transitions
+  document.addEventListener('astro:page-load', initializeSearch);
 </script> 

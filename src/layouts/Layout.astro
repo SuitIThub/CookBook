@@ -1,9 +1,12 @@
 ---
+import { ViewTransitions } from 'astro:transitions';
 import '../styles/components.css';
 import MultiTimerManager from '../components/timer/MultiTimerManager.astro';
-import Modal from '../components/Modal.astro';
+import NotificationModal from '../components/modals/NotificationModal.astro';
+import WarningModal from '../components/modals/WarningModal.astro';
+import WarningImportModal from '../components/modals/WarningImportModal.astro';
 
-export interface Props {
+interface Props {
   title: string;
 }
 
@@ -11,126 +14,81 @@ const { title } = Astro.props;
 ---
 
 <!DOCTYPE html>
-<html lang="de" style="background-color: #111827; color: #f9fafb;">
-  <script>
-    // Theme detection script (runs immediately to prevent flash)
-    (function() {
-      const theme = localStorage.getItem('theme') || 
-        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      
-      // Apply theme class immediately
-      document.documentElement.classList.toggle('dark', theme === 'dark');
-      document.documentElement.classList.add(theme);
-      
-      // Apply correct colors based on theme
-      if (theme === 'dark') {
-        document.documentElement.style.backgroundColor = '#111827'; // gray-900
-        document.documentElement.style.color = '#f9fafb'; // gray-100
-      } else {
-        document.documentElement.style.backgroundColor = '#f9fafb'; // gray-50
-        document.documentElement.style.color = '#111827'; // gray-900
-      }
-      
-      // Ensure visibility is set
-      document.documentElement.style.visibility = 'visible';
-    })();
-  </script>
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="description" content="Digitales Kochbuch für Rezepte und Einkaufslisten" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-    <link rel="manifest" href="/site.webmanifest">
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
     
-    <!-- PWA Meta Tags -->
-    <meta name="application-name" content="Kochbuch" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Kochbuch" />
-    <meta name="format-detection" content="telephone=no" />
-    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Dark mode script - MUSS vor ViewTransitions sein -->
+    <script is:inline>
+      // Sofort beim Laden der Seite ausführen, um Flackern zu vermeiden
+      const theme = localStorage.getItem('color-theme');
+      
+      // Wenn Dark Mode gespeichert ist oder System-Präferenz dunkel ist
+      if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      
+      // Icons entsprechend aktualisieren (wird später im DOM ausgeführt)
+      document.addEventListener('DOMContentLoaded', () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        const lightIcon = document.getElementById('theme-toggle-light-icon');
+        const darkIcon = document.getElementById('theme-toggle-dark-icon');
+        
+        if (lightIcon && darkIcon) {
+          lightIcon.classList.toggle('hidden', !isDark);
+          darkIcon.classList.toggle('hidden', isDark);
+        }
+      });
+    </script>
+    
+    <ViewTransitions />
+    
+    <!-- PWA meta tags -->
+    <meta name="description" content="Eine moderne Kochbuch-App zum Speichern, Verwalten und Kochen deiner Lieblingsrezepte." />
     <meta name="theme-color" content="#f97316" />
-    
-    <!-- PWA Links -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="shortcut icon" href="/favicon.svg" />
     
-    <!-- Apple Touch Icons -->
-    <link rel="apple-touch-icon" href="/icons/icon-152x152.svg" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.svg" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.svg" />
-    
-    <!-- Microsoft Tiles -->
-    <meta name="msapplication-TileColor" content="#f97316" />
-    <meta name="msapplication-TileImage" content="/icons/icon-144x144.svg" />
-    <style>
-      /* Prevent flash of unstyled content during theme initialization */
-      html:not(.dark):not(.light) {
-        visibility: hidden;
-      }
-      /* Ensure smooth transition once CSS loads */
-      html {
-        transition: background-color 0.2s ease, color 0.2s ease;
-      }
-      /* Remove inline styles once CSS loads */
-      html.css-loaded {
-        background-color: unset !important;
-        color: unset !important;
-      }
-    </style>
+    <!-- Font preloading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
-  <body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
-    <header class="nav-header">
-      <nav class="container">
-        <div class="flex justify-between h-16">
+  <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen flex flex-col transition-colors">
+    <header class="sticky top-0 z-30 w-full">
+      <nav class="nav-header">
+        <div class="container flex items-center justify-between h-16">
           <div class="flex items-center">
-            <a href="/" class="flex items-center space-x-2">
-              <img src="/icons/icon_alpha_32.svg" alt="Kochbuch Logo" class="w-8 h-8 text-orange-500" />
-              <span class="text-xl font-semibold text-gray-900 dark:text-white">Kochbuch</span>
+            <a href="/" class="flex items-center space-x-3">
+              <img src="/icons/icon_alpha_32.svg" alt="Logo" class="h-8 w-8" />
+              <span class="text-xl font-bold text-gray-900 dark:text-white">Kochbuch</span>
             </a>
+            <div class="hidden landscape:flex ml-10 space-x-4">
+              <a href="/rezepte" class="nav-link">
+                Rezepte
+              </a>
+              <a href="/einkaufslisten" class="nav-link">
+                Einkaufslisten
+              </a>
+            </div>
           </div>
-          
-          <!-- Desktop navigation -->
-          <div class="hidden portrait:hidden landscape:flex items-center space-x-4">
-            <a href="/rezepte" class="nav-link">
-              Rezepte
-            </a>
-            <a href="/einkaufslisten" class="nav-link">
-              Einkaufslisten
-            </a>
-            <!-- Theme Toggle Button -->
+          <div class="flex items-center space-x-2">
             <button id="theme-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
-              <!-- Sun icon (visible in dark mode) -->
-              <svg id="theme-toggle-light-icon" class="hidden dark:block w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+              <!-- Sun icon -->
+              <svg id="theme-toggle-light-icon" class="hidden w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
               </svg>
-              <!-- Moon icon (visible in light mode) -->
-              <svg id="theme-toggle-dark-icon" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.293 13.293A8 8 0 616.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-              </svg>
-            </button>
-          </div>
-
-          <!-- Mobile hamburger button -->
-          <div class="flex items-center space-x-2 portrait:flex landscape:hidden">
-            <!-- Theme Toggle Button for Mobile -->
-            <button id="theme-toggle-mobile" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
-              <!-- Sun icon (visible in dark mode) -->
-              <svg id="theme-toggle-light-icon-mobile" class="hidden dark:block w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
-              </svg>
-              <!-- Moon icon (visible in light mode) -->
-              <svg id="theme-toggle-dark-icon-mobile" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.293 13.293A8 8 0 616.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+              <!-- Moon icon -->
+              <svg id="theme-toggle-dark-icon" class="hidden w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
               </svg>
             </button>
-            
-            <!-- Hamburger menu button -->
             <button id="mobile-menu-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle mobile menu">
               <!-- Hamburger icon -->
               <svg id="mobile-menu-open" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,439 +124,83 @@ const { title } = Astro.props;
     <MultiTimerManager />
 
     <!-- Global Modal for notifications -->
-    <Modal id="notification-modal" size="md" />
-
+    <NotificationModal id="notification-modal" />
+    
     <!-- Warning Modal -->
-    <div id="warning-modal" class="fixed inset-0 z-50 hidden">
-      <!-- Backdrop -->
-      <div class="fixed inset-0 bg-black/50 backdrop-blur-sm"></div>
-      
-      <!-- Modal Container -->
-      <div class="fixed inset-0 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
-          <!-- Header -->
-          <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-white flex items-center">
-              <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-              Wichtige Hinweise
-            </h3>
-            <button class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" id="close-warning-modal">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-          
-          <!-- Content -->
-          <div class="p-4 overflow-y-auto flex-1">
-            <div class="space-y-3" id="warning-list">
-              <!-- Warnings will be inserted here -->
-            </div>
-          </div>
-          
-          <!-- Footer -->
-          <div class="flex justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
-            <button id="continue-to-recipe" class="btn btn-primary">
-              Verstanden, weiter zum Rezept
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <WarningModal id="warning-modal" />
+    
+    <!-- Warning Import Modal -->
+    <WarningImportModal id="warning-import-modal" />
 
     <script>
-      // Declare global functions
-      declare global {
-        interface Window {
-          showModal: (message: string, autoHide?: number) => Promise<void>;
-          showWarning: (message: string) => Promise<void>;
-          showInfo: (message: string) => Promise<void>;
-          showConfirm: (message: string) => Promise<boolean>;
-          showDeleteConfirm: (message: string) => Promise<boolean>;
-          showWarnings: (warnings: string[], onContinue: () => void) => void;
-          [key: `modal_${string}`]: {
-            show: (options: {
-              title: string;
-              content: string;
-              buttons?: Array<{
-                text: string;
-                type?: 'primary' | 'secondary' | 'danger' | 'success';
-                action?: () => void;
-              }>;
-              icon?: string;
-            }) => void;
-            hide: () => void;
-          };
+      // Mobile menu toggle
+      const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+      const mobileMenu = document.getElementById('mobile-menu');
+      const mobileMenuOpen = document.getElementById('mobile-menu-open');
+      const mobileMenuClose = document.getElementById('mobile-menu-close');
+      
+      mobileMenuToggle?.addEventListener('click', () => {
+        mobileMenu?.classList.toggle('hidden');
+        mobileMenuOpen?.classList.toggle('hidden');
+        mobileMenuClose?.classList.toggle('hidden');
+      });
+      
+      // Dark mode toggle
+      const themeToggleBtn = document.getElementById('theme-toggle');
+      const themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
+      const themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
+      
+      // Update icon visibility based on current theme
+      function updateThemeToggleIcons() {
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        
+        if (themeToggleLightIcon && themeToggleDarkIcon) {
+          // Show sun icon in dark mode, moon icon in light mode
+          themeToggleLightIcon.classList.toggle('hidden', !isDarkMode);
+          themeToggleDarkIcon.classList.toggle('hidden', isDarkMode);
         }
       }
-
-      // Theme toggle functionality
-      function initializeTheme() {
-        const themeToggle = document.getElementById('theme-toggle');
-        const themeToggleMobile = document.getElementById('theme-toggle-mobile');
-
-        function toggleTheme() {
-          const currentTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-          const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-          
-          document.documentElement.classList.toggle('dark', newTheme === 'dark');
-          document.documentElement.classList.remove(currentTheme);
-          document.documentElement.classList.add(newTheme);
-          localStorage.setItem('theme', newTheme);
-        }
-
-        if (themeToggle) {
-          themeToggle.addEventListener('click', toggleTheme);
-        }
-        if (themeToggleMobile) {
-          themeToggleMobile.addEventListener('click', toggleTheme);
-        }
-      }
-
-      // Mobile menu toggle functionality
-      function initializeMobileMenu() {
-        const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
-        const mobileMenu = document.getElementById('mobile-menu');
-        const openIcon = document.getElementById('mobile-menu-open');
-        const closeIcon = document.getElementById('mobile-menu-close');
-
-        if (!mobileMenuToggle || !mobileMenu || !openIcon || !closeIcon) return;
-
-        // Ensure menu starts in closed state
-        mobileMenu.classList.add('hidden');
-        openIcon.classList.remove('hidden');
-        closeIcon.classList.add('hidden');
-
-        function toggleMobileMenu(e: Event) {
-          e.preventDefault();
-          e.stopPropagation();
-          
-          if (!mobileMenu || !openIcon || !closeIcon) return;
-          
-          const isHidden = mobileMenu.classList.contains('hidden');
-          
-          if (isHidden) {
-            // Show menu
-            mobileMenu.classList.remove('hidden');
-            openIcon.classList.add('hidden');
-            closeIcon.classList.remove('hidden');
-          } else {
-            // Hide menu
-            mobileMenu.classList.add('hidden');
-            openIcon.classList.remove('hidden');
-            closeIcon.classList.add('hidden');
-          }
-        }
-
-        // Add click event with capture phase to ensure it runs before other handlers
-        mobileMenuToggle.addEventListener('click', toggleMobileMenu, { capture: true });
-
-        // Close mobile menu when clicking on links
-        const mobileLinks = mobileMenu.querySelectorAll('a, button');
-        mobileLinks.forEach(link => {
-          link.addEventListener('click', () => {
-            if (!mobileMenu || !openIcon || !closeIcon) return;
-            mobileMenu.classList.add('hidden');
-            openIcon.classList.remove('hidden');
-            closeIcon.classList.add('hidden');
-          });
-        });
-
-        // Close mobile menu when screen orientation changes
-        const handleOrientationChange = () => {
-          setTimeout(() => {
-            if (!mobileMenu || !openIcon || !closeIcon) return;
-            // Always close menu and reset icons on orientation change
-            mobileMenu.classList.add('hidden');
-            openIcon.classList.remove('hidden');
-            closeIcon.classList.add('hidden');
-          }, 100);
-        };
-
-        window.addEventListener('orientationchange', handleOrientationChange);
-        window.addEventListener('resize', handleOrientationChange);
-      }
-
-      // Initialize modal functionality
-      function initializeModal() {
-        console.log('Initializing modals...'); // Debug log
+      
+      // Call once on page load to ensure icons are correct
+      updateThemeToggleIcons();
+      
+      themeToggleBtn?.addEventListener('click', function() {
+        // Toggle dark mode class
+        document.documentElement.classList.toggle('dark');
         
-        const modal = document.getElementById('notification-modal') as HTMLElement;
-        const warningModal = document.getElementById('warning-modal') as HTMLElement;
-        const warningList = document.getElementById('warning-list') as HTMLElement;
-        const closeWarningModal = document.getElementById('close-warning-modal') as HTMLButtonElement;
-        const continueWarning = document.getElementById('continue-to-recipe') as HTMLButtonElement;
+        // Update localStorage
+        if (document.documentElement.classList.contains('dark')) {
+          localStorage.setItem('color-theme', 'dark');
+        } else {
+          localStorage.setItem('color-theme', 'light');
+        }
         
-        // Debug log for element existence and properties
-        console.log('Modal elements found:', {
-          modal: modal?.id,
-          warningModal: warningModal?.id,
-          warningList: warningList?.id,
-          closeWarningModal: {
-            id: closeWarningModal?.id,
-            className: closeWarningModal?.className
-          },
-          continueWarning: {
-            id: continueWarning?.id,
-            className: continueWarning?.className
-          }
-        });
+        // Update icons
+        updateThemeToggleIcons();
+      });
+      
+      // Listen for theme changes from other tabs/windows
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'color-theme') {
+          // Update theme based on localStorage
+          const isDark = e.newValue === 'dark';
+          document.documentElement.classList.toggle('dark', isDark);
+          updateThemeToggleIcons();
+        }
+      });
+      
+      // Handle Astro View Transitions
+      document.addEventListener('astro:after-swap', () => {
+        // Re-apply theme after page transition
+        const theme = localStorage.getItem('color-theme');
+        if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
         
-        if (!modal || !warningModal || !warningList || !closeWarningModal || !continueWarning) {
-          console.error('Required modal elements not found:', {
-            modal: !!modal,
-            warningModal: !!warningModal,
-            warningList: !!warningList,
-            closeWarningModal: !!closeWarningModal,
-            continueWarning: !!continueWarning
-          });
-          return;
-        }
-
-        // Add click handler to continue button immediately to test
-        continueWarning.addEventListener('click', (e) => {
-          console.log('Direct continue button click handler');
-        });
-
-        function showModal(message: string, autoHide = 0): Promise<void> {
-          console.log('Showing modal with message:', message); // Debug log
-          return new Promise((resolve) => {
-            const modalInstance = window[`modal_notification-modal`];
-            if (!modalInstance) {
-              console.error('Modal instance not found');
-              return;
-            }
-
-            modalInstance.show({
-              title: 'Hinweis',
-              content: message,
-              buttons: [{ text: 'OK', type: 'primary', action: () => {
-                modalInstance.hide();
-                resolve();
-              }}]
-            });
-
-            if (autoHide > 0) {
-              setTimeout(() => {
-                modalInstance.hide();
-                resolve();
-              }, autoHide);
-            }
-          });
-        }
-
-        function showWarnings(warnings: string[], onContinue: () => void): void {
-          console.log('Showing warnings modal with warnings:', warnings);
-          
-          // Create warning list HTML
-          warningList.innerHTML = warnings.map(warning => `
-            <div class="flex items-start p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-              <svg class="w-5 h-5 text-yellow-500 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-              <span class="text-gray-800 dark:text-gray-200">${warning}</span>
-            </div>
-          `).join('');
-
-          // Show warning modal
-          requestAnimationFrame(() => {
-            document.body.classList.add('overflow-hidden');
-            warningModal.classList.remove('hidden');
-            console.log('Warning modal shown');
-            
-            // Debug click areas
-            console.log('Button dimensions:', {
-              continueWarning: continueWarning.getBoundingClientRect(),
-              closeWarningModal: closeWarningModal.getBoundingClientRect()
-            });
-          });
-
-          // Clean up previous event listeners
-          const cleanup = () => {
-            console.log('Cleaning up event listeners');
-            closeWarningModal.removeEventListener('click', handleClose);
-            continueWarning.removeEventListener('click', handleContinue);
-            document.removeEventListener('keydown', handleEscape);
-          };
-
-          // Handle close button
-          function handleClose(e: Event) {
-            console.log('Close button clicked', e.target);
-            e.preventDefault();
-            cleanup();
-            warningModal.classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-          }
-
-          // Handle continue button
-          function handleContinue(e: Event) {
-            console.log('Continue button clicked', e.target);
-            e.preventDefault();
-            e.stopPropagation();
-            cleanup();
-            warningModal.classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-            // Wrap the callback in requestAnimationFrame to ensure DOM updates are complete
-            requestAnimationFrame(() => {
-              console.log('Executing onContinue callback');
-              onContinue();
-            });
-          }
-
-          // Handle ESC key
-          function handleEscape(e: KeyboardEvent) {
-            if (e.key === 'Escape') {
-              handleClose(e);
-            }
-          }
-
-          // Add event listeners with direct and delegated approach
-          console.log('Adding event listeners');
-          
-          // Direct button click listeners
-          closeWarningModal.onclick = handleClose;
-          continueWarning.onclick = handleContinue;
-          
-          // Backup delegated listeners
-          warningModal.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            console.log('Modal click event:', {
-              target: target,
-              id: target.id,
-              classList: Array.from(target.classList)
-            });
-            
-            if (target.id === 'continue-to-recipe' || target.closest('#continue-to-recipe')) {
-              handleContinue(e);
-            } else if (target.id === 'close-warning-modal' || target.closest('#close-warning-modal')) {
-              handleClose(e);
-            }
-          });
-          
-          document.addEventListener('keydown', handleEscape);
-        }
-
-        function showWarning(message: string): Promise<void> {
-          console.log('Showing warning:', message); // Debug log
-          return showModal(`
-            <div class="flex items-center">
-              <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-              <span>${message}</span>
-            </div>
-          `, 3000);
-        }
-
-        function showInfo(message: string): Promise<void> {
-          console.log('Showing info:', message); // Debug log
-          return showModal(`
-            <div class="flex items-center">
-              <svg class="w-6 h-6 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
-              <span>${message}</span>
-            </div>
-          `, 3000);
-        }
-
-        function showConfirm(message: string, onExport?: () => void): Promise<boolean> {
-          return new Promise((resolve) => {
-            const modalInstance = window[`modal_notification-modal`];
-            if (!modalInstance) {
-              console.error('Modal instance not found');
-              return resolve(false);
-            }
-
-            modalInstance.show({
-              title: 'Bestätigung',
-              content: message,
-              buttons: [
-                { 
-                  text: 'Abbrechen', 
-                  type: 'secondary', 
-                  action: () => {
-                    modalInstance.hide();
-                    resolve(false);
-                  }
-                },
-                { 
-                  text: 'Bestätigen', 
-                  type: 'primary', 
-                  action: () => {
-                    modalInstance.hide();
-                    if (onExport) onExport();
-                    resolve(true);
-                  }
-                }
-              ]
-            });
-          });
-        }
-
-        function showDeleteConfirm(message: string): Promise<boolean> {
-          return new Promise((resolve) => {
-            const modalInstance = window[`modal_notification-modal`];
-            if (!modalInstance) {
-              console.error('Modal instance not found');
-              return resolve(false);
-            }
-
-            modalInstance.show({
-              title: 'Löschen bestätigen',
-              content: message,
-              icon: `<svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-              </svg>`,
-              buttons: [
-                { 
-                  text: 'Abbrechen', 
-                  type: 'secondary', 
-                  action: () => {
-                    modalInstance.hide();
-                    resolve(false);
-                  }
-                },
-                { 
-                  text: 'Löschen', 
-                  type: 'danger', 
-                  action: () => {
-                    modalInstance.hide();
-                    resolve(true);
-                  }
-                }
-              ]
-            });
-          });
-        }
-
-        // Expose modal functions globally
-        console.log('Exposing modal functions globally...'); // Debug log
-        window.showModal = showModal;
-        window.showWarning = showWarning;
-        window.showInfo = showInfo;
-        window.showConfirm = showConfirm;
-        window.showDeleteConfirm = showDeleteConfirm;
-        window.showWarnings = showWarnings;
-        
-        console.log('Modal functions exposed:', {
-          showModal: !!window.showModal,
-          showWarning: !!window.showWarning,
-          showInfo: !!window.showInfo,
-          showConfirm: !!window.showConfirm,
-          showDeleteConfirm: !!window.showDeleteConfirm,
-          showWarnings: !!window.showWarnings
-        });
-      }
-
-      // Initialize all functionality
-      document.addEventListener('DOMContentLoaded', () => {
-        console.log('DOM Content Loaded - Initializing...'); // Debug log
-        initializeTheme();
-        initializeMobileMenu();
-        initializeModal();
+        // Update icons after transition
+        updateThemeToggleIcons();
       });
     </script>
   </body>

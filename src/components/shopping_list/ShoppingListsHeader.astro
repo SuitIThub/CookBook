@@ -55,56 +55,11 @@ const { listCount } = Astro.props;
   </div>
 </div>
 
-<!-- Create Shopping List Modal -->
-<div id="create-shopping-list-modal" class="modal hidden">
-  <div class="modal-overlay"></div>
-  <div class="modal-content">
-    <div class="modal-header">
-      <h2 class="modal-title">Neue Einkaufsliste erstellen</h2>
-      <button class="modal-close">&times;</button>
-    </div>
-    
-    <form id="create-shopping-list-form" class="modal-body space-y-4">
-      <div>
-        <label for="shopping-list-title" class="form-label">Titel</label>
-        <input 
-          type="text" 
-          id="shopping-list-title" 
-          name="title"
-          class="form-input" 
-          placeholder="z.B. Wocheneinkauf, Grillparty, ..."
-          required
-        />
-      </div>
-      
-      <div>
-        <label for="shopping-list-description" class="form-label">Beschreibung (optional)</label>
-        <textarea 
-          id="shopping-list-description" 
-          name="description"
-          class="form-textarea" 
-          rows="3"
-          placeholder="Kurze Beschreibung der Einkaufsliste..."
-        ></textarea>
-      </div>
-    </form>
-    
-    <div class="modal-footer">
-      <button type="button" class="btn btn-secondary modal-close">Abbrechen</button>
-      <button type="submit" form="create-shopping-list-form" class="btn btn-success">
-        Erstellen
-      </button>
-    </div>
-  </div>
-</div>
-
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const createBtn = document.getElementById('create-shopping-list-btn');
   const quickAddBtn = document.getElementById('quick-add-list-btn');
   const modal = document.getElementById('create-shopping-list-modal');
-  const form = document.getElementById('create-shopping-list-form') as HTMLFormElement;
-  const closeButtons = modal?.querySelectorAll('.modal-close');
 
   // Selection mode elements
   const selectButton = document.getElementById('select-lists-btn');
@@ -114,7 +69,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectionButtons = document.getElementById('selection-buttons');
   
   let isSelectionMode = false;
-  let selectedLists = new Set();
+  let selectedLists = new Set<string>();
+
+  // Open modal when clicking "Neue Liste" button
+  createBtn?.addEventListener('click', () => {
+    modal?.classList.remove('hidden');
+    document.getElementById('shopping-list-title')?.focus();
+  });
+
+  // Quick add functionality - create a list with current date as title
+  quickAddBtn?.addEventListener('click', async () => {
+    try {
+      const currentDate = new Date().toLocaleDateString('de-DE');
+      const response = await fetch('/api/shopping-lists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: `Einkaufsliste vom ${currentDate}`,
+          description: ''
+        }),
+      });
+
+      if (response.ok) {
+        const newList = await response.json();
+        // Show success message
+        window.showSuccess('Einkaufsliste erfolgreich erstellt');
+        // Redirect to the new list
+        window.location.href = `/einkaufsliste/${newList.id}`;
+      } else {
+        const error = await response.json();
+        window.showError(error.error || 'Fehler beim Erstellen der Einkaufsliste');
+      }
+    } catch (error) {
+      console.error('Error creating shopping list:', error);
+      window.showError('Fehler beim Erstellen der Einkaufsliste');
+    }
+  });
 
   // Toggle selection mode
   function toggleSelectionMode(enable: boolean) {
@@ -151,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
   deleteSelectedButton?.addEventListener('click', async () => {
     if (selectedLists.size === 0) return;
 
-    const confirmed = await window.showDeleteConfirm(
+    const confirmed = await (window as any).showDeleteConfirm(
       `Möchten Sie ${selectedLists.size} ausgewählte ${selectedLists.size === 1 ? 'Liste' : 'Listen'} wirklich löschen?`
     );
 
@@ -173,9 +165,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const failCount = selectedLists.size - successCount;
 
       if (failCount === 0) {
-        window.showInfo(`${successCount} ${successCount === 1 ? 'Liste wurde' : 'Listen wurden'} erfolgreich gelöscht`);
+        (window as any).showInfo(`${successCount} ${successCount === 1 ? 'Liste wurde' : 'Listen wurden'} erfolgreich gelöscht`);
       } else {
-        window.showWarning(`${failCount} ${failCount === 1 ? 'Liste konnte' : 'Listen konnten'} nicht gelöscht werden`);
+        (window as any).showWarning(`${failCount} ${failCount === 1 ? 'Liste konnte' : 'Listen konnten'} nicht gelöscht werden`);
       }
 
       toggleSelectionMode(false);
@@ -192,98 +184,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateDeleteButton();
   }) as EventListener);
-
-  // Open modal
-  createBtn?.addEventListener('click', () => {
-    modal?.classList.remove('hidden');
-    document.getElementById('shopping-list-title')?.focus();
-  });
-
-  // Close modal
-  closeButtons?.forEach(btn => {
-    btn.addEventListener('click', () => {
-      modal?.classList.add('hidden');
-      form?.reset();
-    });
-  });
-
-  // Close on overlay click
-  modal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
-    modal.classList.add('hidden');
-    form?.reset();
-  });
-
-  // Handle form submission
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const formData = new FormData(form);
-    const title = formData.get('title') as string;
-    const description = formData.get('description') as string;
-
-    if (!title.trim()) {
-      alert('Bitte geben Sie einen Titel ein.');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/shopping-lists', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined
-        }),
-      });
-
-      if (response.ok) {
-        const newList = await response.json();
-        // Redirect to the new list
-        window.location.href = `/einkaufsliste/${newList.id}`;
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Fehler beim Erstellen der Einkaufsliste');
-      }
-    } catch (error) {
-      console.error('Error creating shopping list:', error);
-      alert('Fehler beim Erstellen der Einkaufsliste');
-    }
-  });
-
-  // Quick add functionality
-  quickAddBtn?.addEventListener('click', async () => {
-    try {
-      // Format current date as "DD.MM.YYYY"
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = now.getFullYear();
-      const dateStr = `${day}.${month}.${year}`;
-      
-      const response = await fetch('/api/shopping-lists', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title: `Einkaufsliste ${dateStr}`,
-          description: ''
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create shopping list');
-      }
-
-      const newList = await response.json();
-      window.location.href = `/einkaufsliste/${newList.id}`;
-    } catch (error) {
-      console.error('Error creating quick shopping list:', error);
-      window.showError('Fehler beim Erstellen der Einkaufsliste');
-    }
-  });
 });
 </script>
 

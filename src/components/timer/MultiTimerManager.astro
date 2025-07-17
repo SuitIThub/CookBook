@@ -1,5 +1,6 @@
 ---
 // Multi-Timer Manager Component
+import { TimerModal, TimerExpiredModal } from '../modals';
 ---
 
 <!-- Timer Sidebar for landscape mode -->
@@ -53,7 +54,9 @@
   </div>
 </div>
 
-
+<!-- Timer Modals -->
+<TimerModal id="add-timer-modal" />
+<TimerExpiredModal id="timer-expired-modal" />
 
 <script>
   // Timer interface definition
@@ -161,6 +164,22 @@
         }, index * 500); // 500ms delay between notifications
       });
     }
+    
+    private showExpiredTimerNotification(timer: Timer) {
+      // Use the new timer expired modal
+      const timerData = {
+        id: timer.id,
+        label: timer.label,
+        description: timer.stepDescription,
+        expiredDuration: (timer as any).expiredDuration,
+        recipeName: timer.recipeName,
+        stepDescription: timer.stepDescription,
+        recipeId: timer.recipeId,
+        stepId: timer.stepId
+      };
+      
+      (window as any).showTimerExpired(timerData);
+    }
 
     private setupEventListeners() {
       // Orientation change
@@ -183,6 +202,18 @@
       document.getElementById('add-timer-btn')?.addEventListener('click', () => {
         this.showAddTimerDialog();
       });
+      
+      // Listen for timer creation events from the modal
+      document.addEventListener('createTimer', ((event: CustomEvent) => {
+        const { title, description, duration } = event.detail;
+        this.addTimer(title, duration, undefined, description);
+      }) as EventListener);
+      
+      // Listen for timer removal events from the expired modal
+      document.addEventListener('removeTimer', ((event: CustomEvent) => {
+        const { id } = event.detail;
+        this.removeTimer(id);
+      }) as EventListener);
     }
 
     private updateOrientation() {
@@ -248,7 +279,6 @@
       this.renderTimers();
       this.showTimerUI(); // Make sure UI is visible when adding timer
       
-      // Auto-start timer if requested
       if (autoStart) {
         this.startTimer(id);
       }
@@ -953,139 +983,6 @@
       document.body.appendChild(modal);
     }
 
-    private showExpiredTimerNotification(timer: Timer) {
-      const expiredDuration = (timer as any).expiredDuration || 0;
-      const expiredMinutes = Math.floor(expiredDuration / 60);
-      const expiredSeconds = expiredDuration % 60;
-      
-      let expiredTimeText = '';
-      if (expiredMinutes > 0) {
-        expiredTimeText = `${expiredMinutes} Min ${expiredSeconds} Sek`;
-      } else {
-        expiredTimeText = `${expiredSeconds} Sek`;
-      }
-      
-      // Remove any existing expired timer notifications
-      document.querySelectorAll('.expired-timer-notification').forEach(el => el.remove());
-      document.querySelectorAll('.expired-timer-overlay').forEach(el => el.remove());
-      
-      // Create overlay background
-      const overlay = document.createElement('div');
-      overlay.className = 'expired-timer-overlay fixed inset-0 bg-black bg-opacity-50 z-40 cursor-pointer';
-      overlay.addEventListener('click', () => {
-        this.removeTimer(timer.id);
-        notification.remove();
-        overlay.remove();
-      });
-      document.body.appendChild(overlay);
-      
-      const notification = document.createElement('div');
-      notification.className = 'expired-timer-notification fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white dark:bg-gray-800 border-2 border-red-500 rounded-lg shadow-2xl p-4 sm:p-6 w-[95vw] max-w-xs sm:max-w-sm md:max-w-lg max-h-[90vh] overflow-y-auto';
-      
-      // Build context information with full step description
-      let contextInfo = '';
-      if (timer.recipeName || timer.stepDescription) {
-        contextInfo = `
-          <div class="mb-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md border-l-4 border-red-500">
-            ${timer.recipeName ? `<div class="font-semibold text-red-700 dark:text-red-300 mb-2 text-lg">${timer.recipeName}</div>` : ''}
-            ${timer.stepDescription ? `
-              <div class="text-gray-700 dark:text-gray-300 leading-relaxed">
-                <div class="font-medium text-gray-800 dark:text-gray-200 mb-1">Zubereitungsschritt:</div>
-                <div class="text-base">${timer.stepDescription}</div>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      }
-      
-      notification.innerHTML = `
-        <div class="text-center mb-4">
-          <div class="mx-auto w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mb-3">
-            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Timer abgelaufen!</h3>
-          <p class="text-lg font-medium text-red-600 dark:text-red-400 mb-2">${timer.label}</p>
-          <p class="text-sm text-gray-600 dark:text-gray-400">
-            Abgelaufen seit: <span class="font-medium text-red-600 dark:text-red-400">${expiredTimeText}</span>
-          </p>
-        </div>
-        
-        ${contextInfo}
-        
-        <div class="space-y-3">
-          <div class="grid grid-cols-3 gap-1 sm:gap-2">
-            <button class="extend-expired-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="1">
-              +1 Min
-            </button>
-            <button class="extend-expired-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="5">
-              +5 Min
-            </button>
-            <button class="extend-expired-timer-btn px-2 sm:px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs sm:text-sm font-medium transition-colors" data-timer-id="${timer.id}" data-minutes="10">
-              +10 Min
-            </button>
-          </div>
-          
-          <div class="grid grid-cols-2 gap-2">
-            <button class="restart-expired-timer-btn px-3 sm:px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}">
-              Neu starten
-            </button>
-            <button class="close-expired-timer-btn px-3 sm:px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm font-medium transition-colors" data-timer-id="${timer.id}">
-              Schließen
-            </button>
-          </div>
-        </div>
-      `;
-      
-      // Add event listeners
-      notification.querySelectorAll('.extend-expired-timer-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const target = e.currentTarget as HTMLElement;
-          const timerId = target.dataset.timerId;
-          const minutes = parseInt(target.dataset.minutes || '0');
-          if (timerId) {
-            this.extendCompletedTimer(timerId, minutes);
-            notification.remove();
-            overlay.remove();
-          }
-        });
-      });
-      
-      notification.querySelector('.restart-expired-timer-btn')?.addEventListener('click', (e) => {
-        const target = e.currentTarget as HTMLElement;
-        const timerId = target.dataset.timerId;
-        if (timerId) {
-          this.restartTimer(timerId);
-          notification.remove();
-          overlay.remove();
-        }
-      });
-      
-      notification.querySelector('.close-expired-timer-btn')?.addEventListener('click', (e) => {
-        const target = e.currentTarget as HTMLElement;
-        const timerId = target.dataset.timerId;
-        if (timerId) {
-          this.removeTimer(timerId);
-          notification.remove();
-          overlay.remove();
-        }
-      });
-      
-      document.body.appendChild(notification);
-      
-      // Auto-remove after 30 seconds if no action taken
-      setTimeout(() => {
-        if (notification.parentNode) {
-          this.removeTimer(timer.id);
-          notification.remove();
-        }
-        if (overlay.parentNode) {
-          overlay.remove();
-        }
-      }, 30000);
-    }
-
     private setupAddTimerModalEvents(modal: HTMLElement, overlay: HTMLElement) {
       const titleInput = modal.querySelector('#timer-title-input') as HTMLInputElement;
       const descriptionInput = modal.querySelector('#timer-description-input') as HTMLTextAreaElement;
@@ -1410,8 +1307,7 @@
             body: body,
             icon: '/favicon.svg',
             tag: 'timer-notification', // Prevents duplicate notifications
-            requireInteraction: true, // Notification persists until user interacts with it
-            vibrate: [200, 100, 200], // Vibration pattern for mobile devices
+            requireInteraction: true // Notification persists until user interacts with it
           });
 
           // Handle notification click
@@ -1432,17 +1328,8 @@
     }
   }
 
-  // Initialize multi-timer manager
-  let timerManager: MultiTimerManager;
-  
+  // Initialize the timer manager
   document.addEventListener('DOMContentLoaded', () => {
-    timerManager = new MultiTimerManager();
+    (window as any).timerManager = new MultiTimerManager();
   });
-
-  // Global function to start timer from recipe pages
-  (window as any).startTimer = (label: string, duration: number, recipeName?: string, stepDescription?: string, autoStart: boolean = true, recipeId?: string, stepId?: string) => {
-    if (timerManager) {
-      timerManager.addTimer(label, duration, recipeName, stepDescription, autoStart, recipeId, stepId);
-    }
-  };
 </script> 
