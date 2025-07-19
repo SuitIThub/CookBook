@@ -28,6 +28,29 @@ function formatTime(minutes: number): string {
 function getTotalTime(timeEntries: any[]): number {
   return timeEntries.reduce((total, entry) => total + entry.minutes, 0);
 }
+
+// Helper function to convert URLs to clickable links and find YouTube URLs
+function processDescription(text: string): { formattedText: string, youtubeUrl: string | null } {
+  // Regular expressions for detecting URLs and YouTube links
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  
+  let youtubeUrl = null;
+  
+  // Find YouTube URL if it exists
+  const youtubeMatch = text.match(youtubeRegex);
+  if (youtubeMatch) {
+    const videoId = youtubeMatch[1];
+    youtubeUrl = `https://www.youtube.com/embed/${videoId}`;
+  }
+  
+  // Make all URLs clickable
+  const formattedText = text.replace(urlRegex, '<a href="$&" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline">$&</a>');
+  
+  return { formattedText, youtubeUrl };
+}
+
+const processedDescription = recipe.description ? processDescription(recipe.description) : { formattedText: '', youtubeUrl: null };
 ---
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 overflow-hidden transition-colors duration-200">
@@ -40,7 +63,7 @@ function getTotalTime(timeEntries: any[]): number {
           <p class="text-xl text-gray-700 dark:text-gray-300 mb-3">{recipe.subtitle}</p>
         )}
         {recipe.description && (
-          <p class="text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap">{recipe.description}</p>
+          <p class="text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-wrap" set:html={processedDescription.formattedText}></p>
         )}
       </div>
       <div class="flex flex-col space-y-2 flex-shrink-0 min-w-fit">
@@ -109,7 +132,7 @@ function getTotalTime(timeEntries: any[]): number {
           <p class="text-lg sm:text-xl text-gray-700 dark:text-gray-300 mb-3">{recipe.subtitle}</p>
         )}
         {recipe.description && (
-          <p class="text-gray-600 dark:text-gray-400 leading-relaxed text-sm sm:text-base whitespace-pre-wrap">{recipe.description}</p>
+          <p class="text-gray-600 dark:text-gray-400 leading-relaxed text-sm sm:text-base whitespace-pre-wrap" set:html={processedDescription.formattedText}></p>
         )}
       </div>
       
@@ -170,6 +193,22 @@ function getTotalTime(timeEntries: any[]): number {
         </button>
       </div>
     </div>
+
+    <!-- YouTube Embed Section -->
+    {processedDescription.youtubeUrl && (
+      <div class="mb-6 mt-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+        <div class="relative w-full" style="padding-top: 56.25%;">
+          <iframe
+            src={processedDescription.youtubeUrl}
+            title="YouTube video player"
+            class="absolute top-0 left-0 w-full h-full"
+            style="min-height: 315px;"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          ></iframe>
+        </div>
+      </div>
+    )}
 
     <!-- Nutrition Information -->
     {recipe.metadata.nutrition && (
