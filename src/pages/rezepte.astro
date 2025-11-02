@@ -97,5 +97,31 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
         }
       });
     }
+
+    // Random recipe button
+    const randomRecipeBtn = document.getElementById('random-recipe-btn');
+    if (randomRecipeBtn) {
+      randomRecipeBtn.addEventListener('click', () => {
+        // Get all visible recipe cards (not hidden)
+        const visibleCards = Array.from(document.querySelectorAll('.recipe-card:not(.hidden)'));
+        
+        if (visibleCards.length === 0) {
+          if (window.showError) {
+            window.showError('Keine Rezepte gefunden. Bitte ändern Sie Ihre Suchkriterien.');
+          } else {
+            alert('Keine Rezepte gefunden. Bitte ändern Sie Ihre Suchkriterien.');
+          }
+          return;
+        }
+
+        // Pick a random card
+        const randomCard = visibleCards[Math.floor(Math.random() * visibleCards.length)] as HTMLElement;
+        const recipeId = randomCard.getAttribute('data-recipe-id');
+        
+        if (recipeId) {
+          window.location.href = `/rezept/${recipeId}`;
+        }
+      });
+    }
   });
 </script> 
