@@ -1,9 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../lib/database';
 
-// Default base URL if not configured elsewhere
-const DEFAULT_BASE_URL = 'https://cookbook.suit-ji.com';
-
 export const GET: APIRoute = async ({ url, request, site }) => {
   try {
     const searchParams = new URL(url).searchParams;
@@ -13,12 +10,15 @@ export const GET: APIRoute = async ({ url, request, site }) => {
     // If url parameter is provided, look up recipe by source URL
     if (sourceUrl) {
       // Determine the base URL
-      // Priority: 1. Astro site config, 2. Request host (if not localhost), 3. Default
-      let siteBaseUrl = DEFAULT_BASE_URL;
+      // Priority: 1. Astro site config, 2. Environment variable, 3. Request host (if not localhost)
+      let siteBaseUrl: string | undefined;
       
       if (site) {
         // Use Astro's site configuration if available
         siteBaseUrl = site.origin;
+      } else if (import.meta.env.PUBLIC_SITE_URL) {
+        // Use environment variable if set
+        siteBaseUrl = import.meta.env.PUBLIC_SITE_URL;
       } else {
         // Try to get from request, but only if it's not localhost
         const requestUrl = new URL(request.url);
@@ -31,6 +31,14 @@ export const GET: APIRoute = async ({ url, request, site }) => {
             !requestBaseUrl.includes('0.0.0.0')) {
           siteBaseUrl = requestBaseUrl;
         }
+      }
+
+      // Fallback: if no base URL could be determined, return an error
+      if (!siteBaseUrl) {
+        return new Response(JSON.stringify({ error: 'Site URL not configured' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
       // Search for recipe with matching source URL

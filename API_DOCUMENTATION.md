@@ -6,6 +6,19 @@ Diese Dokumentation beschreibt alle verfügbaren API-Endpunkte der CookBook-Anwe
 
 Alle API-Endpunkte sind unter `/api` verfügbar. Die API verwendet standardmäßig JSON für Request und Response Bodies.
 
+## Umgebungsvariablen
+
+Die Anwendung verwendet Umgebungsvariablen für die Konfiguration. Folgende Dateien werden unterstützt:
+
+- `.env` - Basis-Konfiguration (für alle Umgebungen)
+- `.env.local` - Lokale Entwicklungsumgebung (überschreibt `.env`, wird nicht in Git eingecheckt)
+- `.env.production` - Produktionsumgebung (überschreibt `.env`)
+
+**Wichtige Umgebungsvariablen:**
+- `PUBLIC_SITE_URL` - Die Basis-URL der Anwendung (z.B. `https://example.com` oder `http://localhost:4321` für Entwicklung)
+
+Für die lokale Entwicklung sollte eine `.env.local` Datei erstellt werden (siehe `.env.local.example` als Vorlage).
+
 ## Fehlerbehandlung
 
 Alle API-Endpunkte verwenden ein einheitliches Format für Fehlerantworten:
@@ -98,6 +111,38 @@ curl --url "https://example.com/api/recipes?id=123"
 
 Mögliche Fehler:
 - `404`: Rezept nicht gefunden
+- `500`: Interner Serverfehler
+
+#### Rezept anhand der Quell-URL suchen
+
+```plaintext
+GET /api/recipes?url={sourceUrl}
+```
+
+Sucht nach einem Rezept, das die angegebene Quell-URL (`source_url`) in der Datenbank hat. Bei Erfolg wird Status `200` und die URL des Rezepts in der Anwendung zurückgegeben.
+
+Die Basis-URL wird automatisch ermittelt (in dieser Reihenfolge):
+1. Aus der Astro-Konfiguration (`site`), falls vorhanden
+2. Aus der Umgebungsvariable `PUBLIC_SITE_URL`, falls gesetzt
+3. Aus dem Request-Host, falls nicht localhost
+
+**Hinweis:** Die Basis-URL sollte über die Umgebungsvariable `PUBLIC_SITE_URL` in der `.env` Datei konfiguriert werden.
+
+Beispiel-Request:
+```shell
+curl --url "https://example.com/api/recipes?url=https://chefkoch.de/rezepte/1234567890"
+```
+
+Beispiel-Response:
+```json
+{
+  "url": "https://example.com/rezept/abc-123-def-456",
+  "recipeId": "abc-123-def-456"
+}
+```
+
+Mögliche Fehler:
+- `404`: Kein Rezept mit dieser Quell-URL gefunden
 - `500`: Interner Serverfehler
 
 #### Neues Rezept erstellen
