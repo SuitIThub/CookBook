@@ -191,9 +191,28 @@ declare global {
     updateUI();
   });
 
+  // Handle checkbox clicks directly to ensure they work in selection mode
+  // This must run before the card click handler to prevent interference
+  document.addEventListener('click', (e) => {
+    const checkbox = e.target as HTMLInputElement;
+    if (!checkbox.classList.contains('recipe-select-checkbox')) return;
+    
+    // Stop propagation to prevent the card click handler from also handling this
+    // The checkbox's native behavior will toggle it, and the change event will fire
+    e.stopPropagation();
+  });
+
   // Handle recipe card clicks in selection mode
   document.addEventListener('click', (e) => {
-    const recipeCard = (e.target as HTMLElement).closest('.recipe-card');
+    const target = e.target as HTMLElement;
+    
+    // Don't handle clicks on the checkbox itself - let the change event handle it
+    if (target.classList.contains('recipe-select-checkbox') || 
+        target.closest('.selection-indicator')) {
+      return;
+    }
+    
+    const recipeCard = target.closest('.recipe-card');
     if (!recipeCard || !isSelectionMode) return;
 
     const recipeId = recipeCard.getAttribute('data-recipe-id');
@@ -219,6 +238,18 @@ declare global {
   // Update UI based on selection state
   function updateUI() {
     const count = selectedRecipes.size;
+    
+    // If no recipes are selected and we're in selection mode, exit selection mode
+    if (count === 0 && isSelectionMode) {
+      // Remove selection-mode class from all recipe cards
+      document.querySelectorAll('.recipe-card').forEach(card => {
+        card.classList.remove('selection-mode');
+        card.classList.remove('selected');
+      });
+      
+      // Clear selection mode flag
+      isSelectionMode = false;
+    }
     
     if (count > 0 || isSelectionMode) {
       bulkActions?.classList.remove('hidden');

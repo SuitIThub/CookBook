@@ -234,8 +234,12 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         if (!card.classList.contains('selection-mode')) return;
         
         const target = e.target as HTMLElement;
-        // Prevent click if clicking on menu button or menu
-        if (target.closest('.recipe-menu-btn') || target.closest('.recipe-menu')) {
+        // Prevent click if clicking on menu button, menu, or checkbox/selection indicator
+        if (target.closest('.recipe-menu-btn') || 
+            target.closest('.recipe-menu') ||
+            target.closest('.selection-indicator') ||
+            target.classList.contains('recipe-select-checkbox') ||
+            target === card.querySelector('.recipe-select-checkbox')) {
           return;
         }
 
