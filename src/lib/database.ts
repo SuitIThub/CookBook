@@ -645,6 +645,38 @@ export class CookbookDatabase {
     return shoppingList;
   }
 
+  /**
+   * Health check method to verify database connectivity
+   */
+  healthCheck(): { healthy: boolean; error?: string } {
+    try {
+      const result = this.db.prepare('SELECT 1 as health').get();
+      return { healthy: !!result };
+    } catch (error) {
+      return {
+        healthy: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Get basic statistics about the database
+   */
+  getStats(): { recipes: number; shoppingLists: number } {
+    try {
+      const recipeCount = this.db.prepare('SELECT COUNT(*) as count FROM recipes').get() as { count: number };
+      const shoppingListCount = this.db.prepare('SELECT COUNT(*) as count FROM shopping_lists').get() as { count: number };
+      return {
+        recipes: recipeCount.count,
+        shoppingLists: shoppingListCount.count
+      };
+    } catch (error) {
+      console.error('Error getting database stats:', error);
+      return { recipes: 0, shoppingLists: 0 };
+    }
+  }
+
   close(): void {
     this.db.close();
   }

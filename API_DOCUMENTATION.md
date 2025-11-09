@@ -759,4 +759,51 @@ Liefert eine Liste aller verfügbaren Einheiten, gruppiert nach Kategorien:
   - Hauch
 
 Mögliche Fehler:
-- `500`: Fehler beim Abrufen der Einheiten 
+- `500`: Fehler beim Abrufen der Einheiten
+
+## Health Check
+
+### Health Check Endpoint
+
+```plaintext
+GET /api/health
+```
+
+Überprüft den Gesundheitszustand der Anwendung, einschließlich der Datenbankverbindung.
+
+Bei Erfolg wird Status `200` und der Gesundheitsstatus zurückgegeben.
+
+Beispiel-Request:
+```shell
+curl --url "https://example.com/api/health"
+```
+
+Beispiel-Response (healthy):
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "timestamp": "2024-03-20T12:00:00.000Z",
+  "stats": {
+    "recipes": 42,
+    "shoppingLists": 5
+  }
+}
+```
+
+Beispiel-Response (unhealthy):
+```json
+{
+  "status": "unhealthy",
+  "database": "disconnected",
+  "error": "Database connection failed",
+  "timestamp": "2024-03-20T12:00:00.000Z"
+}
+```
+
+Mögliche Statuscodes:
+- `200`: Anwendung ist gesund
+- `503`: Anwendung ist ungesund (Datenbankverbindung fehlgeschlagen)
+
+**Verwendung:**
+Dieser Endpunkt kann für Monitoring, Load Balancer Health Checks oder Container Orchestrierung (z.B. Kubernetes Liveness/Readiness Probes) verwendet werden.
