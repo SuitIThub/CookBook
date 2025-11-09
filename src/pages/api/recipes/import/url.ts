@@ -87,9 +87,7 @@ export const POST: APIRoute = async ({ request }) => {
     const finalRecipeData = {
       title: extractedData.title,
       subtitle: extractedData.subtitle,
-      description: extractedData.description 
-        ? `${extractedData.description}\n\nImportiert von: ${url}`
-        : `Importiert von: ${url}`,
+      description: extractedData.description || '',
       category: recipeData.category, // Add category from extractor
       tags: recipeData.tags || [], // Add tags/keywords from extractor
       metadata: recipeData.metadata || {

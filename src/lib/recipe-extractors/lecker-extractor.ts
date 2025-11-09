@@ -443,7 +443,7 @@ export class LeckerExtractor extends BaseRecipeExtractor {
     return {
       title,
       subtitle,
-      description: description || `Recipe from Lecker.de: ${url}`,
+      description: description || '', // Description is empty since URL is saved in sourceUrl
       servings,
       timeEntries: timeEntries,
       difficulty,

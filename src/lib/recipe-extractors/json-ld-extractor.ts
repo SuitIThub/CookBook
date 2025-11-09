@@ -408,7 +408,7 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
     
     return {
       title,
-      description: `Recipe imported from ${url}`,
+      description: '', // Description is empty since URL is saved in sourceUrl
       keywords,
       category,
       ingredients: ingredients.length > 0 ? ingredients : ['Bitte Zutaten manuell hinzufügen'],

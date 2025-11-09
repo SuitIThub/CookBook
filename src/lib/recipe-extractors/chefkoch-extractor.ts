@@ -217,7 +217,7 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
 
     return {
       title: data.name || 'Chefkoch Recipe',
-      description: data.description || `Importiert von: ${url}`,
+      description: data.description || '', // Description is empty since URL is saved in sourceUrl
       servings,
       timeEntries: timeEntries,
       difficulty: difficulty,
@@ -383,7 +383,7 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
 
     return {
       title,
-      description: `Recipe imported from Chefkoch: ${url}`,
+      description: '', // Description is empty since URL is saved in sourceUrl
       servings,
       timeEntries: timeEntries,
       difficulty,
