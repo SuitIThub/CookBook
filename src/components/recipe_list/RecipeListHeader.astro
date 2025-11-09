@@ -337,32 +337,23 @@ declare global {
   });
   
   // Shopping List Modal
-  window.createNewShoppingList = async () => {
-    try {
-      const response = await fetch('/api/shopping-lists', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
-          recipeIds: Array.from(selectedRecipes)
-        })
-      });
-      
-      if (!response.ok) throw new Error('Fehler beim Erstellen der Einkaufsliste');
-      
-      const { id } = await response.json();
-      window.location.href = `/einkaufsliste/${id}`;
-    } catch (error) {
-      console.error('Fehler beim Erstellen der Einkaufsliste:', error);
-      alert('Die Einkaufsliste konnte nicht erstellt werden.');
-    }
-  };
+  // NOTE: createNewShoppingList is now handled by ShoppingListModal component
+  // Do not define it here to avoid conflicts
 
   // Show shopping list modal
   bulkShoppingListBtn?.addEventListener('click', async () => {
     if (selectedRecipes.size === 0) return;
+    
+    // Create a fresh Set from checked boxes to ensure we're passing the right data
+    const checkedBoxes = document.querySelectorAll<HTMLInputElement>('.recipe-select-checkbox:checked');
+    const checkedRecipeIds = Array.from(checkedBoxes)
+      .map(cb => cb.dataset.recipeId)
+      .filter((id): id is string => Boolean(id));
+    
+    const verifiedSelectedRecipes = new Set<string>(checkedRecipeIds);
+    
     if (window.openShoppingListModal) {
-      await window.openShoppingListModal(selectedRecipes as Set<string>);
+      await window.openShoppingListModal(verifiedSelectedRecipes);
     }
   });
 

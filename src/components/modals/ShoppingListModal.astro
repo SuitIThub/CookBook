@@ -7,8 +7,8 @@ declare global {
 }
 ---
 
-<!-- Shopping List Modal -->
-<div id="shopping-list-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+<!-- Shopping List Modal (Bulk Operations) -->
+<div id="bulk-shopping-list-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
   <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
     <div class="flex justify-between items-center mb-4">
       <h3 class="text-lg font-medium text-gray-900 dark:text-white">Zur Einkaufsliste hinzufügen</h3>
@@ -21,7 +21,7 @@ declare global {
 
     <div class="space-y-4">
       <!-- Create New List Button -->
-      <button id="create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2">
+      <button id="bulk-create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
@@ -41,14 +41,43 @@ declare global {
 
 <script>
   // Shopping List Modal
-  const shoppingListModal = document.getElementById('shopping-list-modal');
+  const shoppingListModal = document.getElementById('bulk-shopping-list-modal');
   const closeShoppingListModal = document.getElementById('close-shopping-list-modal');
-  const createNewList = document.getElementById('create-new-list');
+  const createNewList = document.getElementById('bulk-create-new-list');
   const existingLists = document.getElementById('existing-lists');
 
-  // Expose function to open modal
+  // Store selected recipes in modal scope
+  let currentSelectedRecipes: Set<string> = new Set();
+  let isCreatingList = false; // Prevent multiple simultaneous requests
+  
+  // Global flag to prevent multiple listener attachments
+  const isInitialized = (window as any).shoppingListModalInitialized;
+  if (!isInitialized) {
+    (window as any).shoppingListModalInitialized = true;
+  }
+
+  // Helper function to update selected recipes - always accessible
+  function updateSelectedRecipes(selectedRecipes: Set<string> | string[]) {
+    // Store the selected recipes in modal scope - ensure it's a proper Set
+    if (selectedRecipes instanceof Set) {
+      currentSelectedRecipes = new Set(selectedRecipes);
+    } else if (Array.isArray(selectedRecipes)) {
+      currentSelectedRecipes = new Set(selectedRecipes);
+    } else {
+      return false;
+    }
+    
+    return true;
+  }
+
+  // Expose function to open modal - always update, but only define once
   window.openShoppingListModal = async (selectedRecipes: Set<string>) => {
     if (selectedRecipes.size === 0) return;
+
+    // Always update the selected recipes when modal opens
+    if (!updateSelectedRecipes(selectedRecipes)) {
+      return;
+    }
 
     try {
       // Fetch existing shopping lists
@@ -86,7 +115,9 @@ declare global {
               </svg>
             `;
             
-            button.addEventListener('click', () => addToExistingList(list.id, selectedRecipes));
+            // Capture currentSelectedRecipes in closure
+            const recipesToAdd = new Set(currentSelectedRecipes);
+            button.addEventListener('click', () => addToExistingList(list.id, recipesToAdd));
             existingLists.appendChild(button);
           });
         }
@@ -102,19 +133,88 @@ declare global {
       if (existingLists) existingLists.innerHTML = errorMessage.outerHTML;
     }
   };
+  
+  // Override any existing createNewShoppingList function to prevent conflicts
+  // Protect against overwrites by RecipeListHeader
+  Object.defineProperty(window, 'createNewShoppingList', {
+    value: async () => {
+      // Do nothing - the modal handles this now
+      return;
+    },
+    writable: false,
+    configurable: false
+  });
 
   // Close modal
   closeShoppingListModal?.addEventListener('click', () => {
     shoppingListModal?.classList.add('hidden');
   });
 
-  // Create new list
-  createNewList?.addEventListener('click', async () => {
-    // This will be handled by the parent component
-    if (window.createNewShoppingList) {
-      await window.createNewShoppingList();
-    }
-  });
+  // Create new list - handle directly in modal to avoid multiple calls
+  // Only initialize once - use a more robust check
+  if (createNewList && !(createNewList as any).__listenerAttached) {
+    (createNewList as any).__listenerAttached = true;
+    
+    // Remove any existing listeners by cloning the element
+    const newButton = createNewList.cloneNode(true) as HTMLButtonElement;
+    createNewList.parentNode?.replaceChild(newButton, createNewList);
+    (newButton as any).__listenerAttached = true;
+    
+    newButton.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Prevent multiple simultaneous requests
+      if (isCreatingList) {
+        return;
+      }
+      
+      // Capture currentSelectedRecipes at click time to avoid closure issues
+      const recipesToAdd = new Set(currentSelectedRecipes);
+      const recipeArray = Array.from(recipesToAdd);
+      
+      if (recipesToAdd.size === 0) {
+        alert('Keine Rezepte ausgewählt.');
+        return;
+      }
+
+      isCreatingList = true;
+      
+      // Disable button to prevent multiple clicks
+      newButton.disabled = true;
+      const originalText = newButton.innerHTML;
+      newButton.innerHTML = '<span>Wird erstellt...</span>';
+      
+      try {
+        const requestBody = {
+          title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
+          recipeIds: recipeArray
+        };
+        
+        const response = await fetch('/api/shopping-lists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Fehler beim Erstellen der Einkaufsliste');
+        }
+        
+        const result = await response.json();
+        
+        // Redirect immediately to prevent any further actions
+        window.location.href = `/einkaufsliste/${result.id}`;
+      } catch (error) {
+        console.error('Fehler beim Erstellen der Einkaufsliste:', error);
+        alert('Die Einkaufsliste konnte nicht erstellt werden.');
+        isCreatingList = false;
+        newButton.disabled = false;
+        newButton.innerHTML = originalText;
+      }
+    });
+  }
 
   // Add to existing list
   async function addToExistingList(listId: string, selectedRecipes: Set<string>) {
