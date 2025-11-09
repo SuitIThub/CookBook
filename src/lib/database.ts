@@ -27,6 +27,7 @@ export class CookbookDatabase {
         preparation_groups TEXT,
         image_url TEXT,
         images TEXT,
+        source_url TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -97,8 +98,8 @@ export class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -113,6 +114,7 @@ export class CookbookDatabase {
       JSON.stringify(newRecipe.preparationGroups),
       newRecipe.imageUrl,
       JSON.stringify(newRecipe.images || []),
+      newRecipe.sourceUrl,
       newRecipe.createdAt.toISOString(),
       newRecipe.updatedAt.toISOString()
     );
@@ -151,6 +153,7 @@ export class CookbookDatabase {
       preparationGroups: JSON.parse(row.preparation_groups),
       imageUrl: row.image_url,
       images: row.images ? JSON.parse(row.images) : [],
+      sourceUrl: row.source_url,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -192,7 +195,7 @@ export class CookbookDatabase {
     const stmt = this.db.prepare(`
       UPDATE recipes 
       SET title = ?, subtitle = ?, description = ?, metadata = ?, category = ?, tags = ?,
-          ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, updated_at = ?
+          ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, source_url = ?, updated_at = ?
       WHERE id = ?
     `);
 
@@ -207,6 +210,7 @@ export class CookbookDatabase {
       JSON.stringify(updatedRecipe.preparationGroups),
       updatedRecipe.imageUrl,
       JSON.stringify(updatedRecipe.images || []),
+      updatedRecipe.sourceUrl,
       updatedRecipe.updatedAt.toISOString(),
       id
     );

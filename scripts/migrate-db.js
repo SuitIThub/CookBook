@@ -20,6 +20,7 @@ const EXPECTED_SCHEMA = {
         { name: 'preparation_groups', type: 'TEXT', nullable: true },
         { name: 'image_url', type: 'TEXT', nullable: true },
         { name: 'images', type: 'TEXT', nullable: true, defaultValue: "'[]'" },
+        { name: 'source_url', type: 'TEXT', nullable: true },
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
       ]

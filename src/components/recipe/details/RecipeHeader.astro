@@ -50,7 +50,19 @@ function processDescription(text: string): { formattedText: string, youtubeUrl: 
   return { formattedText, youtubeUrl };
 }
 
+// Helper function to detect YouTube URLs and extract embed URL
+function getYouTubeEmbedUrl(url: string): string | null {
+  const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const match = url.match(youtubeRegex);
+  if (match) {
+    const videoId = match[1];
+    return `https://www.youtube.com/embed/${videoId}`;
+  }
+  return null;
+}
+
 const processedDescription = recipe.description ? processDescription(recipe.description) : { formattedText: '', youtubeUrl: null };
+const sourceYouTubeEmbed = recipe.sourceUrl ? getYouTubeEmbedUrl(recipe.sourceUrl) : null;
 ---
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 overflow-hidden transition-colors duration-200">
@@ -194,7 +206,40 @@ const processedDescription = recipe.description ? processDescription(recipe.desc
       </div>
     </div>
 
-    <!-- YouTube Embed Section -->
+    <!-- Source URL Section (only in view mode) -->
+    {recipe.sourceUrl && (
+      <div id="source-url-section" class="mb-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+        <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+          <span>Importiert von:</span>
+          <a 
+            href={recipe.sourceUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            class="text-blue-600 dark:text-blue-400 hover:underline break-all"
+          >
+            {recipe.sourceUrl}
+          </a>
+        </div>
+        
+        <!-- YouTube Embed if source is YouTube -->
+        {sourceYouTubeEmbed && (
+          <div class="mt-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+            <div class="relative w-full" style="padding-top: 56.25%;">
+              <iframe
+                src={sourceYouTubeEmbed}
+                title="YouTube video player"
+                class="absolute top-0 left-0 w-full h-full"
+                style="min-height: 315px;"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+              ></iframe>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
+    <!-- YouTube Embed Section (from description) -->
     {processedDescription.youtubeUrl && (
       <div class="mb-6 mt-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
         <div class="relative w-full" style="padding-top: 56.25%;">
@@ -295,12 +340,18 @@ const processedDescription = recipe.description ? processDescription(recipe.desc
     const addToShoppingBtnMobile = document.getElementById('add-to-shopping-mobile');
     const saveBtnMobile = document.getElementById('save-btn-mobile');
     
+    // Source URL section (hide in edit mode)
+    const sourceUrlSection = document.getElementById('source-url-section');
+    
     if (isEditMode) {
       // Hide export and shopping list buttons
       exportContainer?.classList.add('hidden');
       addToShoppingBtn?.classList.add('hidden');
       exportContainerMobile?.classList.add('hidden');
       addToShoppingBtnMobile?.classList.add('hidden');
+      
+      // Hide source URL section in edit mode
+      sourceUrlSection?.classList.add('hidden');
       
       // Show save buttons
       saveBtn?.classList.remove('hidden');
@@ -313,6 +364,9 @@ const processedDescription = recipe.description ? processDescription(recipe.desc
       addToShoppingBtn?.classList.remove('hidden');
       exportContainerMobile?.classList.remove('hidden');
       addToShoppingBtnMobile?.classList.remove('hidden');
+      
+      // Show source URL section in view mode
+      sourceUrlSection?.classList.remove('hidden');
       
       // Hide save buttons
       saveBtn?.classList.add('hidden');

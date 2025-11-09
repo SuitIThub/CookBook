@@ -681,6 +681,10 @@ const { recipe } = Astro.props;
       title: document.getElementById('edit-title')?.value || updatedRecipe.title,
       subtitle: document.getElementById('edit-subtitle')?.value ?? updatedRecipe.subtitle,
       description: document.getElementById('edit-description')?.value ?? updatedRecipe.description,
+      sourceUrl: (() => {
+        const sourceUrlValue = document.getElementById('edit-source-url')?.value?.trim();
+        return sourceUrlValue && sourceUrlValue !== '' ? sourceUrlValue : undefined;
+      })(),
       category: tagsData.category,
       tags: tagsData.tags,
               metadata: {

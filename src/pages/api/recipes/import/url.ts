@@ -100,7 +100,8 @@ export const POST: APIRoute = async ({ request }) => {
       ingredientGroups: recipeData.ingredientGroups || [],
       preparationGroups: recipeData.preparationGroups || [],
       imageUrl: extractedData.imageUrl, // Keep for backward compatibility
-      images: images // Add images array for frontend
+      images: images, // Add images array for frontend
+      sourceUrl: url // Save the source URL
     };
     
     // Create the recipe

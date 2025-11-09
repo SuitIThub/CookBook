@@ -11,9 +11,13 @@ db.exec(`
     subtitle TEXT,
     description TEXT,
     metadata TEXT,
+    category TEXT,
+    tags TEXT,
     ingredient_groups TEXT,
     preparation_groups TEXT,
     image_url TEXT,
+    images TEXT,
+    source_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )

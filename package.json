@@ -10,7 +10,8 @@
     "build:start": "npm run build && npm run start",
     "astro": "astro",
     "db:init": "node scripts/init-db.js",
-    "db:migrate": "node scripts/migrate-db.js"
+    "db:migrate": "node scripts/migrate-db.js",
+    "db:extract-urls": "node scripts/extract-source-urls.js"
   },
   "dependencies": {
     "@astrojs/node": "^9.2.2",

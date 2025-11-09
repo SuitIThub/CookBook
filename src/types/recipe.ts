@@ -82,6 +82,7 @@ export interface Recipe {
   preparationGroups: PreparationGroup[];
   imageUrl?: string; // Keep for backward compatibility
   images?: RecipeImage[];
+  sourceUrl?: string; // URL of the recipe if imported via URL
   createdAt: Date;
   updatedAt: Date;
 }
