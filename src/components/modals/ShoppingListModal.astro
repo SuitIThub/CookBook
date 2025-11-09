@@ -1,0 +1,146 @@
+---
+declare global {
+  interface Window {
+    openShoppingListModal?: (selectedRecipes: Set<string>) => Promise<void>;
+    createNewShoppingList?: () => Promise<void>;
+  }
+}
+---
+
+<!-- Shopping List Modal -->
+<div id="shopping-list-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-medium text-gray-900 dark:text-white">Zur Einkaufsliste hinzufügen</h3>
+      <button id="close-shopping-list-modal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="space-y-4">
+      <!-- Create New List Button -->
+      <button id="create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        <span>Neue Einkaufsliste erstellen</span>
+      </button>
+
+      <!-- Existing Lists -->
+      <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Oder zu bestehender Liste hinzufügen:</h4>
+        <div id="existing-lists" class="space-y-2 max-h-60 overflow-y-auto">
+          <!-- Lists will be inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Shopping List Modal
+  const shoppingListModal = document.getElementById('shopping-list-modal');
+  const closeShoppingListModal = document.getElementById('close-shopping-list-modal');
+  const createNewList = document.getElementById('create-new-list');
+  const existingLists = document.getElementById('existing-lists');
+
+  // Expose function to open modal
+  window.openShoppingListModal = async (selectedRecipes: Set<string>) => {
+    if (selectedRecipes.size === 0) return;
+
+    try {
+      // Fetch existing shopping lists
+      const response = await fetch('/api/shopping-lists');
+      if (!response.ok) throw new Error('Fehler beim Laden der Einkaufslisten');
+      
+      const lists = await response.json();
+      
+      // Clear and populate existing lists
+      if (existingLists) {
+        existingLists.innerHTML = '';
+        
+        if (lists.length === 0) {
+          existingLists.innerHTML = `
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              Keine bestehenden Einkaufslisten gefunden
+            </p>
+          `;
+        } else {
+          lists.forEach((list: any) => {
+            const button = document.createElement('button');
+            button.className = 'w-full btn btn-secondary flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700';
+            button.innerHTML = `
+              <span class="flex items-center space-x-3">
+                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span class="text-left">
+                  <span class="block font-medium">${list.title}</span>
+                  <span class="block text-sm text-gray-500">${list.items?.length || 0} Zutaten</span>
+                </span>
+              </span>
+              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            `;
+            
+            button.addEventListener('click', () => addToExistingList(list.id, selectedRecipes));
+            existingLists.appendChild(button);
+          });
+        }
+      }
+      
+      // Show modal
+      shoppingListModal?.classList.remove('hidden');
+    } catch (error) {
+      console.error('Fehler beim Laden der Einkaufslisten:', error);
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'text-sm text-red-600 dark:text-red-400 text-center py-4';
+      errorMessage.textContent = 'Fehler beim Laden der Einkaufslisten';
+      if (existingLists) existingLists.innerHTML = errorMessage.outerHTML;
+    }
+  };
+
+  // Close modal
+  closeShoppingListModal?.addEventListener('click', () => {
+    shoppingListModal?.classList.add('hidden');
+  });
+
+  // Create new list
+  createNewList?.addEventListener('click', async () => {
+    // This will be handled by the parent component
+    if (window.createNewShoppingList) {
+      await window.createNewShoppingList();
+    }
+  });
+
+  // Add to existing list
+  async function addToExistingList(listId: string, selectedRecipes: Set<string>) {
+    try {
+      const response = await fetch(`/api/shopping-lists/${listId}/recipes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeIds: Array.from(selectedRecipes)
+        })
+      });
+      
+      if (!response.ok) throw new Error('Fehler beim Hinzufügen zur Einkaufsliste');
+      
+      window.location.href = `/einkaufsliste/${listId}`;
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen zur Einkaufsliste:', error);
+      alert('Die Rezepte konnten nicht zur Einkaufsliste hinzugefügt werden.');
+    }
+  }
+
+  // Close modal when clicking outside
+  shoppingListModal?.addEventListener('click', (e) => {
+    if (e.target === shoppingListModal) {
+      shoppingListModal.classList.add('hidden');
+    }
+  });
+</script>
+

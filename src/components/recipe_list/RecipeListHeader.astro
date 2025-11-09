@@ -1,18 +1,20 @@
 ---
+import ImportModal from '../modals/ImportModal.astro';
+import WarningModal from '../modals/WarningModal.astro';
+import ShoppingListModal from '../modals/ShoppingListModal.astro';
+
 interface Props {
   recipeCount: number;
 }
 
 const { recipeCount } = Astro.props;
 
+// Note: showModal, showSuccess, showError, etc. are declared in Layout.astro
 declare global {
   interface Window {
-    showModal: (message: string, autoHide?: number) => Promise<void>;
-    showSuccess: (message: string) => Promise<void>;
-    showError: (message: string) => Promise<void>;
-    showWarning: (message: string) => Promise<void>;
-    showConfirm: (message: string) => Promise<boolean>;
-    showDeleteConfirm: (message: string) => Promise<boolean>;
+    openImportModal?: () => void;
+    openShoppingListModal?: (selectedRecipes: Set<string>) => Promise<void>;
+    createNewShoppingList?: () => Promise<void>;
   }
 }
 ---
@@ -154,176 +156,11 @@ declare global {
 <!-- Hidden file input for import -->
 <input type="file" id="import-file" accept=".json,.rcb" style="display: none;">
 
-<!-- Import/Export Modal -->
-<div id="import-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Rezepte importieren</h3>
-    
-    <!-- Import Type Selector -->
-    <div class="mb-4">
-      <div class="flex border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700">
-        <button id="import-file-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-l-lg border-r border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
-          Datei
-        </button>
-        <button id="import-url-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
-          URL
-        </button>
-      </div>
-    </div>
-    
-    <!-- File Import Content -->
-    <div id="import-file-content">
-      <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-orange-400 dark:hover:border-orange-500 transition-colors">
-        <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3-3m-3 3l3 3m-3-3H21" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <div class="mt-4">
-          <label for="file-upload" class="cursor-pointer">
-            <span class="mt-2 block text-sm font-medium text-gray-900 dark:text-white">
-              Datei auswählen oder hier ablegen
-            </span>
-            <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-              JSON oder RCB Dateien (.json, .rcb)
-            </span>
-          </label>
-          <input id="file-upload" name="file-upload" type="file" accept=".json,.rcb" class="sr-only">
-        </div>
-      </div>
-    </div>
-    
-    <!-- URL Import Content -->
-    <div id="import-url-content" class="hidden">
-      <div class="space-y-4">
-        <div>
-          <label for="recipe-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Rezept-URL eingeben
-          </label>
-          <input 
-            type="url" 
-            id="recipe-url" 
-            placeholder="https://www.chefkoch.de/rezepte/..." 
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-white"
-          >
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Unterstützt: Chefkoch.de, Lecker.de und viele andere Websites mit Rezept-Daten
-          </p>
-        </div>
-        <div id="url-preview" class="hidden p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-          <div class="space-y-3">
-            <div class="text-sm text-gray-600 dark:text-gray-300">
-              <strong>Erkannte Website:</strong> <span id="detected-site" class="text-orange-600 dark:text-orange-400"></span>
-            </div>
-            
-            <div id="extractor-details" class="text-sm text-gray-600 dark:text-gray-300">
-              <div class="font-medium mb-2">Extraktor-Funktionen:</div>
-              <div class="grid grid-cols-2 gap-2 text-xs">
-                <div class="flex items-center space-x-2">
-                  <span id="ingredient-groups-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="ingredient-groups-support-title">Zutatengruppen</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="preparation-groups-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="preparation-groups-support-title">Zubereitungsgruppen</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="images-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="images-support-title">Bilder</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="nutrition-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="nutrition-support-title">Nährwerte</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="metadata-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="metadata-support-title">Metadaten</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="keywords-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="keywords-support-title">Keywords</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="category-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="category-support-title">Kategorie</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="difficulty-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="difficulty-support-title">Schwierigkeit</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <span id="time-support" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                  <span id="time-support-title">Zeit-Extraktion</span>
-                </div>
-              </div>
-              <div id="extractor-description" class="mt-2 text-xs text-gray-500 dark:text-gray-400 italic"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="mt-6 flex justify-end space-x-3">
-      <button id="cancel-import" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Abbrechen</button>
-      <button id="confirm-import" class="px-4 py-2 text-sm font-medium text-white bg-orange-500 border border-transparent rounded-md hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Importieren</button>
-    </div>
-  </div>
-</div>
-
-<!-- Warning Modal -->
-<div id="warning-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-    <div class="flex items-center mb-4">
-      <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-      </svg>
-      <h3 class="text-lg font-medium text-gray-900 dark:text-white">Wichtige Hinweise zum Import</h3>
-    </div>
-    
-    <div id="warning-list" class="space-y-2 mb-6 text-sm text-gray-700 dark:text-gray-300">
-      <!-- Warnings will be inserted here -->
-    </div>
-    
-    <div class="flex justify-end">
-      <button id="continue-to-recipe" class="px-4 py-2 text-sm font-medium text-white bg-orange-500 border border-transparent rounded-md hover:bg-orange-600 transition-colors">
-        Verstanden, weiter zum Rezept
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Shopping List Modal -->
-<div id="shopping-list-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
-  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-    <div class="flex justify-between items-center mb-4">
-      <h3 class="text-lg font-medium text-gray-900 dark:text-white">Zur Einkaufsliste hinzufügen</h3>
-      <button id="close-shopping-list-modal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-
-    <div class="space-y-4">
-      <!-- Create New List Button -->
-      <button id="create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
-        <span>Neue Einkaufsliste erstellen</span>
-      </button>
-
-      <!-- Existing Lists -->
-      <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Oder zu bestehender Liste hinzufügen:</h4>
-        <div id="existing-lists" class="space-y-2 max-h-60 overflow-y-auto">
-          <!-- Lists will be inserted here -->
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+<ImportModal />
+<WarningModal />
+<ShoppingListModal />
 
 <script>
-import type { Capability } from "../../lib/recipe-extractors/base-extractor";
 
   // Selection state
   let selectedRecipes = new Set();
@@ -453,9 +290,9 @@ import type { Capability } from "../../lib/recipe-extractors/base-extractor";
   bulkDeleteBtn?.addEventListener('click', async () => {
     if (selectedRecipes.size === 0) return;
     
-    const confirmed = await window.showDeleteConfirm(
+    const confirmed = window.showDeleteConfirm ? await window.showDeleteConfirm(
       `Möchten Sie wirklich ${selectedRecipes.size} Rezept${selectedRecipes.size === 1 ? '' : 'e'} löschen?`
-    );
+    ) : false;
     
     if (!confirmed) return;
     
@@ -471,7 +308,9 @@ import type { Capability } from "../../lib/recipe-extractors/base-extractor";
       window.location.reload();
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
-      window.showError('Die Rezepte konnten nicht gelöscht werden.');
+      if (window.showError) {
+        window.showError('Die Rezepte konnten nicht gelöscht werden.');
+      }
     }
   });
   
@@ -498,75 +337,7 @@ import type { Capability } from "../../lib/recipe-extractors/base-extractor";
   });
   
   // Shopping List Modal
-  const shoppingListModal = document.getElementById('shopping-list-modal');
-  const closeShoppingListModal = document.getElementById('close-shopping-list-modal');
-  const createNewList = document.getElementById('create-new-list');
-  const existingLists = document.getElementById('existing-lists');
-
-  // Show shopping list modal
-  bulkShoppingListBtn?.addEventListener('click', async () => {
-    if (selectedRecipes.size === 0) return;
-
-    try {
-      // Fetch existing shopping lists
-      const response = await fetch('/api/shopping-lists');
-      if (!response.ok) throw new Error('Fehler beim Laden der Einkaufslisten');
-      
-      const lists = await response.json();
-      
-      // Clear and populate existing lists
-      if (existingLists) {
-        existingLists.innerHTML = '';
-        
-        if (lists.length === 0) {
-          existingLists.innerHTML = `
-            <p class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-              Keine bestehenden Einkaufslisten gefunden
-            </p>
-          `;
-        } else {
-          lists.forEach((list: any) => {
-            const button = document.createElement('button');
-            button.className = 'w-full btn btn-secondary flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700';
-            button.innerHTML = `
-              <span class="flex items-center space-x-3">
-                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                <span class="text-left">
-                  <span class="block font-medium">${list.title}</span>
-                  <span class="block text-sm text-gray-500">${list.items?.length || 0} Zutaten</span>
-                </span>
-              </span>
-              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
-            `;
-            
-            button.addEventListener('click', () => addToExistingList(list.id));
-            existingLists.appendChild(button);
-          });
-        }
-      }
-      
-      // Show modal
-      shoppingListModal?.classList.remove('hidden');
-    } catch (error) {
-      console.error('Fehler beim Laden der Einkaufslisten:', error);
-      const errorMessage = document.createElement('div');
-      errorMessage.className = 'text-sm text-red-600 dark:text-red-400 text-center py-4';
-      errorMessage.textContent = 'Fehler beim Laden der Einkaufslisten';
-      if (existingLists) existingLists.innerHTML = errorMessage.outerHTML;
-    }
-  });
-
-  // Close modal
-  closeShoppingListModal?.addEventListener('click', () => {
-    shoppingListModal?.classList.add('hidden');
-  });
-
-  // Create new list
-  createNewList?.addEventListener('click', async () => {
+  window.createNewShoppingList = async () => {
     try {
       const response = await fetch('/api/shopping-lists', {
         method: 'POST',
@@ -585,437 +356,23 @@ import type { Capability } from "../../lib/recipe-extractors/base-extractor";
       console.error('Fehler beim Erstellen der Einkaufsliste:', error);
       alert('Die Einkaufsliste konnte nicht erstellt werden.');
     }
-  });
+  };
 
-  // Add to existing list
-  async function addToExistingList(listId: string) {
-    try {
-      const response = await fetch(`/api/shopping-lists/${listId}/recipes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipeIds: Array.from(selectedRecipes)
-        })
-      });
-      
-      if (!response.ok) throw new Error('Fehler beim Hinzufügen zur Einkaufsliste');
-      
-      window.location.href = `/einkaufsliste/${listId}`;
-    } catch (error) {
-      console.error('Fehler beim Hinzufügen zur Einkaufsliste:', error);
-      alert('Die Rezepte konnten nicht zur Einkaufsliste hinzugefügt werden.');
-    }
-  }
-
-  // Close modal when clicking outside
-  shoppingListModal?.addEventListener('click', (e) => {
-    if (e.target === shoppingListModal) {
-      shoppingListModal.classList.add('hidden');
+  // Show shopping list modal
+  bulkShoppingListBtn?.addEventListener('click', async () => {
+    if (selectedRecipes.size === 0) return;
+    if (window.openShoppingListModal) {
+      await window.openShoppingListModal(selectedRecipes as Set<string>);
     }
   });
 
-  // Import functionality
+  // Import functionality - moved to ImportModal component
   const importBtn = document.getElementById('import-btn');
-  const importModal = document.getElementById('import-modal');
-  const importFile = document.getElementById('import-file');
-  const fileUpload = document.getElementById('file-upload');
-  const cancelImport = document.getElementById('cancel-import');
-  const confirmImport = document.getElementById('confirm-import');
-  
-  // Tab elements
-  const importFileTab = document.getElementById('import-file-tab');
-  const importUrlTab = document.getElementById('import-url-tab');
-  const importFileContent = document.getElementById('import-file-content');
-  const importUrlContent = document.getElementById('import-url-content');
-  
-  // URL elements
-  const recipeUrl = document.getElementById('recipe-url') as HTMLInputElement;
-  const urlPreview = document.getElementById('url-preview');
-  const detectedSite = document.getElementById('detected-site');
-  
-  let selectedFile: File | null = null;
-  let currentImportType: 'file' | 'url' = 'file';
-  let supportedSites: any[] = [];
-
-  // Load supported sites
-  loadSupportedSites();
-
   importBtn?.addEventListener('click', () => {
-    importModal?.classList.remove('hidden');
-    setImportType('file');
-  });
-
-  cancelImport?.addEventListener('click', () => {
-    importModal?.classList.add('hidden');
-    resetImportModal();
-  });
-
-  // Tab switching
-  importFileTab?.addEventListener('click', () => setImportType('file'));
-  importUrlTab?.addEventListener('click', () => setImportType('url'));
-
-  // File upload
-  fileUpload?.addEventListener('change', (e) => {
-    const target = e.target as HTMLInputElement;
-    if (target.files && target.files[0]) {
-      selectedFile = target.files[0];
-      updateImportButton();
-      updateFileDisplay();
+    if (window.openImportModal) {
+      window.openImportModal();
     }
   });
-
-  // URL input
-  recipeUrl?.addEventListener('input', async (e) => {
-    const target = e.target as HTMLInputElement;
-    const url = target.value.trim();
-    
-    if (url) {
-      await updateUrlPreview(url);
-      updateImportButton();
-    } else {
-      hideUrlPreview();
-      updateImportButton();
-    }
-  });
-
-  confirmImport?.addEventListener('click', async () => {
-    if (currentImportType === 'file') {
-      await handleFileImport();
-    } else {
-      await handleUrlImport();
-    }
-  });
-
-  function setImportType(type: 'file' | 'url') {
-    currentImportType = type;
-    
-    if (type === 'file') {
-      // Activate file tab
-      importFileTab?.classList.add('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
-      importFileTab?.classList.remove('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      
-      // Deactivate URL tab
-      importUrlTab?.classList.add('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      importUrlTab?.classList.remove('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
-      
-      importFileContent?.classList.remove('hidden');
-      importUrlContent?.classList.add('hidden');
-    } else {
-      // Activate URL tab
-      importUrlTab?.classList.add('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
-      importUrlTab?.classList.remove('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      
-      // Deactivate file tab
-      importFileTab?.classList.add('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      importFileTab?.classList.remove('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
-      
-      importUrlContent?.classList.remove('hidden');
-      importFileContent?.classList.add('hidden');
-    }
-    
-    updateImportButton();
-  }
-
-  async function loadSupportedSites() {
-    try {
-      const response = await fetch('/api/recipes/import/url');
-      if (response.ok) {
-        const data = await response.json();
-        supportedSites = data.supportedSites || [];
-      }
-    } catch (error) {
-      console.error('Failed to load supported sites:', error);
-    }
-  }
-
-  async function updateUrlPreview(url: string) {
-    try {
-      new URL(url); // Validate URL format first
-      
-      // Get extractor preview information
-      const response = await fetch('/api/recipes/import/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ url })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Update extractor name
-        if (detectedSite) {
-          detectedSite.textContent = data.extractorName;
-        }
-        
-        // Update capabilities
-        updateCapabilityIndicator('ingredient-groups-support', data.capabilities.supportsIngredientGroups);
-        updateCapabilityIndicator('preparation-groups-support', data.capabilities.supportsPreparationGroups);
-        updateCapabilityIndicator('images-support', data.capabilities.supportsImages);
-        updateCapabilityIndicator('nutrition-support', data.capabilities.supportsNutrition);
-        updateCapabilityIndicator('metadata-support', data.capabilities.supportsMetadata);
-        updateCapabilityIndicator('keywords-support', data.capabilities.supportsKeywordExtraction);
-        updateCapabilityIndicator('category-support', data.capabilities.supportsCategoryExtraction);
-        updateCapabilityIndicator('difficulty-support', data.capabilities.supportsDifficultyExtraction);
-        updateCapabilityIndicator('time-support', data.capabilities.supportsTimeExtraction);
-        
-        // Update description
-        const descriptionElement = document.getElementById('extractor-description');
-        if (descriptionElement) {
-          descriptionElement.textContent = data.description;
-        }
-        
-        urlPreview?.classList.remove('hidden');
-      } else {
-        // Fallback to simple domain detection
-        const urlObj = new URL(url);
-        const domain = urlObj.hostname.toLowerCase();
-        
-        const matchingSite = supportedSites.find(site => 
-          site.domains.some((d: string) => 
-            domain === d || domain.endsWith(`.${d}`) || domain.includes(d)
-          )
-        );
-        
-        if (detectedSite) {
-          detectedSite.textContent = matchingSite ? matchingSite.name : 'Allgemeine Website (JSON-LD Fallback)';
-        }
-        
-        // Set default capabilities for fallback
-        updateCapabilityIndicator('ingredient-groups-support', { value: false, title: 'Zutatengruppen' });
-        updateCapabilityIndicator('preparation-groups-support', { value: false, title: 'Vorbereitungsschritte' });
-        updateCapabilityIndicator('images-support', { value: true, title: 'Bilder' });
-        updateCapabilityIndicator('nutrition-support', { value: false, title: 'Nährwerte' });
-        updateCapabilityIndicator('metadata-support', { value: true, title: 'Metadaten' });
-        updateCapabilityIndicator('keywords-support', { value: true, title: 'Schlüsselwörter' });
-        updateCapabilityIndicator('category-support', { value: true, title: 'Kategorien' });
-        updateCapabilityIndicator('difficulty-support', { value: false, title: 'Schwierigkeit' });
-        updateCapabilityIndicator('time-support', { value: false, title: 'Zeit-Extraktion' });
-        
-        const descriptionElement = document.getElementById('extractor-description');
-        if (descriptionElement) {
-          descriptionElement.textContent = 'Basis-Funktionalität verfügbar';
-        }
-        
-        urlPreview?.classList.remove('hidden');
-      }
-    } catch (error) {
-      console.error('Error updating URL preview:', error);
-      hideUrlPreview();
-    }
-  }
-  
-
-
-  function updateCapabilityIndicator(elementId: string, capability: Capability) {
-    const element = document.getElementById(elementId);
-    if (element) {
-      if (capability.value === 'experimental') {
-        element.className = 'w-3 h-3 rounded-full bg-yellow-500';
-      } else{
-        element.className = `w-3 h-3 rounded-full ${
-          capability.value 
-            ? 'bg-green-500' 
-            : 'bg-gray-400'
-        }`;
-      }
-    }
-    const titleElement = document.getElementById(`${elementId}-title`);
-    if (titleElement) {
-      titleElement.textContent = capability.title;
-    }
-  }
-
-  function hideUrlPreview() {
-    urlPreview?.classList.add('hidden');
-  }
-
-  async function handleUrlImport() {
-    const url = recipeUrl?.value.trim();
-    if (!url) return;
-
-    // Show loading state
-    if (confirmImport) {
-      (confirmImport as HTMLButtonElement).disabled = true;
-      (confirmImport as HTMLButtonElement).textContent = 'Importiere...';
-    }
-
-    try {
-      const response = await fetch('/api/recipes/import/url', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ url })
-      });
-
-      const result = await response.json();
-      console.log('Import result:', result); // Debug log
-
-      if (response.ok) {
-        // Hide import modal
-        importModal?.classList.add('hidden');
-        
-        // Show success message
-        if (window.showSuccess) {
-          await window.showSuccess(`Erfolgreich Rezept "${result.recipe.title}" importiert mit ${result.extractorUsed}!`);
-        }
-
-        // Show warnings if any and redirect after confirmation
-        if (result.warnings && result.warnings.length > 0) {
-          console.log('Warnings found:', result.warnings); // Debug log
-          console.log('showWarnings function exists:', !!window.showWarnings); // Debug log
-          
-          if (window.showWarnings) {
-            console.log('Showing warnings modal...'); // Debug log
-            window.showWarnings(result.warnings, () => {
-              console.log('Warning modal confirmed, redirecting...'); // Debug log
-              if (result.recipeId) {
-                window.location.href = `/rezept/${result.recipeId}`;
-              } else {
-                window.location.reload();
-              }
-            });
-          } else {
-            console.warn('showWarnings function not found!'); // Debug log
-            // Fallback: redirect immediately if showWarnings is not available
-            if (result.recipeId) {
-              window.location.href = `/rezept/${result.recipeId}`;
-            } else {
-              window.location.reload();
-            }
-          }
-        } else {
-          console.log('No warnings, redirecting immediately...'); // Debug log
-          // No warnings, redirect immediately
-          if (result.recipeId) {
-            window.location.href = `/rezept/${result.recipeId}`;
-          } else {
-            window.location.reload();
-          }
-        }
-      } else {
-        console.error('Import failed:', result.error); // Debug log
-        if (window.showError) {
-          window.showError(`Import fehlgeschlagen: ${result.error}`);
-        } else {
-          alert(`Import fehlgeschlagen: ${result.error}`);
-        }
-      }
-    } catch (error) {
-      console.error('Import error:', error); // Debug log
-      if (window.showError) {
-        window.showError(`Import fehlgeschlagen: ${error}`);
-      } else {
-        alert(`Import fehlgeschlagen: ${error}`);
-      }
-    }
-
-    // Reset loading state
-    if (confirmImport) {
-      (confirmImport as HTMLButtonElement).disabled = false;
-      (confirmImport as HTMLButtonElement).textContent = 'Importieren';
-    }
-
-    resetImportModal();
-  }
-
-  async function handleFileImport() {
-    if (!selectedFile) return;
-
-    try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      const response = await fetch('/api/recipes/import', {
-        method: 'POST',
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        const imageInfo = result.totalImages ? ` (mit ${result.totalImages} Bild(ern))` : '';
-        
-        if (result.imported === 1 && result.recipeId) {
-          // Single recipe imported - redirect to recipe page
-          if (window.showSuccess) {
-            await window.showSuccess(`Erfolgreich Rezept importiert${imageInfo}!`);
-          }
-          window.location.href = `/rezept/${result.recipeId}`;
-        } else {
-          // Multiple recipes imported - stay on recipe list
-          if (window.showSuccess) {
-            await window.showSuccess(`Erfolgreich ${result.imported} Rezept(e) importiert${imageInfo}!`);
-          }
-          window.location.reload();
-        }
-      } else {
-        if (window.showError) {
-          window.showError(`Import fehlgeschlagen: ${result.error}`);
-        } else {
-          alert(`Import fehlgeschlagen: ${result.error}`);
-        }
-      }
-    } catch (error) {
-      if (window.showError) {
-        window.showError(`Import fehlgeschlagen: ${error}`);
-      } else {
-        alert(`Import fehlgeschlagen: ${error}`);
-      }
-    }
-
-    // Reset loading state
-    if (confirmImport) {
-      (confirmImport as HTMLButtonElement).disabled = false;
-      (confirmImport as HTMLButtonElement).textContent = 'Importieren';
-    }
-
-    resetImportModal();
-  }
-
-  function resetImportModal() {
-    // Reset file upload
-    selectedFile = null;
-    if (fileUpload) {
-      (fileUpload as HTMLInputElement).value = '';
-    }
-    
-    // Reset URL input
-    if (recipeUrl) {
-      recipeUrl.value = '';
-    }
-    hideUrlPreview();
-    
-    // Reset import button
-    updateImportButton();
-    
-    // Reset to file tab
-    setImportType('file');
-    
-    // Hide modals
-    importModal?.classList.add('hidden');
-    document.getElementById('warning-modal')?.classList.add('hidden');
-  }
-
-  function updateImportButton() {
-    if (!confirmImport) return;
-    
-    const button = confirmImport as HTMLButtonElement;
-    if (currentImportType === 'file') {
-      button.disabled = !selectedFile;
-    } else {
-      button.disabled = !recipeUrl?.value.trim();
-    }
-  }
-
-  function updateFileDisplay() {
-    const dropText = document.querySelector('#import-file-content .text-sm');
-    if (dropText && selectedFile) {
-      dropText.textContent = selectedFile.name;
-    }
-  }
 
   // Export functionality
   const exportBtn = document.getElementById('export-btn');
