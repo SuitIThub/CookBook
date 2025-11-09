@@ -68,6 +68,7 @@ Unterstützte Attribute:
 | `ingredientGroups` | object[] | Ja | Liste von Zutatgruppen |
 | `preparationGroups` | object[] | Ja | Liste von Zubereitungsschritten |
 | `images`      | object[] | Nein     | Liste von Bildern |
+| `sourceUrl`   | string   | Nein     | URL der Quelle, von der das Rezept importiert wurde |
 
 #### Liste aller Rezepte abrufen
 
