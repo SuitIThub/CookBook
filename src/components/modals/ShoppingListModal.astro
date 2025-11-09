@@ -70,6 +70,26 @@ declare global {
     return true;
   }
 
+  // Helper function to check which recipes are already in a shopping list
+  function getAlreadyAddedRecipes(list: any, selectedRecipeIds: Set<string>): { ids: Set<string>, titles: string[] } {
+    const existingRecipeIds = new Set((list.recipes || []).map((r: any) => r.id));
+    const alreadyAddedIds = new Set<string>();
+    const alreadyAddedTitles: string[] = [];
+    
+    selectedRecipeIds.forEach(recipeId => {
+      if (existingRecipeIds.has(recipeId)) {
+        alreadyAddedIds.add(recipeId);
+        // Find the recipe title from the list
+        const recipe = (list.recipes || []).find((r: any) => r.id === recipeId);
+        if (recipe) {
+          alreadyAddedTitles.push(recipe.title);
+        }
+      }
+    });
+    
+    return { ids: alreadyAddedIds, titles: alreadyAddedTitles };
+  }
+
   // Expose function to open modal - always update, but only define once
   window.openShoppingListModal = async (selectedRecipes: Set<string>) => {
     if (selectedRecipes.size === 0) return;
@@ -98,26 +118,62 @@ declare global {
           `;
         } else {
           lists.forEach((list: any) => {
+            // Check which recipes are already in this list
+            const { ids: alreadyAddedIds, titles: alreadyAddedTitles } = getAlreadyAddedRecipes(list, currentSelectedRecipes);
+            const allRecipesAdded = alreadyAddedIds.size === currentSelectedRecipes.size;
+            const someRecipesAdded = alreadyAddedIds.size > 0 && alreadyAddedIds.size < currentSelectedRecipes.size;
+            
             const button = document.createElement('button');
-            button.className = 'w-full btn btn-secondary flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700';
+            button.className = 'w-full btn btn-secondary flex flex-col items-start p-3 hover:bg-gray-50 dark:hover:bg-gray-700';
+            
+            // Disable button if all recipes are already added
+            if (allRecipesAdded) {
+              button.disabled = true;
+              button.className += ' opacity-50 cursor-not-allowed';
+            }
+            
+            // Build warning HTML if some recipes are already added
+            const warningHTML = someRecipesAdded ? `
+              <div class="mt-2 pt-2 border-t border-orange-200 dark:border-orange-800 w-full">
+                <div class="flex items-start space-x-2">
+                  <svg class="w-4 h-4 mt-0.5 flex-shrink-0 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div class="text-xs text-orange-600 dark:text-orange-400 flex-1">
+                    <span class="font-medium">Bereits hinzugefügt:</span>
+                    <span class="ml-1">${alreadyAddedTitles.join(', ')}</span>
+                    <div class="mt-1 text-gray-600 dark:text-gray-400">Nur die anderen Rezepte werden hinzugefügt.</div>
+                  </div>
+                </div>
+              </div>
+            ` : '';
+            
             button.innerHTML = `
-              <span class="flex items-center space-x-3">
-                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                <span class="text-left">
-                  <span class="block font-medium">${list.title}</span>
-                  <span class="block text-sm text-gray-500">${list.items?.length || 0} Zutaten</span>
+              <div class="flex items-center justify-between w-full">
+                <span class="flex items-center space-x-3">
+                  <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span class="text-left">
+                    <span class="block font-medium">${list.title}</span>
+                    <span class="block text-sm text-gray-500">${list.items?.length || 0} Zutaten</span>
+                    ${allRecipesAdded ? '<span class="block text-xs text-orange-600 dark:text-orange-400 mt-1">Alle Rezepte bereits hinzugefügt</span>' : ''}
+                  </span>
                 </span>
-              </span>
-              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
+                <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+              ${warningHTML}
             `;
             
-            // Capture currentSelectedRecipes in closure
-            const recipesToAdd = new Set(currentSelectedRecipes);
-            button.addEventListener('click', () => addToExistingList(list.id, recipesToAdd));
+            // Only add click handler if not all recipes are already added
+            if (!allRecipesAdded) {
+              // Filter out already-added recipes
+              const recipesToAdd = new Set(Array.from(currentSelectedRecipes).filter(id => !alreadyAddedIds.has(id)));
+              button.addEventListener('click', () => addToExistingList(list.id, recipesToAdd, alreadyAddedTitles));
+            }
+            
             existingLists.appendChild(button);
           });
         }
@@ -217,8 +273,15 @@ declare global {
   }
 
   // Add to existing list
-  async function addToExistingList(listId: string, selectedRecipes: Set<string>) {
+  async function addToExistingList(listId: string, selectedRecipes: Set<string>, alreadyAddedTitles: string[] = []) {
     try {
+      // Only add recipes that aren't already in the list
+      if (selectedRecipes.size === 0) {
+        // All recipes were already in the list, just redirect
+        window.location.href = `/einkaufsliste/${listId}`;
+        return;
+      }
+      
       const response = await fetch(`/api/shopping-lists/${listId}/recipes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

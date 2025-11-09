@@ -1,7 +1,6 @@
 ---
 import type { Recipe } from '../../types/recipe';
 import RecipeImageCarousel from './RecipeImageCarousel.astro';
-import AddToShoppingListModal from '../shopping_list/AddToShoppingListModal.astro';
 
 interface Props {
   recipe: Recipe;
@@ -146,9 +145,6 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
     </button>
   </div>
 </div>
-
-<!-- Shopping List Modal -->
-<AddToShoppingListModal recipeId={recipe.id} />
 
 <style>
   .recipe-card.selected {
@@ -378,9 +374,10 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
         if (!recipeId) return;
 
-        // Show shopping list modal
-        const modal = document.getElementById('shopping-list-modal');
-        modal?.classList.remove('hidden');
+        // Use the ShoppingListModal (same as bulk operations)
+        if (window.openShoppingListModal) {
+          await window.openShoppingListModal(new Set([recipeId]));
+        }
         menu.classList.add('hidden');
       });
     });
