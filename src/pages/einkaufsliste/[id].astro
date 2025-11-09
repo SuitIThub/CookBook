@@ -147,6 +147,22 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       </div>
     </template>
 
+    <!-- Hide Checked Items Toggle -->
+    <div class="card mt-6">
+      <div class="card-content">
+        <label class="flex items-center space-x-3 cursor-pointer">
+          <input 
+            type="checkbox" 
+            id="hide-checked-items-toggle"
+            class="w-5 h-5 text-primary-500 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2"
+          />
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Erledigte Artikel ausblenden
+          </span>
+        </label>
+      </div>
+    </div>
+
     <!-- Shopping List Items -->
     <div class="card mt-6">
       <div class="card-content">
@@ -295,6 +311,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     // Recipe management variables
     let availableRecipes = [];
     let currentlyHighlightedRecipe = null;
+    
+    // Toggle state for hiding checked items (default: false = show all items)
+    let hideCheckedItems = false;
 
     // Load available units
     async function loadUnits() {
@@ -330,6 +349,15 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 
     document.addEventListener('DOMContentLoaded', async () => {
       await loadUnits();
+      
+      // Hide checked items toggle functionality
+      const hideCheckedToggle = document.getElementById('hide-checked-items-toggle');
+      if (hideCheckedToggle) {
+        hideCheckedToggle.addEventListener('change', () => {
+          hideCheckedItems = hideCheckedToggle.checked;
+          renderShoppingItems();
+        });
+      }
       
       // Share button functionality
       const shareButton = document.getElementById('share-list-btn');
@@ -404,7 +432,14 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         const container = document.getElementById('shopping-items');
         if (!container) return;
         
-        const groupedItems = groupItems(shoppingListData.items);
+        let itemsToRender = shoppingListData.items;
+        
+        // Filter out checked items if toggle is enabled
+        if (hideCheckedItems) {
+          itemsToRender = itemsToRender.filter(item => !item.isChecked);
+        }
+        
+        const groupedItems = groupItems(itemsToRender);
         
         if (groupedItems.length === 0) {
           container.innerHTML = `
