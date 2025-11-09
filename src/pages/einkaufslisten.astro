@@ -57,6 +57,7 @@ try {
     let eventSource: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let isOnline = navigator.onLine;
+    let isBulkDeleting = false; // Flag to prevent reloads during bulk deletion
     
     document.addEventListener('DOMContentLoaded', () => {
       // Get initial lists from the grid
@@ -135,6 +136,11 @@ try {
       }
       
       function renderShoppingLists() {
+        // Don't reload during bulk deletion - let the bulk delete handler manage the reload
+        if (isBulkDeleting) {
+          return;
+        }
+        
         const gridContainer = document.getElementById('shopping-lists-grid');
         const emptyState = document.getElementById('empty-state');
         
@@ -157,6 +163,11 @@ try {
           window.location.reload(); // Reload the page to get fresh components
         }
       }
+
+      // Expose bulk deletion flag globally
+      (window as any).setBulkDeleting = (value: boolean) => {
+        isBulkDeleting = value;
+      };
 
       // Start SSE connection
       connectSSE();

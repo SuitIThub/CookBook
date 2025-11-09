@@ -1,0 +1,122 @@
+---
+interface Props {
+  images: any[];
+}
+
+const { images = [] } = Astro.props;
+---
+
+<!-- Lightbox Modal -->
+<div id="lightbox-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center hidden">
+  <div class="relative max-w-4xl max-h-full p-4">
+    <button id="close-lightbox" class="absolute top-4 right-4 text-white hover:text-gray-300 z-10">
+      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+    <img id="lightbox-image" src="" alt="" class="max-w-full max-h-full object-contain">
+    
+    <!-- Navigation arrows for multiple images -->
+    {images.length > 1 && (
+      <>
+        <button id="prev-image" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <button id="next-image" class="absolute right-4 top-1/2 transform -translate-y-1/2 text-white hover:text-gray-300 bg-black bg-opacity-50 rounded-full p-2">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </>
+    )}
+  </div>
+</div>
+
+<script>
+  let currentImageIndex = 0;
+  let recipeImages: any[] = [];
+  
+  // Initialize data from container
+  const container = document.querySelector('[data-recipe-images]') as HTMLElement;
+  if (container) {
+    recipeImages = JSON.parse(container.dataset.recipeImages || '[]');
+  }
+
+  // Lightbox handlers
+  const lightboxImages = document.querySelectorAll('[data-lightbox="recipe-gallery"]');
+  lightboxImages.forEach(img => {
+    img.addEventListener('click', openLightbox);
+  });
+
+  const closeLightbox = document.getElementById('close-lightbox');
+  const lightboxModal = document.getElementById('lightbox-modal');
+  if (closeLightbox && lightboxModal) {
+    closeLightbox.addEventListener('click', () => {
+      lightboxModal.classList.add('hidden');
+    });
+    
+    lightboxModal.addEventListener('click', (e) => {
+      if (e.target === lightboxModal) {
+        lightboxModal.classList.add('hidden');
+      }
+    });
+  }
+
+  // Navigation handlers
+  const prevBtn = document.getElementById('prev-image');
+  const nextBtn = document.getElementById('next-image');
+  if (prevBtn) prevBtn.addEventListener('click', showPrevImage);
+  if (nextBtn) nextBtn.addEventListener('click', showNextImage);
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    const modal = document.getElementById('lightbox-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    
+    if (e.key === 'Escape') {
+      modal.classList.add('hidden');
+    } else if (e.key === 'ArrowLeft') {
+      showPrevImage();
+    } else if (e.key === 'ArrowRight') {
+      showNextImage();
+    }
+  });
+
+  function openLightbox(event: Event) {
+    const target = event.target as HTMLImageElement;
+    const imageId = target.dataset.imageId;
+    const imageIndex = recipeImages.findIndex((img: any) => img.id === imageId);
+    
+    if (imageIndex !== -1) {
+      currentImageIndex = imageIndex;
+      showLightboxImage();
+      const modal = document.getElementById('lightbox-modal');
+      modal?.classList.remove('hidden');
+    }
+  }
+
+  function showLightboxImage() {
+    const lightboxImage = document.getElementById('lightbox-image') as HTMLImageElement;
+    if (lightboxImage && recipeImages[currentImageIndex]) {
+      lightboxImage.src = recipeImages[currentImageIndex].url;
+      lightboxImage.alt = `Recipe image ${currentImageIndex + 1}`;
+    }
+  }
+
+  function showPrevImage() {
+    if (recipeImages.length > 1) {
+      currentImageIndex = (currentImageIndex - 1 + recipeImages.length) % recipeImages.length;
+      showLightboxImage();
+    }
+  }
+
+  function showNextImage() {
+    if (recipeImages.length > 1) {
+      currentImageIndex = (currentImageIndex + 1) % recipeImages.length;
+      showLightboxImage();
+    }
+  }
+</script>
+

@@ -147,6 +147,47 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       </div>
     </template>
 
+    <!-- Hide Checked Items Toggle and Grouping Controls -->
+    <div class="card mt-6">
+      <div class="card-content">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <label class="flex items-center space-x-3 cursor-pointer">
+            <input 
+              type="checkbox" 
+              id="hide-checked-items-toggle"
+              class="w-5 h-5 text-primary-500 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 focus:ring-2"
+            />
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Erledigte Artikel ausblenden
+            </span>
+          </label>
+          <div class="flex items-center gap-2">
+            <button id="group-items-btn" class="btn btn-secondary btn-sm flex items-center space-x-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+              </svg>
+              <span>Gruppieren</span>
+            </button>
+            <button id="ungroup-items-btn" class="btn btn-secondary btn-sm flex items-center space-x-2" style="display: none;">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+              </svg>
+              <span>Gruppierung aufheben</span>
+            </button>
+            <div id="group-selection-controls" class="hidden flex items-center gap-2">
+              <button id="confirm-group-btn" class="btn btn-success btn-sm" disabled>
+                Gruppierung bestätigen
+              </button>
+              <button id="cancel-group-btn" class="btn btn-secondary btn-sm">
+                Abbrechen
+              </button>
+              <span id="selected-count" class="text-sm text-gray-600 dark:text-gray-400">0 ausgewählt</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Shopping List Items -->
     <div class="card mt-6">
       <div class="card-content">
@@ -185,7 +226,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label for="item-amount" class="form-label">Menge</label>
+            <label for="item-amount" class="form-label">Menge (optional)</label>
             <input 
               type="number" 
               id="item-amount" 
@@ -194,16 +235,14 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
               placeholder="1"
               step="0.1"
               min="0"
-              required
             />
           </div>
           <div>
-            <label for="item-unit" class="form-label">Einheit</label>
+            <label for="item-unit" class="form-label">Einheit (optional)</label>
             <select 
               id="item-unit" 
               name="unit"
               class="form-input" 
-              required
             >
               <option value="">Einheit wählen...</option>
             </select>
@@ -295,6 +334,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     // Recipe management variables
     let availableRecipes = [];
     let currentlyHighlightedRecipe = null;
+    
+    // Toggle state for hiding checked items (default: false = show all items)
+    let hideCheckedItems = false;
+    
+    // Grouping state
+    let isGroupingMode = false;
+    let selectedGroupIds = new Set();
 
     // Load available units
     async function loadUnits() {
@@ -331,6 +377,50 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     document.addEventListener('DOMContentLoaded', async () => {
       await loadUnits();
       
+      // Hide checked items toggle functionality
+      const hideCheckedToggle = document.getElementById('hide-checked-items-toggle');
+      if (hideCheckedToggle) {
+        hideCheckedToggle.addEventListener('change', () => {
+          hideCheckedItems = hideCheckedToggle.checked;
+          renderShoppingItems();
+        });
+      }
+      
+      // Grouping functionality
+      const groupBtn = document.getElementById('group-items-btn');
+      const ungroupBtn = document.getElementById('ungroup-items-btn');
+      const confirmGroupBtn = document.getElementById('confirm-group-btn');
+      const cancelGroupBtn = document.getElementById('cancel-group-btn');
+      
+      if (groupBtn) {
+        groupBtn.addEventListener('click', () => {
+          toggleGroupingMode(true);
+        });
+      }
+      
+      if (ungroupBtn) {
+        ungroupBtn.addEventListener('click', () => {
+          ungroupAll();
+        });
+      }
+      
+      if (confirmGroupBtn) {
+        confirmGroupBtn.addEventListener('click', () => {
+          confirmGrouping();
+        });
+      }
+      
+      if (cancelGroupBtn) {
+        cancelGroupBtn.addEventListener('click', () => {
+          toggleGroupingMode(false);
+        });
+      }
+      
+      // Initialize ungroup button visibility
+      if (ungroupBtn) {
+        ungroupBtn.style.display = hasManualGroups() ? 'flex' : 'none';
+      }
+      
       // Share button functionality
       const shareButton = document.getElementById('share-list-btn');
       shareButton?.addEventListener('click', async () => {
@@ -365,17 +455,65 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         }
       });
       
-      // Function to group items by name and unit
+      // Function to group items by name (ignoring unit differences) and manual groups
       function groupItems(items) {
         const groups = new Map();
         
+        // First, group by manualGroupId if present
+        const manualGroups = new Map();
+        const ungroupedItems = [];
+        
         items.forEach(item => {
-          const key = `${item.name.toLowerCase()}_${item.quantity.unit.toLowerCase()}`;
+          if (item.manualGroupId) {
+            if (!manualGroups.has(item.manualGroupId)) {
+              manualGroups.set(item.manualGroupId, []);
+            }
+            manualGroups.get(item.manualGroupId).push(item);
+          } else {
+            ungroupedItems.push(item);
+          }
+        });
+        
+        // Process manual groups - combine all items in a manual group
+        manualGroups.forEach((groupItems, groupId) => {
+          const group = {
+            name: groupItems.map(i => i.name).join(', '), // Combined name
+            items: groupItems,
+            allChecked: groupItems.every(i => i.isChecked),
+            anyChecked: groupItems.some(i => i.isChecked),
+            descriptions: [...new Set(groupItems.map(i => i.description).filter(Boolean))],
+            quantitiesByUnit: new Map(),
+            unitCasing: new Map(),
+            manualGroupId: groupId,
+            isManualGroup: true
+          };
+          
+          // Sum quantities by unit across all items in the manual group
+          groupItems.forEach(item => {
+            if (item.quantity) {
+              const unitKey = item.quantity.unit.toLowerCase();
+              if (group.quantitiesByUnit.has(unitKey)) {
+                group.quantitiesByUnit.set(
+                  unitKey,
+                  group.quantitiesByUnit.get(unitKey) + item.quantity.amount
+                );
+              } else {
+                group.quantitiesByUnit.set(unitKey, item.quantity.amount);
+                group.unitCasing.set(unitKey, item.quantity.unit);
+              }
+            }
+          });
+          
+          groups.set(`manual_${groupId}`, group);
+        });
+        
+        // Process ungrouped items - group by name only (case-insensitive)
+        ungroupedItems.forEach(item => {
+          const key = item.name.toLowerCase();
           
           if (groups.has(key)) {
             const existingGroup = groups.get(key);
             existingGroup.items.push(item);
-            existingGroup.totalAmount += item.quantity.amount;
             existingGroup.allChecked = existingGroup.allChecked && item.isChecked;
             existingGroup.anyChecked = existingGroup.anyChecked || item.isChecked;
             
@@ -383,15 +521,40 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             if (item.description && !existingGroup.descriptions.includes(item.description)) {
               existingGroup.descriptions.push(item.description);
             }
+            
+            // Sum amounts by unit (only if item has quantity)
+            if (item.quantity) {
+              const unitKey = item.quantity.unit.toLowerCase();
+              if (existingGroup.quantitiesByUnit.has(unitKey)) {
+                existingGroup.quantitiesByUnit.set(
+                  unitKey,
+                  existingGroup.quantitiesByUnit.get(unitKey) + item.quantity.amount
+                );
+              } else {
+                existingGroup.quantitiesByUnit.set(unitKey, item.quantity.amount);
+                // Store the original unit casing for display
+                existingGroup.unitCasing.set(unitKey, item.quantity.unit);
+              }
+            }
           } else {
+            // Create new group
+            const quantitiesByUnit = new Map();
+            const unitCasing = new Map();
+            if (item.quantity) {
+              const unitKey = item.quantity.unit.toLowerCase();
+              quantitiesByUnit.set(unitKey, item.quantity.amount);
+              unitCasing.set(unitKey, item.quantity.unit);
+            }
+            
             groups.set(key, {
               name: item.name,
-              unit: item.quantity.unit,
-              totalAmount: item.quantity.amount,
               items: [item],
               allChecked: item.isChecked,
               anyChecked: item.isChecked,
-              descriptions: item.description ? [item.description] : []
+              descriptions: item.description ? [item.description] : [],
+              quantitiesByUnit: quantitiesByUnit,
+              unitCasing: unitCasing,
+              isManualGroup: false
             });
           }
         });
@@ -404,7 +567,14 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         const container = document.getElementById('shopping-items');
         if (!container) return;
         
-        const groupedItems = groupItems(shoppingListData.items);
+        let itemsToRender = shoppingListData.items;
+        
+        // Filter out checked items if toggle is enabled
+        if (hideCheckedItems) {
+          itemsToRender = itemsToRender.filter(item => !item.isChecked);
+        }
+        
+        const groupedItems = groupItems(itemsToRender);
         
         if (groupedItems.length === 0) {
           container.innerHTML = `
@@ -425,20 +595,54 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           const itemIds = group.items.map(item => item.id).join(',');
           const recipeIds = [...new Set(group.items.map(item => item.recipeId).filter(Boolean))].join(',');
           const hasMultipleItems = group.items.length > 1;
+          const hasMultipleUnits = group.quantitiesByUnit.size > 1;
           
-          // Format amount (remove decimals if it's a whole number)
-          const formattedAmount = group.totalAmount % 1 === 0 ? 
-            group.totalAmount.toString() : 
-            group.totalAmount.toFixed(1).replace(/\.0$/, '');
+          // Format quantities by unit
+          const quantitiesByUnit = Array.from(group.quantitiesByUnit.entries())
+            .map(([unitKey, amount]) => {
+              const formattedAmount = amount % 1 === 0 ? 
+                amount.toString() : 
+                amount.toFixed(1).replace(/\.0$/, '');
+              const unit = group.unitCasing.get(unitKey);
+              return { amount: formattedAmount, unit, unitKey };
+            });
+          
+          // First unit display (always shown, inline with description/buttons)
+          const firstUnitDisplay = quantitiesByUnit.length > 0 ? `
+            <span class="${isChecked 
+              ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-3 py-1.5 rounded border border-green-200 dark:border-green-700 flex-shrink-0'
+              : 'text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-1.5 rounded border border-gray-200 dark:border-gray-600 flex-shrink-0'
+            }">
+              ${quantitiesByUnit[0].amount} ${quantitiesByUnit[0].unit}
+            </span>
+          ` : '';
+          
+          // Additional units display (boxes below, aligned with first unit)
+          const additionalUnitsDisplay = hasMultipleUnits && quantitiesByUnit.length > 1 ? `
+            <div class="flex flex-col gap-1.5 mt-1.5 items-end">
+              ${quantitiesByUnit.slice(1).map(({ amount, unit }) => `
+                <span class="${isChecked 
+                  ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-3 py-1.5 rounded border border-green-200 dark:border-green-700'
+                  : 'text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-1.5 rounded border border-gray-200 dark:border-gray-600'
+                }">
+                  ${amount} ${unit}
+                </span>
+              `).join('')}
+            </div>
+          ` : '';
           
           // Create details for individual items if there are multiple
           const itemDetails = hasMultipleItems ? group.items.map((item, index) => {
-            const itemAmount = item.quantity.amount % 1 === 0 ? 
-              item.quantity.amount.toString() : 
-              item.quantity.amount.toFixed(1).replace(/\.0$/, '');
-            
             const sourceLabel = item.recipeId ? '🍳 Rezept' : '✋ Manuell';
             const sourceClass = item.recipeId ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400';
+            
+            let quantityDisplay = '';
+            if (item.quantity) {
+              const itemAmount = item.quantity.amount % 1 === 0 ? 
+                item.quantity.amount.toString() : 
+                item.quantity.amount.toFixed(1).replace(/\.0$/, '');
+              quantityDisplay = `<span class="text-gray-700 dark:text-gray-300 font-mono">${itemAmount} ${item.quantity.unit}</span>`;
+            }
             
             return `
               <div class="detail-item flex justify-between items-center py-1 px-2 text-sm transition-colors" data-item-id="${item.id}">
@@ -446,46 +650,53 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                   <span class="${sourceClass} text-xs font-medium">${sourceLabel}</span>
                   ${item.description ? `<span class="text-gray-500">• ${item.description}</span>` : ''}
                 </div>
-                <span class="text-gray-700 dark:text-gray-300 font-mono">${itemAmount} ${item.quantity.unit}</span>
+                ${quantityDisplay}
               </div>
             `;
           }).join('') : '';
           
+          const groupId = group.manualGroupId || `group_${itemIds}`;
+          const isSelected = selectedGroupIds.has(groupId);
+          
           return `
-            <div class="shopping-item-group" data-item-ids="${itemIds}" data-recipe-ids="${recipeIds}">
-              <div class="shopping-item flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors ${hasMultipleItems ? 'cursor-pointer' : ''}" ${hasMultipleItems ? 'data-expandable="true"' : ''}>
-                <!-- First Row: Checkbox and Title -->
-                <div class="flex items-center gap-3 flex-1">
+            <div class="shopping-item-group ${isSelected ? 'ring-2 ring-blue-500' : ''}" data-item-ids="${itemIds}" data-recipe-ids="${recipeIds}" data-group-id="${groupId}">
+              <div class="shopping-item p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors ${hasMultipleItems ? 'cursor-pointer' : ''}" ${hasMultipleItems ? 'data-expandable="true"' : ''}>
+                <!-- Main Row: Selection Checkbox (in grouping mode), Item Checkbox, Title, Description, Actions, and First Unit -->
+                <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  ${isGroupingMode ? `
+                    <input 
+                      type="checkbox" 
+                      class="group-selection-checkbox w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 flex-shrink-0"
+                      data-group-id="${groupId}"
+                      ${isSelected ? 'checked' : ''}
+                    />
+                  ` : ''}
                   <input 
                     type="checkbox" 
-                    class="item-checkbox w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2 ${isPartiallyChecked ? 'opacity-50' : ''} flex-shrink-0"
+                    class="item-checkbox w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2 ${isPartiallyChecked ? 'opacity-50' : ''} ${isGroupingMode ? 'opacity-50 cursor-not-allowed' : ''} flex-shrink-0"
                     ${isChecked ? 'checked' : ''}
-                    title="${isPartiallyChecked ? 'Teilweise erledigt' : ''}"
+                    ${isGroupingMode ? 'disabled' : ''}
+                    title="${isPartiallyChecked ? 'Teilweise erledigt' : isGroupingMode ? 'Gruppierungsmodus aktiv' : ''}"
                   />
-                  <span class="font-medium transition-colors ${
+                  <span class="font-medium transition-colors flex-shrink-0 ${
                     isChecked 
                       ? 'text-green-800 dark:text-green-300 line-through' 
                       : 'text-gray-900 dark:text-white'
                   }">
                     ${group.name}
                     ${hasMultipleItems ? `<span class="text-xs text-gray-500 ml-1">(${group.items.length}x)</span>` : ''}
+                    ${group.isManualGroup ? `<span class="text-xs text-blue-600 dark:text-blue-400 ml-1">(Manuell gruppiert)</span>` : ''}
                   </span>
-                </div>
-
-                <!-- Second Row: Description, Actions, and Amount -->
-                <div class="flex items-center justify-between gap-2 ml-8 sm:ml-0">
-                  <div class="flex items-center gap-2 flex-1 min-w-0">
-                    ${group.descriptions.length > 0 ? `
-                      <p class="text-sm transition-colors truncate ${
-                        isChecked 
-                          ? 'text-green-700 dark:text-green-300 line-through' 
-                          : 'text-muted'
-                      }">
-                        ${group.descriptions.join(', ')}
-                      </p>
-                    ` : ''}
-                  </div>
-                  <div class="flex items-center gap-2 flex-shrink-0">
+                  ${group.descriptions.length > 0 ? `
+                    <p class="text-sm transition-colors flex-shrink-0 ${
+                      isChecked 
+                        ? 'text-green-700 dark:text-green-300 line-through' 
+                        : 'text-muted'
+                    }">
+                      ${group.descriptions.join(', ')}
+                    </p>
+                  ` : ''}
+                  <div class="flex items-center gap-2 flex-shrink-0 ml-auto">
                     ${recipeIds ? `
                       <button class="recipe-highlight-btn w-5 h-5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors flex-shrink-0" 
                               data-recipe-ids="${recipeIds}" 
@@ -500,14 +711,10 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                       </svg>
                     ` : ''}
-                    <span class="${isChecked 
-                      ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-2 py-1 rounded flex-shrink-0'
-                      : 'quantity-badge flex-shrink-0'
-                    }">
-                      ${formattedAmount} ${group.unit}
-                    </span>
+                    ${firstUnitDisplay}
                   </div>
                 </div>
+                ${additionalUnitsDisplay}
               </div>
               ${hasMultipleItems ? `
                 <div class="item-details hidden mt-2 ml-8 mr-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -525,6 +732,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         attachCheckboxListeners();
         attachExpandListeners();
         attachRecipeHighlightListeners();
+        attachGroupSelectionListeners();
         
         // Restore highlights if any recipe was selected
         if (currentlyHighlightedRecipe) {
@@ -532,12 +740,190 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         }
       }
       
+      // Function to attach group selection listeners
+      function attachGroupSelectionListeners() {
+        document.querySelectorAll('.group-selection-checkbox').forEach(checkbox => {
+          checkbox.addEventListener('change', (e) => {
+            const groupId = e.target.getAttribute('data-group-id');
+            const groupElement = e.target.closest('.shopping-item-group');
+            
+            if (e.target.checked) {
+              selectedGroupIds.add(groupId);
+              if (groupElement) {
+                groupElement.classList.add('ring-2', 'ring-blue-500');
+              }
+            } else {
+              selectedGroupIds.delete(groupId);
+              if (groupElement) {
+                groupElement.classList.remove('ring-2', 'ring-blue-500');
+              }
+            }
+            
+            updateGroupSelectionUI();
+          });
+        });
+      }
+      
+      // Function to update group selection UI
+      function updateGroupSelectionUI() {
+        const selectedCount = selectedGroupIds.size;
+        const selectedCountElement = document.getElementById('selected-count');
+        const confirmBtn = document.getElementById('confirm-group-btn');
+        
+        if (selectedCountElement) {
+          selectedCountElement.textContent = `${selectedCount} ausgewählt`;
+        }
+        
+        if (confirmBtn) {
+          confirmBtn.disabled = selectedCount < 2;
+        }
+      }
+      
+      // Function to toggle grouping mode
+      function toggleGroupingMode(enable) {
+        isGroupingMode = enable;
+        selectedGroupIds.clear();
+        
+        const groupBtn = document.getElementById('group-items-btn');
+        const ungroupBtn = document.getElementById('ungroup-items-btn');
+        const selectionControls = document.getElementById('group-selection-controls');
+        
+        if (groupBtn) {
+          groupBtn.style.display = enable ? 'none' : 'flex';
+        }
+        if (ungroupBtn) {
+          ungroupBtn.style.display = enable ? 'none' : (hasManualGroups() ? 'flex' : 'none');
+        }
+        if (selectionControls) {
+          selectionControls.classList.toggle('hidden', !enable);
+        }
+        
+        // Add/remove grouping mode class to body
+        document.body.classList.toggle('grouping-mode', enable);
+        
+        renderShoppingItems();
+      }
+      
+      // Function to check if there are manual groups
+      function hasManualGroups() {
+        return shoppingListData.items.some(item => item.manualGroupId);
+      }
+      
+      // Function to confirm grouping
+      async function confirmGrouping() {
+        if (selectedGroupIds.size < 2) {
+          alert('Bitte wählen Sie mindestens 2 Gruppen aus.');
+          return;
+        }
+        
+        // Generate a new group ID
+        const newGroupId = `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Get all item IDs from selected groups
+        const selectedItemIds = new Set();
+        selectedGroupIds.forEach(groupId => {
+          const groupElement = document.querySelector(`[data-group-id="${groupId}"]`);
+          if (groupElement) {
+            const itemIdsAttr = groupElement.getAttribute('data-item-ids');
+            if (itemIdsAttr) {
+              itemIdsAttr.split(',').forEach(id => selectedItemIds.add(id));
+            }
+          }
+        });
+        
+        // Update items with the new manualGroupId
+        const updatedItems = shoppingListData.items.map(item => {
+          if (selectedItemIds.has(item.id)) {
+            return { ...item, manualGroupId: newGroupId };
+          }
+          return item;
+        });
+        
+        try {
+          const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              items: updatedItems
+            }),
+          });
+          
+          if (response.ok) {
+            const updatedList = await response.json();
+            shoppingListData.items = updatedList.items;
+            
+            // Exit grouping mode and re-render
+            toggleGroupingMode(false);
+            renderShoppingItems();
+            updateHeaderCounters();
+          } else {
+            const error = await response.json();
+            alert(error.error || 'Fehler beim Gruppieren der Artikel');
+          }
+        } catch (error) {
+          console.error('Error grouping items:', error);
+          alert('Fehler beim Gruppieren der Artikel');
+        }
+      }
+      
+      // Function to ungroup all items
+      async function ungroupAll() {
+        if (!hasManualGroups()) {
+          return;
+        }
+        
+        if (!confirm('Möchten Sie wirklich alle manuellen Gruppierungen aufheben?')) {
+          return;
+        }
+        
+        // Remove manualGroupId from all items
+        const updatedItems = shoppingListData.items.map(item => {
+          const { manualGroupId, ...itemWithoutGroupId } = item;
+          return itemWithoutGroupId;
+        });
+        
+        try {
+          const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              items: updatedItems
+            }),
+          });
+          
+          if (response.ok) {
+            const updatedList = await response.json();
+            shoppingListData.items = updatedList.items;
+            
+            // Re-render
+            renderShoppingItems();
+            updateHeaderCounters();
+            
+            // Update ungroup button visibility
+            const ungroupBtn = document.getElementById('ungroup-items-btn');
+            if (ungroupBtn) {
+              ungroupBtn.style.display = 'none';
+            }
+          } else {
+            const error = await response.json();
+            alert(error.error || 'Fehler beim Aufheben der Gruppierungen');
+          }
+        } catch (error) {
+          console.error('Error ungrouping items:', error);
+          alert('Fehler beim Aufheben der Gruppierungen');
+        }
+      }
+      
              // Function to attach expand/collapse listeners
        function attachExpandListeners() {
          document.querySelectorAll('[data-expandable="true"]').forEach(item => {
            item.addEventListener('click', (e) => {
-             // Don't expand if clicking on checkbox
-             if (e.target.closest('.item-checkbox')) {
+             // Don't expand if clicking on checkbox or in grouping mode
+             if (e.target.closest('.item-checkbox') || e.target.closest('.group-selection-checkbox') || isGroupingMode) {
                return;
              }
              
@@ -582,6 +968,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
        function attachCheckboxListeners() {
          document.querySelectorAll('.item-checkbox').forEach(checkbox => {
           checkbox.addEventListener('change', async (e) => {
+          // Don't handle item checkbox changes in grouping mode
+          if (isGroupingMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          
           const target = e.target;
           const itemElement = target.closest('.shopping-item-group');
           const itemIdsAttr = itemElement.getAttribute('data-item-ids');
@@ -688,13 +1081,28 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         
         const formData = new FormData(addItemForm);
         const name = formData.get('name');
-        const amount = parseFloat(formData.get('amount'));
-        const unit = formData.get('unit');
+        const amountValue = formData.get('amount');
+        const unitValue = formData.get('unit');
         const description = formData.get('description');
 
-        if (!name.trim() || !amount || !unit.trim()) {
-          alert('Bitte füllen Sie alle Pflichtfelder aus.');
+        if (!name.trim()) {
+          alert('Bitte geben Sie einen Namen für den Artikel ein.');
           return;
+        }
+
+        // Make amount and unit optional - only include quantity if both are provided
+        const amount = amountValue && !isNaN(parseFloat(amountValue)) ? parseFloat(amountValue) : null;
+        const unit = unitValue && unitValue.trim() ? unitValue.trim() : null;
+        
+        // Only include quantity if both amount and unit are provided (no defaults)
+        const item = {
+          name: name.trim(),
+          description: description.trim() || undefined,
+          isChecked: false
+        };
+        
+        if (amount !== null && unit !== null) {
+          item.quantity = { amount, unit };
         }
 
         try {
@@ -705,12 +1113,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             },
             body: JSON.stringify({
               action: 'add-item',
-              item: {
-                name: name.trim(),
-                quantity: { amount, unit: unit.trim() },
-                description: description.trim() || undefined,
-                isChecked: false
-              }
+              item
             }),
           });
 

@@ -91,11 +91,12 @@ export interface ShoppingListItem {
   id: string;
   name: string;
   description?: string;
-  quantity: Quantity;
+  quantity?: Quantity; // Optional: can be omitted for items without amount/unit
   originalQuantity?: Quantity; // Optional: original quantity from recipe before scaling
   isChecked?: boolean;
   recipeId?: string; // Optional: verknüpft Item mit Rezept
   recipeIngredientId?: string; // Optional: Original Ingredient ID aus dem Rezept
+  manualGroupId?: string; // Optional: ID for manually grouped items
 }
 
 export interface ShoppingListRecipe {

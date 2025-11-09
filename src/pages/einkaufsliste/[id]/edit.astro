@@ -149,7 +149,7 @@ if (!shoppingList) {
                       <input 
                         type="number" 
                         class="item-amount form-input"
-                        value={item.quantity.amount}
+                        value={item.quantity?.amount || ''}
                         placeholder="0"
                         step="0.1"
                         min="0"
@@ -161,7 +161,9 @@ if (!shoppingList) {
                         class="item-unit form-input"
                       >
                         <option value="">Einheit wählen...</option>
-                        <option value={item.quantity.unit} selected>{item.quantity.unit}</option>
+                        {item.quantity?.unit && (
+                          <option value={item.quantity.unit} selected>{item.quantity.unit}</option>
+                        )}
                       </select>
                     </div>
                     <div class="col-span-3">
@@ -506,7 +508,7 @@ if (!shoppingList) {
               </div>
               <div class="col-span-2">
                 <label class="form-label text-sm">Menge</label>
-                <input type="number" class="item-amount form-input" placeholder="0" step="0.1" min="0" value="1" />
+                <input type="number" class="item-amount form-input" placeholder="0" step="0.1" min="0" />
               </div>
               <div class="col-span-2">
                 <label class="form-label text-sm">Einheit</label>
@@ -593,24 +595,28 @@ if (!shoppingList) {
         // Collect items
         const items = Array.from(document.querySelectorAll('.item-edit-row')).map(row => {
           const name = row.querySelector('.item-name')?.value.trim();
-          const amount = parseFloat(row.querySelector('.item-amount')?.value || '1');
-          const unit = row.querySelector('.item-unit')?.value.trim();
+          const amountValue = row.querySelector('.item-amount')?.value;
+          const unitValue = row.querySelector('.item-unit')?.value.trim();
           const description = row.querySelector('.item-description')?.value.trim();
           const isChecked = row.querySelector('.item-checked')?.checked || false;
           const itemId = row.getAttribute('data-item-id');
           const recipeId = row.getAttribute('data-recipe-id');
           const recipeIngredientId = row.getAttribute('data-recipe-ingredient-id');
 
+          const amount = amountValue && !isNaN(parseFloat(amountValue)) ? parseFloat(amountValue) : null;
+          const unit = unitValue && unitValue.trim() ? unitValue.trim() : null;
+
           const item = {
             id: itemId?.startsWith('new-') ? undefined : itemId,
             name,
-            quantity: { 
-              amount: amount || 1, 
-              unit: unit || 'Stück' 
-            },
             description: description || undefined,
             isChecked
           };
+          
+          // Only include quantity if both amount and unit are provided
+          if (amount !== null && unit !== null) {
+            item.quantity = { amount, unit };
+          }
           
           // Preserve recipe information for recipe-based items
           if (recipeId && recipeId !== '') {

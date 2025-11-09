@@ -1,0 +1,309 @@
+---
+declare global {
+  interface Window {
+    openShoppingListModal?: (selectedRecipes: Set<string>) => Promise<void>;
+    createNewShoppingList?: () => Promise<void>;
+  }
+}
+---
+
+<!-- Shopping List Modal (Bulk Operations) -->
+<div id="bulk-shopping-list-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-medium text-gray-900 dark:text-white">Zur Einkaufsliste hinzufügen</h3>
+      <button id="close-shopping-list-modal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="space-y-4">
+      <!-- Create New List Button -->
+      <button id="bulk-create-new-list" class="w-full btn btn-primary flex items-center justify-center space-x-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        <span>Neue Einkaufsliste erstellen</span>
+      </button>
+
+      <!-- Existing Lists -->
+      <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Oder zu bestehender Liste hinzufügen:</h4>
+        <div id="existing-lists" class="space-y-2 max-h-60 overflow-y-auto">
+          <!-- Lists will be inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Shopping List Modal
+  const shoppingListModal = document.getElementById('bulk-shopping-list-modal');
+  const closeShoppingListModal = document.getElementById('close-shopping-list-modal');
+  const createNewList = document.getElementById('bulk-create-new-list');
+  const existingLists = document.getElementById('existing-lists');
+
+  // Store selected recipes in modal scope
+  let currentSelectedRecipes: Set<string> = new Set();
+  let isCreatingList = false; // Prevent multiple simultaneous requests
+  
+  // Global flag to prevent multiple listener attachments
+  const isInitialized = (window as any).shoppingListModalInitialized;
+  if (!isInitialized) {
+    (window as any).shoppingListModalInitialized = true;
+  }
+
+  // Helper function to update selected recipes - always accessible
+  function updateSelectedRecipes(selectedRecipes: Set<string> | string[]) {
+    // Store the selected recipes in modal scope - ensure it's a proper Set
+    if (selectedRecipes instanceof Set) {
+      currentSelectedRecipes = new Set(selectedRecipes);
+    } else if (Array.isArray(selectedRecipes)) {
+      currentSelectedRecipes = new Set(selectedRecipes);
+    } else {
+      return false;
+    }
+    
+    return true;
+  }
+
+  // Helper function to check which recipes are already in a shopping list
+  function getAlreadyAddedRecipes(list: any, selectedRecipeIds: Set<string>): { ids: Set<string>, titles: string[] } {
+    const existingRecipeIds = new Set((list.recipes || []).map((r: any) => r.id));
+    const alreadyAddedIds = new Set<string>();
+    const alreadyAddedTitles: string[] = [];
+    
+    selectedRecipeIds.forEach(recipeId => {
+      if (existingRecipeIds.has(recipeId)) {
+        alreadyAddedIds.add(recipeId);
+        // Find the recipe title from the list
+        const recipe = (list.recipes || []).find((r: any) => r.id === recipeId);
+        if (recipe) {
+          alreadyAddedTitles.push(recipe.title);
+        }
+      }
+    });
+    
+    return { ids: alreadyAddedIds, titles: alreadyAddedTitles };
+  }
+
+  // Expose function to open modal - always update, but only define once
+  window.openShoppingListModal = async (selectedRecipes: Set<string>) => {
+    if (selectedRecipes.size === 0) return;
+
+    // Always update the selected recipes when modal opens
+    if (!updateSelectedRecipes(selectedRecipes)) {
+      return;
+    }
+
+    try {
+      // Fetch existing shopping lists
+      const response = await fetch('/api/shopping-lists');
+      if (!response.ok) throw new Error('Fehler beim Laden der Einkaufslisten');
+      
+      const lists = await response.json();
+      
+      // Clear and populate existing lists
+      if (existingLists) {
+        existingLists.innerHTML = '';
+        
+        if (lists.length === 0) {
+          existingLists.innerHTML = `
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              Keine bestehenden Einkaufslisten gefunden
+            </p>
+          `;
+        } else {
+          lists.forEach((list: any) => {
+            // Check which recipes are already in this list
+            const { ids: alreadyAddedIds, titles: alreadyAddedTitles } = getAlreadyAddedRecipes(list, currentSelectedRecipes);
+            const allRecipesAdded = alreadyAddedIds.size === currentSelectedRecipes.size;
+            const someRecipesAdded = alreadyAddedIds.size > 0 && alreadyAddedIds.size < currentSelectedRecipes.size;
+            
+            const button = document.createElement('button');
+            button.className = 'w-full btn btn-secondary flex flex-col items-start p-3 hover:bg-gray-50 dark:hover:bg-gray-700';
+            
+            // Disable button if all recipes are already added
+            if (allRecipesAdded) {
+              button.disabled = true;
+              button.className += ' opacity-50 cursor-not-allowed';
+            }
+            
+            // Build warning HTML if some recipes are already added
+            const warningHTML = someRecipesAdded ? `
+              <div class="mt-2 pt-2 border-t border-orange-200 dark:border-orange-800 w-full">
+                <div class="flex items-start space-x-2">
+                  <svg class="w-4 h-4 mt-0.5 flex-shrink-0 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div class="text-xs text-orange-600 dark:text-orange-400 flex-1">
+                    <span class="font-medium">Bereits hinzugefügt:</span>
+                    <span class="ml-1">${alreadyAddedTitles.join(', ')}</span>
+                    <div class="mt-1 text-gray-600 dark:text-gray-400">Nur die anderen Rezepte werden hinzugefügt.</div>
+                  </div>
+                </div>
+              </div>
+            ` : '';
+            
+            button.innerHTML = `
+              <div class="flex items-center justify-between w-full">
+                <span class="flex items-center space-x-3">
+                  <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span class="text-left">
+                    <span class="block font-medium">${list.title}</span>
+                    <span class="block text-sm text-gray-500">${list.items?.length || 0} Zutaten</span>
+                    ${allRecipesAdded ? '<span class="block text-xs text-orange-600 dark:text-orange-400 mt-1">Alle Rezepte bereits hinzugefügt</span>' : ''}
+                  </span>
+                </span>
+                <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+              ${warningHTML}
+            `;
+            
+            // Only add click handler if not all recipes are already added
+            if (!allRecipesAdded) {
+              // Filter out already-added recipes
+              const recipesToAdd = new Set(Array.from(currentSelectedRecipes).filter(id => !alreadyAddedIds.has(id)));
+              button.addEventListener('click', () => addToExistingList(list.id, recipesToAdd, alreadyAddedTitles));
+            }
+            
+            existingLists.appendChild(button);
+          });
+        }
+      }
+      
+      // Show modal
+      shoppingListModal?.classList.remove('hidden');
+    } catch (error) {
+      console.error('Fehler beim Laden der Einkaufslisten:', error);
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'text-sm text-red-600 dark:text-red-400 text-center py-4';
+      errorMessage.textContent = 'Fehler beim Laden der Einkaufslisten';
+      if (existingLists) existingLists.innerHTML = errorMessage.outerHTML;
+    }
+  };
+  
+  // Override any existing createNewShoppingList function to prevent conflicts
+  // Protect against overwrites by RecipeListHeader
+  Object.defineProperty(window, 'createNewShoppingList', {
+    value: async () => {
+      // Do nothing - the modal handles this now
+      return;
+    },
+    writable: false,
+    configurable: false
+  });
+
+  // Close modal
+  closeShoppingListModal?.addEventListener('click', () => {
+    shoppingListModal?.classList.add('hidden');
+  });
+
+  // Create new list - handle directly in modal to avoid multiple calls
+  // Only initialize once - use a more robust check
+  if (createNewList && !(createNewList as any).__listenerAttached) {
+    (createNewList as any).__listenerAttached = true;
+    
+    // Remove any existing listeners by cloning the element
+    const newButton = createNewList.cloneNode(true) as HTMLButtonElement;
+    createNewList.parentNode?.replaceChild(newButton, createNewList);
+    (newButton as any).__listenerAttached = true;
+    
+    newButton.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Prevent multiple simultaneous requests
+      if (isCreatingList) {
+        return;
+      }
+      
+      // Capture currentSelectedRecipes at click time to avoid closure issues
+      const recipesToAdd = new Set(currentSelectedRecipes);
+      const recipeArray = Array.from(recipesToAdd);
+      
+      if (recipesToAdd.size === 0) {
+        alert('Keine Rezepte ausgewählt.');
+        return;
+      }
+
+      isCreatingList = true;
+      
+      // Disable button to prevent multiple clicks
+      newButton.disabled = true;
+      const originalText = newButton.innerHTML;
+      newButton.innerHTML = '<span>Wird erstellt...</span>';
+      
+      try {
+        const requestBody = {
+          title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
+          recipeIds: recipeArray
+        };
+        
+        const response = await fetch('/api/shopping-lists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Fehler beim Erstellen der Einkaufsliste');
+        }
+        
+        const result = await response.json();
+        
+        // Redirect immediately to prevent any further actions
+        window.location.href = `/einkaufsliste/${result.id}`;
+      } catch (error) {
+        console.error('Fehler beim Erstellen der Einkaufsliste:', error);
+        alert('Die Einkaufsliste konnte nicht erstellt werden.');
+        isCreatingList = false;
+        newButton.disabled = false;
+        newButton.innerHTML = originalText;
+      }
+    });
+  }
+
+  // Add to existing list
+  async function addToExistingList(listId: string, selectedRecipes: Set<string>, alreadyAddedTitles: string[] = []) {
+    try {
+      // Only add recipes that aren't already in the list
+      if (selectedRecipes.size === 0) {
+        // All recipes were already in the list, just redirect
+        window.location.href = `/einkaufsliste/${listId}`;
+        return;
+      }
+      
+      const response = await fetch(`/api/shopping-lists/${listId}/recipes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeIds: Array.from(selectedRecipes)
+        })
+      });
+      
+      if (!response.ok) throw new Error('Fehler beim Hinzufügen zur Einkaufsliste');
+      
+      window.location.href = `/einkaufsliste/${listId}`;
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen zur Einkaufsliste:', error);
+      alert('Die Rezepte konnten nicht zur Einkaufsliste hinzugefügt werden.');
+    }
+  }
+
+  // Close modal when clicking outside
+  shoppingListModal?.addEventListener('click', (e) => {
+    if (e.target === shoppingListModal) {
+      shoppingListModal.classList.add('hidden');
+    }
+  });
+</script>
+
