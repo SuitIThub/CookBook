@@ -2,6 +2,7 @@
 import '../styles/components.css';
 import MultiTimerManager from '../components/timer/MultiTimerManager.astro';
 import Modal from '../components/Modal.astro';
+import WarningModalLayout from '../components/modals/WarningModalLayout.astro';
 
 export interface Props {
   title: string;
@@ -111,7 +112,7 @@ const { title } = Astro.props;
               </svg>
               <!-- Moon icon (visible in light mode) -->
               <svg id="theme-toggle-dark-icon" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.293 13.293A8 8 0 616.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                <path d="M17.293 13.293A8 8 0 0 0 16.707 2.707a8.001 8.001 0 1 0 10.586 10.586z"></path>
               </svg>
             </button>
           </div>
@@ -126,7 +127,7 @@ const { title } = Astro.props;
               </svg>
               <!-- Moon icon (visible in light mode) -->
               <svg id="theme-toggle-dark-icon-mobile" class="block dark:hidden w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.293 13.293A8 8 0 616.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                <path d="M17.293 13.293A8 8 0 0 0 16.707 2.707a8.001 8.001 0 1 0 10.586 10.586z"></path>
               </svg>
             </button>
             
@@ -168,45 +169,7 @@ const { title } = Astro.props;
     <!-- Global Modal for notifications -->
     <Modal id="notification-modal" size="md" />
 
-    <!-- Warning Modal -->
-    <div id="warning-modal" class="fixed inset-0 z-50 hidden">
-      <!-- Backdrop -->
-      <div class="fixed inset-0 bg-black/50 backdrop-blur-sm"></div>
-      
-      <!-- Modal Container -->
-      <div class="fixed inset-0 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
-          <!-- Header -->
-          <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-white flex items-center">
-              <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-              Wichtige Hinweise
-            </h3>
-            <button class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" id="close-warning-modal">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-          
-          <!-- Content -->
-          <div class="p-4 overflow-y-auto flex-1">
-            <div class="space-y-3" id="warning-list">
-              <!-- Warnings will be inserted here -->
-            </div>
-          </div>
-          
-          <!-- Footer -->
-          <div class="flex justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
-            <button id="continue-to-recipe" class="btn btn-primary">
-              Verstanden, weiter zum Rezept
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <WarningModalLayout />
 
     <script>
       // Declare global functions
@@ -217,7 +180,7 @@ const { title } = Astro.props;
           showInfo: (message: string) => Promise<void>;
           showConfirm: (message: string) => Promise<boolean>;
           showDeleteConfirm: (message: string) => Promise<boolean>;
-          showWarnings: (warnings: string[], onContinue: () => void) => void;
+          showWarnings?: (warnings: string[], onContinue: () => void) => void;
           [key: `modal_${string}`]: {
             show: (options: {
               title: string;

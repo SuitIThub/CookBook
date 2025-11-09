@@ -53,4 +53,45 @@ export const POST: APIRoute = async ({ request, params }) => {
       headers: { 'Content-Type': 'application/json' }
     });
   }
+};
+
+export const DELETE: APIRoute = async ({ request, params }) => {
+  try {
+    const { id } = params;
+    if (!id) {
+      return new Response(JSON.stringify({ error: 'Shopping list ID required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { recipeId } = await request.json();
+    if (!recipeId) {
+      return new Response(JSON.stringify({ error: 'Recipe ID required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Remove recipe from shopping list
+    const updatedList = db.removeRecipeFromShoppingList(id, recipeId);
+    
+    if (!updatedList) {
+      return new Response(JSON.stringify({ error: 'Shopping list or recipe not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(JSON.stringify(updatedList), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error removing recipe from shopping list:', error);
+    return new Response(JSON.stringify({ error: 'Failed to remove recipe from shopping list' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }; 

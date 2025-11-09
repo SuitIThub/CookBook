@@ -19,7 +19,13 @@ const { listCount } = Astro.props;
   
   <div class="flex flex-col sm:flex-row gap-3">
     <!-- Selection Mode Buttons -->
-    <div id="selection-buttons" class="hidden sm:flex-row flex-col w-full sm:w-auto gap-3">
+    <div id="selection-buttons" class="hidden flex flex-col sm:flex-row gap-3">
+      <button id="select-all-btn" class="btn btn-secondary flex items-center space-x-2 w-full sm:w-auto justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Alle auswählen</span>
+      </button>
       <button id="delete-selected-btn" class="btn btn-danger flex items-center space-x-2 w-full sm:w-auto justify-center" disabled>
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -110,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectButton = document.getElementById('select-lists-btn');
   const cancelButton = document.getElementById('cancel-selection-btn');
   const deleteSelectedButton = document.getElementById('delete-selected-btn') as HTMLButtonElement;
+  const selectAllButton = document.getElementById('select-all-btn');
   const normalButtons = document.getElementById('normal-buttons');
   const selectionButtons = document.getElementById('selection-buttons');
   
@@ -147,6 +154,51 @@ document.addEventListener('DOMContentLoaded', () => {
   selectButton?.addEventListener('click', () => toggleSelectionMode(true));
   cancelButton?.addEventListener('click', () => toggleSelectionMode(false));
 
+  // Handle select all
+  selectAllButton?.addEventListener('click', () => {
+    const allCheckboxes = document.querySelectorAll('.shopping-list-checkbox') as NodeListOf<HTMLInputElement>;
+    
+    // Check if all are selected
+    const allSelected = Array.from(allCheckboxes).every(cb => cb.checked);
+    
+    // Toggle all checkboxes
+    allCheckboxes.forEach((checkbox) => {
+      const listId = checkbox.dataset.listId;
+      const card = checkbox.closest('.shopping-list-card') as HTMLElement;
+      
+      if (!listId) {
+        console.warn('Checkbox missing data-list-id attribute');
+        return;
+      }
+      
+      checkbox.checked = !allSelected;
+      
+      if (!allSelected) {
+        // Select all
+        selectedLists.add(listId);
+        if (card) {
+          card.classList.add('selected');
+        }
+        // Dispatch event (event listener will also add to selectedLists, but that's fine)
+        document.dispatchEvent(new CustomEvent('shoppingListSelected', {
+          detail: { listId, selected: true }
+        }));
+      } else {
+        // Deselect all
+        selectedLists.delete(listId);
+        if (card) {
+          card.classList.remove('selected');
+        }
+        // Dispatch event (event listener will also remove from selectedLists, but that's fine)
+        document.dispatchEvent(new CustomEvent('shoppingListSelected', {
+          detail: { listId, selected: false }
+        }));
+      }
+    });
+    
+    updateDeleteButton();
+  });
+
   // Handle bulk delete
   deleteSelectedButton?.addEventListener('click', async () => {
     if (selectedLists.size === 0) return;
@@ -156,29 +208,66 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     if (confirmed) {
-      const deletePromises = Array.from(selectedLists).map(async (listId) => {
+      // Disable button during deletion
+      if (deleteSelectedButton) {
+        deleteSelectedButton.disabled = true;
+      }
+
+      // Set bulk deletion flag to prevent SSE from triggering reloads
+      if ((window as any).setBulkDeleting) {
+        (window as any).setBulkDeleting(true);
+      }
+
+      const listIds = Array.from(selectedLists);
+      let successCount = 0;
+      let failCount = 0;
+      const errors: string[] = [];
+
+      // Delete sequentially to avoid race conditions
+      for (const listId of listIds) {
         try {
           const response = await fetch(`/api/shopping-lists?id=${listId}`, {
             method: 'DELETE'
           });
-          return response.ok;
+          
+          if (response.ok) {
+            successCount++;
+            // Remove from selectedLists as we go
+            selectedLists.delete(listId);
+          } else {
+            failCount++;
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            errors.push(`Liste ${listId}: ${errorData.error || 'Fehler beim Löschen'}`);
+            console.error(`Failed to delete list ${listId}:`, errorData);
+          }
         } catch (error) {
-          console.error('Error deleting shopping list:', error);
-          return false;
+          failCount++;
+          errors.push(`Liste ${listId}: ${error instanceof Error ? error.message : 'Netzwerkfehler'}`);
+          console.error(`Error deleting shopping list ${listId}:`, error);
         }
-      });
+      }
 
-      const results = await Promise.all(deletePromises);
-      const successCount = results.filter(result => result).length;
-      const failCount = selectedLists.size - successCount;
+      // Clear bulk deletion flag
+      if ((window as any).setBulkDeleting) {
+        (window as any).setBulkDeleting(false);
+      }
+
+      // Re-enable button
+      if (deleteSelectedButton) {
+        deleteSelectedButton.disabled = selectedLists.size === 0;
+      }
 
       if (failCount === 0) {
         window.showInfo(`${successCount} ${successCount === 1 ? 'Liste wurde' : 'Listen wurden'} erfolgreich gelöscht`);
+        // Small delay before reload to ensure server has processed all deletions
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
       } else {
-        window.showWarning(`${failCount} ${failCount === 1 ? 'Liste konnte' : 'Listen konnten'} nicht gelöscht werden`);
+        const errorMsg = errors.length > 0 ? `\n\nFehler:\n${errors.slice(0, 3).join('\n')}${errors.length > 3 ? `\n... und ${errors.length - 3} weitere` : ''}` : '';
+        window.showWarning(`${failCount} ${failCount === 1 ? 'Liste konnte' : 'Listen konnten'} nicht gelöscht werden${errorMsg}`);
+        toggleSelectionMode(false);
       }
-
-      toggleSelectionMode(false);
     }
   });
 
@@ -281,7 +370,11 @@ document.addEventListener('DOMContentLoaded', () => {
       window.location.href = `/einkaufsliste/${newList.id}`;
     } catch (error) {
       console.error('Error creating quick shopping list:', error);
-      window.showError('Fehler beim Erstellen der Einkaufsliste');
+      if (window.showError) {
+        window.showError('Fehler beim Erstellen der Einkaufsliste');
+      } else {
+        alert('Fehler beim Erstellen der Einkaufsliste');
+      }
     }
   });
 });

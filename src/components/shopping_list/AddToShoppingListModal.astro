@@ -125,6 +125,12 @@ const { recipeId } = Astro.props;
 
   // Create new list
   async function createNewList() {
+    // Prevent this from being called if it's not the intended button
+    const btn = document.getElementById('create-new-list');
+    if (!btn || btn.closest('#shopping-list-modal') !== modal) {
+      return;
+    }
+    
     try {
       const response = await fetch('/api/shopping-lists', {
         method: 'POST',

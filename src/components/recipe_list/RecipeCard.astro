@@ -1,7 +1,6 @@
 ---
 import type { Recipe } from '../../types/recipe';
 import RecipeImageCarousel from './RecipeImageCarousel.astro';
-import AddToShoppingListModal from '../shopping_list/AddToShoppingListModal.astro';
 
 interface Props {
   recipe: Recipe;
@@ -147,9 +146,6 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
   </div>
 </div>
 
-<!-- Shopping List Modal -->
-<AddToShoppingListModal recipeId={recipe.id} />
-
 <style>
   .recipe-card.selected {
     @apply ring-2 ring-orange-500;
@@ -234,8 +230,12 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         if (!card.classList.contains('selection-mode')) return;
         
         const target = e.target as HTMLElement;
-        // Prevent click if clicking on menu button or menu
-        if (target.closest('.recipe-menu-btn') || target.closest('.recipe-menu')) {
+        // Prevent click if clicking on menu button, menu, or checkbox/selection indicator
+        if (target.closest('.recipe-menu-btn') || 
+            target.closest('.recipe-menu') ||
+            target.closest('.selection-indicator') ||
+            target.classList.contains('recipe-select-checkbox') ||
+            target === card.querySelector('.recipe-select-checkbox')) {
           return;
         }
 
@@ -374,9 +374,10 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
         if (!recipeId) return;
 
-        // Show shopping list modal
-        const modal = document.getElementById('shopping-list-modal');
-        modal?.classList.remove('hidden');
+        // Use the ShoppingListModal (same as bulk operations)
+        if (window.openShoppingListModal) {
+          await window.openShoppingListModal(new Set([recipeId]));
+        }
         menu.classList.add('hidden');
       });
     });
