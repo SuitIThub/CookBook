@@ -2,7 +2,6 @@
 import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
 import node from '@astrojs/node';
-import basicSsl from '@vitejs/plugin-basic-ssl'
 
 // https://astro.build/config
 export default defineConfig({
@@ -10,8 +9,5 @@ export default defineConfig({
   output: 'server',
   adapter: node({
     mode: 'standalone'
-  }),
-  vite: {
-    plugins: [ basicSsl() ]
-  }
+  })
 });

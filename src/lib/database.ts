@@ -175,9 +175,36 @@ export class CookbookDatabase {
       preparationGroups: JSON.parse(row.preparation_groups),
       imageUrl: row.image_url,
       images: row.images ? JSON.parse(row.images) : [],
+      sourceUrl: row.source_url,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     }));
+  }
+
+  getRecipeBySourceUrl(sourceUrl: string): Recipe | null {
+    const stmt = this.db.prepare('SELECT * FROM recipes WHERE source_url = ?');
+    const row = stmt.get(sourceUrl) as any;
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle,
+      description: row.description,
+      metadata: JSON.parse(row.metadata),
+      category: row.category,
+      tags: row.tags ? JSON.parse(row.tags) : [],
+      ingredientGroups: JSON.parse(row.ingredient_groups),
+      preparationGroups: JSON.parse(row.preparation_groups),
+      imageUrl: row.image_url,
+      images: row.images ? JSON.parse(row.images) : [],
+      sourceUrl: row.source_url,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at)
+    };
   }
 
   updateRecipe(id: string, updates: Partial<Recipe>): Recipe | null {

@@ -1,13 +1,62 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../lib/database';
 
-export const GET: APIRoute = async ({ url }) => {
+// Default base URL if not configured elsewhere
+const DEFAULT_BASE_URL = 'https://cookbook.suit-ji.com';
+
+export const GET: APIRoute = async ({ url, request, site }) => {
   try {
     const searchParams = new URL(url).searchParams;
     const id = searchParams.get('id');
+    const sourceUrl = searchParams.get('url');
 
+    // If url parameter is provided, look up recipe by source URL
+    if (sourceUrl) {
+      // Determine the base URL
+      // Priority: 1. Astro site config, 2. Request host (if not localhost), 3. Default
+      let siteBaseUrl = DEFAULT_BASE_URL;
+      
+      if (site) {
+        // Use Astro's site configuration if available
+        siteBaseUrl = site.origin;
+      } else {
+        // Try to get from request, but only if it's not localhost
+        const requestUrl = new URL(request.url);
+        const requestBaseUrl = `${requestUrl.protocol}//${requestUrl.host}`;
+        
+        // Only use request URL if it's not a localhost/development URL
+        if (requestBaseUrl && 
+            !requestBaseUrl.includes('localhost') && 
+            !requestBaseUrl.includes('127.0.0.1') &&
+            !requestBaseUrl.includes('0.0.0.0')) {
+          siteBaseUrl = requestBaseUrl;
+        }
+      }
+
+      // Search for recipe with matching source URL
+      const recipe = db.getRecipeBySourceUrl(sourceUrl);
+
+      if (!recipe) {
+        return new Response(JSON.stringify({ error: 'Recipe not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Return the recipe URL in the project
+      const recipeUrl = `${siteBaseUrl}/rezept/${recipe.id}`;
+
+      return new Response(JSON.stringify({ 
+        url: recipeUrl,
+        recipeId: recipe.id
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // If id parameter is provided, get single recipe
     if (id) {
-      // Get single recipe
       const recipe = db.getRecipe(id);
       if (!recipe) {
         return new Response(JSON.stringify({ error: 'Recipe not found' }), {
@@ -19,14 +68,14 @@ export const GET: APIRoute = async ({ url }) => {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
-    } else {
-      // Get all recipes
-      const recipes = db.getAllRecipes();
-      return new Response(JSON.stringify(recipes), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
     }
+
+    // Otherwise, get all recipes
+    const recipes = db.getAllRecipes();
+    return new Response(JSON.stringify(recipes), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   } catch (error) {
     console.error('Error fetching recipes:', error);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
