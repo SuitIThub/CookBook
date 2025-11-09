@@ -11,13 +11,18 @@ Alle API-Endpunkte sind unter `/api` verfügbar. Die API verwendet standardmäß
 Die Anwendung verwendet Umgebungsvariablen für die Konfiguration. Folgende Dateien werden unterstützt:
 
 - `.env` - Basis-Konfiguration (für alle Umgebungen)
-- `.env.local` - Lokale Entwicklungsumgebung (überschreibt `.env`, wird nicht in Git eingecheckt)
-- `.env.production` - Produktionsumgebung (überschreibt `.env`)
+- `.env.development` - Entwicklungsumgebung (nur im Dev-Modus, überschreibt `.env`, wird nicht in Git eingecheckt)
+- `.env.production` - Produktionsumgebung (nur im Production-Modus, überschreibt `.env`)
+- `.env.local` - Lokale Overrides (für alle Umgebungen, wird nicht in Git eingecheckt)
 
 **Wichtige Umgebungsvariablen:**
 - `PUBLIC_SITE_URL` - Die Basis-URL der Anwendung (z.B. `https://example.com` oder `http://localhost:4321` für Entwicklung)
 
-Für die lokale Entwicklung sollte eine `.env.local` Datei erstellt werden (siehe `.env.local.example` als Vorlage).
+**Lade-Reihenfolge:**
+- **Development** (`npm run dev`): `.env.development` → `.env.local` → `.env`
+- **Production** (`npm run build` / `npm run start`): `.env.production` → `.env.local` → `.env`
+
+Für die lokale Entwicklung sollte eine `.env.development` Datei erstellt werden (siehe `.env.development.example` als Vorlage).
 
 ## Fehlerbehandlung
 
