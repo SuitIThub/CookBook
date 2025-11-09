@@ -180,7 +180,7 @@ const { title } = Astro.props;
           showInfo: (message: string) => Promise<void>;
           showConfirm: (message: string) => Promise<boolean>;
           showDeleteConfirm: (message: string) => Promise<boolean>;
-          showWarnings: (warnings: string[], onContinue: () => void) => void;
+          showWarnings?: (warnings: string[], onContinue: () => void) => void;
           [key: `modal_${string}`]: {
             show: (options: {
               title: string;
