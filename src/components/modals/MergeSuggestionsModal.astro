@@ -1,0 +1,433 @@
+---
+declare global {
+  interface Window {
+    openMergeSuggestionsModal?: () => Promise<void>;
+  }
+}
+---
+
+<!-- Merge Suggestions Modal -->
+<div
+  id="merge-suggestions-modal"
+  class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
+    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
+      Zutaten-Zusammenführungsvorschläge
+    </h2>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+      Ähnliche Zutaten wurden gruppiert. Wählen Sie für jede Gruppe, ob sie zusammengeführt werden soll oder verworfen wird.
+    </p>
+    <div id="merge-groups-list" class="flex-1 overflow-y-auto space-y-4 mb-4">
+      <!-- Groups will be loaded here -->
+    </div>
+    <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div id="queue-status" class="text-sm text-gray-600 dark:text-gray-400">
+        <span id="queue-count">0</span> Vereinheit(en) in Warteschlange
+      </div>
+      <div class="flex space-x-3">
+        <button
+          id="confirm-merge-btn"
+          class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled
+        >
+          Vereinheiten ausführen
+        </button>
+        <button
+          id="close-merge-suggestions-btn"
+          class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          Schließen
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let allIngredients: Array<{ name: string; usageCount: number }> = [];
+  let mergeQueue: Array<{ groupIndex: number; targetIngredient: string; ingredientsToMerge: Array<string> }> = [];
+  let groups: Array<Array<{ name: string; usageCount: number }>> = [];
+
+  // Calculate similarity between two strings (same as in zutaten.astro)
+  function calculateSimilarity(str1: string, str2: string): number {
+    const s1 = str1.toLowerCase();
+    const s2 = str2.toLowerCase();
+    
+    // Exact match
+    if (s1 === s2) return 1.0;
+    
+    // One string contains the other
+    if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+    
+    // Calculate Levenshtein distance
+    const len1 = s1.length;
+    const len2 = s2.length;
+    const matrix: number[][] = [];
+    
+    for (let i = 0; i <= len1; i++) {
+      matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= len2; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost
+        );
+      }
+    }
+    
+    const distance = matrix[len1][len2];
+    const maxLen = Math.max(len1, len2);
+    return 1 - (distance / maxLen);
+  }
+
+  // Group similar ingredients
+  function groupSimilarIngredients(ingredients: Array<{ name: string; usageCount: number }>, threshold: number = 0.7): Array<Array<{ name: string; usageCount: number }>> {
+    const groups: Array<Array<{ name: string; usageCount: number }>> = [];
+    const used = new Set<string>();
+
+    for (let i = 0; i < ingredients.length; i++) {
+      if (used.has(ingredients[i].name)) continue;
+
+      const group: Array<{ name: string; usageCount: number }> = [ingredients[i]];
+      used.add(ingredients[i].name);
+
+      for (let j = i + 1; j < ingredients.length; j++) {
+        if (used.has(ingredients[j].name)) continue;
+
+        const similarity = calculateSimilarity(ingredients[i].name, ingredients[j].name);
+        if (similarity >= threshold) {
+          group.push(ingredients[j]);
+          used.add(ingredients[j].name);
+        }
+      }
+
+      // Only add groups with at least 2 ingredients
+      if (group.length >= 2) {
+        // Sort by usage count (descending) so most used ingredient is first
+        group.sort((a, b) => b.usageCount - a.usageCount);
+        groups.push(group);
+      }
+    }
+
+    return groups;
+  }
+
+  // Update queue status display
+  function updateQueueStatus() {
+    const queueCount = document.getElementById('queue-count');
+    const confirmBtn = document.getElementById('confirm-merge-btn');
+    
+    if (queueCount) {
+      queueCount.textContent = mergeQueue.length.toString();
+    }
+    
+    if (confirmBtn) {
+      confirmBtn.disabled = mergeQueue.length === 0;
+    }
+  }
+
+  async function openMergeSuggestionsModal() {
+    const modal = document.getElementById('merge-suggestions-modal');
+    const groupsList = document.getElementById('merge-groups-list');
+
+    if (!modal || !groupsList) return;
+
+    // Load ingredients
+    try {
+      const response = await fetch('/api/ingredients?all=true');
+      if (response.ok) {
+        allIngredients = await response.json();
+      }
+    } catch (error) {
+      console.error('Error loading ingredients:', error);
+      if (window.showWarning) {
+        window.showWarning('Fehler beim Laden der Zutaten.');
+      } else {
+        alert('Fehler beim Laden der Zutaten.');
+      }
+      return;
+    }
+
+    groupsList.innerHTML = '<div class="text-center py-4 text-gray-500 dark:text-gray-400">Analysiere Zutaten...</div>';
+    modal.classList.remove('hidden');
+
+    // Reset queue
+    mergeQueue = [];
+    updateQueueStatus();
+
+    // Group similar ingredients
+    groups = groupSimilarIngredients(allIngredients, 0.7);
+
+    if (groups.length === 0) {
+      groupsList.innerHTML = '<div class="text-center py-8 text-gray-500 dark:text-gray-400">Keine ähnlichen Zutaten gefunden, die zusammengeführt werden könnten.</div>';
+      return;
+    }
+
+    // Render groups
+    groupsList.innerHTML = groups.map((group, groupIndex) => {
+      const groupId = `group-${groupIndex}`;
+      const targetSelectId = `target-select-${groupIndex}`;
+      
+      return `
+        <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50" data-group-id="${groupId}">
+          <div class="mb-3">
+            <h3 class="font-semibold text-gray-900 dark:text-white mb-2">Gruppe ${groupIndex + 1}</h3>
+            <div class="space-y-1 mb-3">
+              ${group.map(ing => `
+                <div class="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600">
+                  <span class="text-gray-900 dark:text-white">${ing.name}</span>
+                  <span class="text-sm text-gray-500 dark:text-gray-400">${ing.usageCount} ${ing.usageCount === 1 ? 'Rezept' : 'Rezepte'}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div class="flex items-center space-x-3">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Vereinigen in:
+            </label>
+            <select id="${targetSelectId}" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+              ${group.map(ing => `<option value="${ing.name}">${ing.name}</option>`).join('')}
+            </select>
+            <button
+              class="merge-group-btn px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors text-sm font-medium"
+              data-group-index="${groupIndex}"
+            >
+              Zur Warteschlange hinzufügen
+            </button>
+            <button
+              class="dismiss-group-btn px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
+              data-group-index="${groupIndex}"
+            >
+              Verwerfen
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Mark group as queued
+    function markGroupAsQueued(groupIndex: number, isQueued: boolean) {
+      const groupElement = document.querySelector(`[data-group-id="group-${groupIndex}"]`) as HTMLElement;
+      const mergeBtn = groupElement?.querySelector(`.merge-group-btn[data-group-index="${groupIndex}"]`) as HTMLButtonElement;
+      const targetSelect = document.getElementById(`target-select-${groupIndex}`) as HTMLSelectElement;
+      
+      if (groupElement) {
+        if (isQueued) {
+          groupElement.classList.add('ring-2', 'ring-orange-500', 'bg-orange-50', 'dark:bg-orange-900/20');
+          groupElement.classList.remove('bg-gray-50', 'dark:bg-gray-700/50');
+          if (mergeBtn) {
+            mergeBtn.textContent = 'Aus Warteschlange entfernen';
+            mergeBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+            mergeBtn.classList.add('bg-gray-500', 'hover:bg-gray-600');
+          }
+          if (targetSelect) {
+            targetSelect.disabled = true;
+          }
+        } else {
+          groupElement.classList.remove('ring-2', 'ring-orange-500', 'bg-orange-50', 'dark:bg-orange-900/20');
+          groupElement.classList.add('bg-gray-50', 'dark:bg-gray-700/50');
+          if (mergeBtn) {
+            mergeBtn.textContent = 'Zur Warteschlange hinzufügen';
+            mergeBtn.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+            mergeBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+          }
+          if (targetSelect) {
+            targetSelect.disabled = false;
+          }
+        }
+      }
+    }
+
+    // Setup event listeners for merge buttons
+    document.querySelectorAll('.merge-group-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const groupIndex = parseInt((e.currentTarget as HTMLElement).getAttribute('data-group-index') || '0');
+        const group = groups[groupIndex];
+        const targetSelect = document.getElementById(`target-select-${groupIndex}`) as HTMLSelectElement;
+        
+        if (!targetSelect || !group) return;
+
+        const targetIngredient = targetSelect.value;
+        const ingredientsToMerge = group.filter(ing => ing.name !== targetIngredient).map(ing => ing.name);
+
+        if (ingredientsToMerge.length === 0) {
+          if (window.showWarning) {
+            window.showWarning('Alle Zutaten in dieser Gruppe sind bereits identisch.');
+          } else {
+            alert('Alle Zutaten in dieser Gruppe sind bereits identisch.');
+          }
+          return;
+        }
+
+        // Check if already in queue
+        const queueIndex = mergeQueue.findIndex(q => q.groupIndex === groupIndex);
+        
+        if (queueIndex >= 0) {
+          // Remove from queue
+          mergeQueue.splice(queueIndex, 1);
+          markGroupAsQueued(groupIndex, false);
+        } else {
+          // Add to queue
+          mergeQueue.push({
+            groupIndex,
+            targetIngredient,
+            ingredientsToMerge
+          });
+          markGroupAsQueued(groupIndex, true);
+        }
+        
+        updateQueueStatus();
+      });
+    });
+
+    // Setup event listeners for dismiss buttons
+    document.querySelectorAll('.dismiss-group-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const groupIndex = parseInt((e.currentTarget as HTMLElement).getAttribute('data-group-index') || '0');
+        const groupElement = document.querySelector(`[data-group-id="group-${groupIndex}"]`);
+        
+        if (groupElement) {
+          groupElement.remove();
+        }
+
+        // Check if all groups are processed
+        const remainingGroups = document.querySelectorAll('[data-group-id^="group-"]');
+        if (remainingGroups.length === 0) {
+          groupsList.innerHTML = '<div class="text-center py-8 text-gray-500 dark:text-gray-400">Alle Gruppen wurden bearbeitet.</div>';
+        }
+      });
+    });
+  }
+
+  async function executeMergeQueue() {
+    if (mergeQueue.length === 0) return;
+
+    const confirmBtn = document.getElementById('confirm-merge-btn');
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Führe Vereinheiten aus...';
+    }
+
+    let totalSuccessCount = 0;
+    let totalErrorCount = 0;
+
+    for (const queueItem of mergeQueue) {
+      for (const ingredientName of queueItem.ingredientsToMerge) {
+        try {
+          const response = await fetch('/api/ingredients', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              action: 'unify',
+              oldName: ingredientName,
+              newName: queueItem.targetIngredient
+            })
+          });
+
+          if (response.ok) {
+            totalSuccessCount++;
+          } else {
+            totalErrorCount++;
+          }
+        } catch (error) {
+          console.error(`Error merging ${ingredientName}:`, error);
+          totalErrorCount++;
+        }
+      }
+    }
+
+    if (totalSuccessCount > 0) {
+      if (window.showInfo) {
+        window.showInfo(`${totalSuccessCount} Zutat(en) erfolgreich vereinigt.${totalErrorCount > 0 ? ` ${totalErrorCount} Fehler aufgetreten.` : ''}`);
+      } else {
+        alert(`${totalSuccessCount} Zutat(en) erfolgreich vereinigt.${totalErrorCount > 0 ? ` ${totalErrorCount} Fehler aufgetreten.` : ''}`);
+      }
+    }
+
+    if (totalErrorCount > 0 && totalSuccessCount === 0) {
+      if (window.showWarning) {
+        window.showWarning('Fehler beim Vereinigen der Zutaten.');
+      } else {
+        alert('Fehler beim Vereinigen der Zutaten.');
+      }
+    }
+
+    // Reload page to show updated ingredients
+    if (totalSuccessCount > 0) {
+      window.location.reload();
+    } else {
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Vereinheiten ausführen';
+      }
+    }
+  }
+
+  function closeMergeSuggestionsModal() {
+    if (mergeQueue.length > 0) {
+      const shouldClose = confirm(`Es sind ${mergeQueue.length} Vereinheit(en) in der Warteschlange. Möchten Sie diese verwerfen und das Modal schließen?`);
+      if (!shouldClose) {
+        return;
+      }
+    }
+
+    const modal = document.getElementById('merge-suggestions-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+      mergeQueue = [];
+      updateQueueStatus();
+    }
+  }
+
+  function setupMergeSuggestionsModal() {
+    const modal = document.getElementById('merge-suggestions-modal');
+    const closeBtn = document.getElementById('close-merge-suggestions-btn');
+    const confirmBtn = document.getElementById('confirm-merge-btn');
+
+    if (!modal || !closeBtn || !confirmBtn) return;
+
+    confirmBtn.addEventListener('click', async () => {
+      await executeMergeQueue();
+    });
+
+    closeBtn.addEventListener('click', () => {
+      closeMergeSuggestionsModal();
+    });
+
+    // Close modal on background click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeMergeSuggestionsModal();
+      }
+    });
+
+    // Close modal on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+        closeMergeSuggestionsModal();
+      }
+    });
+  }
+
+  // Expose function globally
+  window.openMergeSuggestionsModal = openMergeSuggestionsModal;
+
+  // Initialize on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupMergeSuggestionsModal);
+  } else {
+    setupMergeSuggestionsModal();
+  }
+</script>
+

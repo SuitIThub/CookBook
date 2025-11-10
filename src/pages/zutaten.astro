@@ -2,6 +2,7 @@
 export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import RecipesModal from '../components/modals/RecipesModal.astro';
+import MergeSuggestionsModal from '../components/modals/MergeSuggestionsModal.astro';
 import { db } from '../lib/database';
 
 // Load all ingredients from database
@@ -27,14 +28,20 @@ try {
       </div>
     </div>
 
-    <!-- Search bar -->
-    <div class="mb-6">
+    <!-- Search bar and merge button -->
+    <div class="mb-6 flex items-center space-x-3">
       <input
         type="text"
         id="ingredient-search"
         placeholder="Zutaten suchen..."
-        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+        class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
       />
+      <button
+        id="merge-suggestions-btn"
+        class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
+      >
+        Zusammenführungsvorschläge
+      </button>
     </div>
 
     <!-- Ingredients list -->
@@ -82,6 +89,7 @@ try {
   </div>
 
   <RecipesModal />
+  <MergeSuggestionsModal />
 
   <!-- Rename Modal -->
   <div
@@ -132,15 +140,33 @@ try {
       <p class="text-gray-600 dark:text-gray-400 mb-4">
         Wählen Sie die Zutat, mit der "<span id="old-ingredient-name" class="font-semibold"></span>" vereinheitlicht werden soll:
       </p>
-      <div class="mb-4">
-        <input
-          type="text"
-          id="new-ingredient-input"
-          placeholder="Zutat eingeben oder auswählen..."
-          class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-          list="ingredient-suggestions"
-        />
-        <datalist id="ingredient-suggestions"></datalist>
+      <div class="mb-4 relative">
+        <div class="relative">
+          <input
+            type="text"
+            id="new-ingredient-input"
+            placeholder="Zutat eingeben oder auswählen..."
+            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            autocomplete="off"
+          />
+          <div
+            id="ingredient-dropdown"
+            class="hidden absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-90 overflow-hidden"
+          >
+            <div class="p-2 border-b border-gray-200 dark:border-gray-700">
+              <input
+                type="text"
+                id="ingredient-filter-input"
+                placeholder="Zutaten filtern..."
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                autocomplete="off"
+              />
+            </div>
+            <div id="ingredient-options" class="max-h-72 overflow-y-auto">
+              <!-- Options will be populated here -->
+            </div>
+          </div>
+        </div>
       </div>
       <div class="flex justify-end space-x-3">
         <button
@@ -172,6 +198,7 @@ try {
       setupUnifyButtons();
       setupRenameModal();
       setupModal();
+      setupMergeSuggestionsButton();
     });
 
     async function loadIngredients() {
@@ -236,6 +263,17 @@ try {
       });
     }
 
+    function setupMergeSuggestionsButton() {
+      const mergeBtn = document.getElementById('merge-suggestions-btn');
+      if (!mergeBtn) return;
+
+      mergeBtn.addEventListener('click', async () => {
+        if (window.openMergeSuggestionsModal) {
+          await window.openMergeSuggestionsModal();
+        }
+      });
+    }
+
     function setupRenameModal() {
       const modal = document.getElementById('rename-modal');
       const cancelBtn = document.getElementById('cancel-rename-btn');
@@ -291,20 +329,182 @@ try {
       const cancelBtn = document.getElementById('cancel-unify-btn');
       const confirmBtn = document.getElementById('confirm-unify-btn');
       const newIngredientInput = document.getElementById('new-ingredient-input') as HTMLInputElement;
+      const dropdown = document.getElementById('ingredient-dropdown');
+      const filterInput = document.getElementById('ingredient-filter-input') as HTMLInputElement;
+      const optionsContainer = document.getElementById('ingredient-options');
 
-      if (!modal || !cancelBtn || !confirmBtn || !newIngredientInput) return;
+      if (!modal || !cancelBtn || !confirmBtn || !newIngredientInput || !dropdown || !filterInput || !optionsContainer) return;
 
-      // Setup autocomplete
-      const datalist = document.getElementById('ingredient-suggestions');
-      if (datalist) {
-        allIngredients.forEach((ing) => {
-          if (ing.name !== currentOldIngredient) {
-            const option = document.createElement('option');
-            option.value = ing.name;
-            datalist.appendChild(option);
+      // Open dropdown when input is focused or clicked
+      newIngredientInput.addEventListener('focus', () => {
+        updateDropdownOptions('');
+        dropdown?.classList.remove('hidden');
+        setTimeout(() => {
+          filterInput?.focus();
+        }, 50);
+      });
+
+      newIngredientInput.addEventListener('click', () => {
+        updateDropdownOptions('');
+        dropdown?.classList.remove('hidden');
+        setTimeout(() => {
+          filterInput?.focus();
+        }, 50);
+      });
+
+      // Also filter when typing directly in the main input
+      newIngredientInput.addEventListener('input', (e) => {
+        const inputValue = (e.target as HTMLInputElement).value;
+        filterInput.value = inputValue;
+        updateDropdownOptions(inputValue.toLowerCase());
+        if (!dropdown.classList.contains('hidden') || inputValue.length > 0) {
+          dropdown.classList.remove('hidden');
+        }
+      });
+
+      // Filter options when typing in filter input
+      filterInput.addEventListener('input', (e) => {
+        const filterText = (e.target as HTMLInputElement).value.toLowerCase();
+        updateDropdownOptions(filterText);
+      });
+
+      // Calculate similarity between two strings (simple Levenshtein-based)
+      function calculateSimilarity(str1: string, str2: string): number {
+        const s1 = str1.toLowerCase();
+        const s2 = str2.toLowerCase();
+        
+        // Exact match
+        if (s1 === s2) return 1.0;
+        
+        // One string contains the other
+        if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+        
+        // Calculate Levenshtein distance
+        const len1 = s1.length;
+        const len2 = s2.length;
+        const matrix: number[][] = [];
+        
+        for (let i = 0; i <= len1; i++) {
+          matrix[i] = [i];
+        }
+        
+        for (let j = 0; j <= len2; j++) {
+          matrix[0][j] = j;
+        }
+        
+        for (let i = 1; i <= len1; i++) {
+          for (let j = 1; j <= len2; j++) {
+            const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+              matrix[i - 1][j] + 1,
+              matrix[i][j - 1] + 1,
+              matrix[i - 1][j - 1] + cost
+            );
           }
+        }
+        
+        const distance = matrix[len1][len2];
+        const maxLen = Math.max(len1, len2);
+        return 1 - (distance / maxLen);
+      }
+
+      // Handle option selection
+      function selectOption(ingredientName: string) {
+        newIngredientInput.value = ingredientName;
+        dropdown.classList.add('hidden');
+        filterInput.value = '';
+        newIngredientInput.focus();
+      }
+
+      // Create option element
+      function createOptionElement(ingredientName: string, isHighlighted: boolean = false) {
+        const option = document.createElement('div');
+        option.className = `px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-white ${isHighlighted ? 'bg-orange-50 dark:bg-orange-900/20' : ''}`;
+        option.textContent = ingredientName;
+        option.addEventListener('click', () => {
+          selectOption(ingredientName);
+        });
+        return option;
+      }
+
+      // Update dropdown options based on filter
+      function updateDropdownOptions(filterText: string) {
+        if (!optionsContainer) return;
+        
+        optionsContainer.innerHTML = '';
+        
+        let filteredIngredients = allIngredients.filter((ing) => {
+          if (ing.name === currentOldIngredient) return false;
+          if (!filterText) return true;
+          return ing.name.toLowerCase().includes(filterText);
+        });
+
+        if (filteredIngredients.length === 0) {
+          const noResults = document.createElement('div');
+          noResults.className = 'px-4 py-3 text-sm text-gray-500 dark:text-gray-400 text-center';
+          noResults.textContent = 'Keine Zutaten gefunden';
+          optionsContainer.appendChild(noResults);
+          return;
+        }
+
+        // Calculate similarity scores and sort
+        const ingredientsWithSimilarity = filteredIngredients.map((ing) => ({
+          ...ing,
+          similarity: calculateSimilarity(currentOldIngredient, ing.name)
+        }));
+
+        // Sort by similarity (highest first)
+        ingredientsWithSimilarity.sort((a, b) => b.similarity - a.similarity);
+
+        // Get top 5 most similar from filtered results
+        const topSuggestions = ingredientsWithSimilarity.slice(0, 5);
+        const remainingIngredients = ingredientsWithSimilarity.slice(5);
+
+        // Add top suggestions with separator
+        if (topSuggestions.length > 0) {
+          topSuggestions.forEach((ing) => {
+            const option = createOptionElement(ing.name, true);
+            optionsContainer.appendChild(option);
+          });
+
+          // Add separator if there are remaining ingredients
+          if (remainingIngredients.length > 0) {
+            const separator = document.createElement('div');
+            separator.className = 'px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700';
+            separator.textContent = 'Weitere Zutaten';
+            optionsContainer.appendChild(separator);
+          }
+        }
+
+        // Add remaining ingredients
+        remainingIngredients.forEach((ing) => {
+          const option = createOptionElement(ing.name, false);
+          optionsContainer.appendChild(option);
         });
       }
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (dropdown && !dropdown.contains(e.target as Node) && e.target !== newIngredientInput) {
+          dropdown.classList.add('hidden');
+          filterInput.value = '';
+        }
+      });
+
+      // Handle keyboard navigation
+      filterInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          dropdown.classList.add('hidden');
+          filterInput.value = '';
+          newIngredientInput.focus();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          const firstOption = optionsContainer?.querySelector('div[class*="cursor-pointer"]') as HTMLElement;
+          if (firstOption) {
+            selectOption(firstOption.textContent || '');
+          }
+        }
+      });
 
       cancelBtn.addEventListener('click', () => {
         closeUnifyModal();
@@ -343,7 +543,14 @@ try {
       // Close modal on ESC key
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
-          closeUnifyModal();
+          const dropdown = document.getElementById('ingredient-dropdown');
+          if (dropdown && !dropdown.classList.contains('hidden')) {
+            dropdown.classList.add('hidden');
+            const filterInput = document.getElementById('ingredient-filter-input') as HTMLInputElement;
+            if (filterInput) filterInput.value = '';
+          } else {
+            closeUnifyModal();
+          }
         }
       });
     }
@@ -376,32 +583,31 @@ try {
       const modal = document.getElementById('unify-modal');
       const oldNameSpan = document.getElementById('old-ingredient-name');
       const newIngredientInput = document.getElementById('new-ingredient-input') as HTMLInputElement;
+      const dropdown = document.getElementById('ingredient-dropdown');
+      const filterInput = document.getElementById('ingredient-filter-input') as HTMLInputElement;
 
       if (!modal || !oldNameSpan || !newIngredientInput) return;
 
       oldNameSpan.textContent = oldIngredient;
       newIngredientInput.value = '';
+      if (dropdown) dropdown.classList.add('hidden');
+      if (filterInput) filterInput.value = '';
       modal.classList.remove('hidden');
       newIngredientInput.focus();
-
-      // Update datalist
-      const datalist = document.getElementById('ingredient-suggestions');
-      if (datalist) {
-        datalist.innerHTML = '';
-        allIngredients.forEach((ing) => {
-          if (ing.name !== oldIngredient) {
-            const option = document.createElement('option');
-            option.value = ing.name;
-            datalist.appendChild(option);
-          }
-        });
-      }
     }
 
     function closeUnifyModal() {
       const modal = document.getElementById('unify-modal');
+      const dropdown = document.getElementById('ingredient-dropdown');
+      const filterInput = document.getElementById('ingredient-filter-input') as HTMLInputElement;
       if (modal) {
         modal.classList.add('hidden');
+      }
+      if (dropdown) {
+        dropdown.classList.add('hidden');
+      }
+      if (filterInput) {
+        filterInput.value = '';
       }
       currentOldIngredient = '';
     }
