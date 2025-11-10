@@ -66,6 +66,24 @@ const EXPECTED_SCHEMA = {
         { name: 'name', type: 'TEXT', nullable: false, unique: true },
         { name: 'usage_count', type: 'INTEGER', nullable: true, defaultValue: '1' }
       ]
+    },
+    global_timers: {
+      columns: [
+        { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+        { name: 'label', type: 'TEXT', nullable: false },
+        { name: 'duration', type: 'INTEGER', nullable: false },
+        { name: 'remaining', type: 'INTEGER', nullable: false },
+        { name: 'is_running', type: 'INTEGER', nullable: false, defaultValue: '0' },
+        { name: 'is_completed', type: 'INTEGER', nullable: false, defaultValue: '0' },
+        { name: 'recipe_name', type: 'TEXT', nullable: true },
+        { name: 'step_description', type: 'TEXT', nullable: true },
+        { name: 'recipe_id', type: 'TEXT', nullable: true },
+        { name: 'step_id', type: 'TEXT', nullable: true },
+        { name: 'start_time', type: 'INTEGER', nullable: true },
+        { name: 'pause_time', type: 'INTEGER', nullable: true },
+        { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
+        { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
+      ]
     }
   },
   directories: [
