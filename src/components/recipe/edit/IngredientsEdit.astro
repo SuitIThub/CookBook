@@ -290,6 +290,33 @@ document.addEventListener('DOMContentLoaded', async function() {
   let dragPreview = null;
   let touchTarget = null;
   
+  // Track text selection in input fields
+  let isMouseDownOnInput = false;
+  let isSelectingTextInInput = false;
+  let mouseDownInputElement: HTMLElement | null = null;
+  
+  // Global mousemove handler to track text selection
+  document.addEventListener('mousemove', (e) => {
+    if (isMouseDownOnInput && mouseDownInputElement) {
+      // Check if mouse is still over the input or if text is being selected
+      const isOverInput = mouseDownInputElement.contains(e.target as Node);
+      if (isOverInput) {
+        isSelectingTextInInput = true;
+      }
+    }
+  });
+  
+  // Global mouseup handler to reset flags
+  document.addEventListener('mouseup', () => {
+    if (isMouseDownOnInput) {
+      setTimeout(() => {
+        isMouseDownOnInput = false;
+        isSelectingTextInInput = false;
+        mouseDownInputElement = null;
+      }, 100);
+    }
+  });
+  
   // Check if device supports touch
   const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
@@ -324,6 +351,63 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Add mouse events to the whole item
         item.addEventListener('dragstart', handleDragStart);
         item.addEventListener('dragend', handleDragEnd);
+        
+        // Prevent drag when clicking on input fields
+        const inputFields = item.querySelectorAll('input, textarea, select');
+        inputFields.forEach(input => {
+          const inputEl = input as HTMLElement;
+          
+          // Set draggable to false to prevent parent drag
+          inputEl.setAttribute('draggable', 'false');
+          
+          // Track mousedown on input
+          inputEl.addEventListener('mousedown', (e) => {
+            isMouseDownOnInput = true;
+            isSelectingTextInInput = false;
+            mouseDownInputElement = inputEl;
+            e.stopPropagation();
+          });
+          
+          // Track mousemove while mouse is down (text selection)
+          inputEl.addEventListener('mousemove', (e) => {
+            if (isMouseDownOnInput && mouseDownInputElement === inputEl) {
+              isSelectingTextInInput = true;
+            }
+          });
+          
+          // Reset on mouseup
+          inputEl.addEventListener('mouseup', (e) => {
+            // Delay reset to allow dragstart check
+            setTimeout(() => {
+              if (mouseDownInputElement === inputEl) {
+                isMouseDownOnInput = false;
+                isSelectingTextInInput = false;
+                mouseDownInputElement = null;
+              }
+            }, 100);
+            e.stopPropagation();
+          });
+          
+          // Also reset if mouse leaves the input while selecting
+          inputEl.addEventListener('mouseleave', () => {
+            if (isMouseDownOnInput && mouseDownInputElement === inputEl) {
+              setTimeout(() => {
+                if (mouseDownInputElement === inputEl) {
+                  isMouseDownOnInput = false;
+                  isSelectingTextInInput = false;
+                  mouseDownInputElement = null;
+                }
+              }, 100);
+            }
+          });
+          
+          // Prevent dragstart when clicking on inputs
+          inputEl.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          });
+        });
         
         // Add touch events only to the drag handle
         if (isTouchDevice) {
@@ -667,6 +751,68 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   // Original drag handlers (for mouse/desktop)
   function handleDragStart(e) {
+    const target = e.target as HTMLElement;
+    
+    // Check if drag is starting from drag handle - always allow
+    const isDragHandle = target.closest('.drag-handle');
+    if (isDragHandle) {
+      // Clear any input-related flags when dragging from handle
+      isMouseDownOnInput = false;
+      isSelectingTextInInput = false;
+    } else {
+      // Prevent drag if user was selecting text in an input field
+      if (isSelectingTextInInput || isMouseDownOnInput) {
+        e.preventDefault();
+        return false;
+      }
+      
+      // Check if an input field is currently focused
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.tagName === 'SELECT'
+      );
+      
+      if (isInputFocused) {
+        e.preventDefault();
+        return false;
+      }
+      
+      // Check if drag is starting from an input field
+      const isInputField = target.tagName === 'INPUT' || 
+                           target.tagName === 'TEXTAREA' || 
+                           target.tagName === 'SELECT' ||
+                           target.closest('input, textarea, select');
+      
+      if (isInputField) {
+        e.preventDefault();
+        return false;
+      }
+      
+      // Check if user is selecting text within an input field
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const commonAncestor = range.commonAncestorContainer;
+        const isTextSelectedInInput = commonAncestor.nodeType === Node.TEXT_NODE 
+          ? (commonAncestor.parentElement?.tagName === 'INPUT' || 
+             commonAncestor.parentElement?.tagName === 'TEXTAREA' ||
+             commonAncestor.parentElement?.closest('input, textarea'))
+          : (commonAncestor.nodeType === Node.ELEMENT_NODE && 
+             ((commonAncestor as Element).tagName === 'INPUT' || 
+              (commonAncestor as Element).tagName === 'TEXTAREA' ||
+              (commonAncestor as Element).closest('input, textarea')));
+        
+        if (isTextSelectedInInput && selection.toString().length > 0) {
+          // Prevent drag if text is selected in an input field
+          e.preventDefault();
+          return false;
+        }
+      }
+    }
+    
+    // Allow drag - proceed with drag operation
     draggedElement = e.currentTarget;
     const parent = draggedElement.parentNode;
     draggedData = {
