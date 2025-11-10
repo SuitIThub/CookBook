@@ -1,6 +1,7 @@
 ---
 export const prerender = false;
 import Layout from '../layouts/Layout.astro';
+import RecipesModal from '../components/modals/RecipesModal.astro';
 import { db } from '../lib/database';
 
 // Load all ingredients from database
@@ -49,12 +50,26 @@ try {
               ({ingredient.usageCount} {ingredient.usageCount === 1 ? 'Rezept' : 'Rezepte'})
             </span>
           </div>
-          <button
-            class="unify-btn px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors text-sm font-medium"
-            data-ingredient-name={ingredient.name}
-          >
-            Vereinheitlichen
-          </button>
+          <div class="flex items-center space-x-2">
+            <button
+              class="recipes-btn px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm font-medium"
+              data-ingredient-name={ingredient.name}
+            >
+              Rezepte
+            </button>
+            <button
+              class="rename-btn px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium"
+              data-ingredient-name={ingredient.name}
+            >
+              Umbenennen
+            </button>
+            <button
+              class="unify-btn px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors text-sm font-medium"
+              data-ingredient-name={ingredient.name}
+            >
+              Vereinheitlichen
+            </button>
+          </div>
         </div>
       ))}
     </div>
@@ -64,6 +79,45 @@ try {
         <p class="text-gray-500 dark:text-gray-400">Keine Zutaten gefunden.</p>
       </div>
     )}
+  </div>
+
+  <RecipesModal />
+
+  <!-- Rename Modal -->
+  <div
+    id="rename-modal"
+    class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+  >
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
+        Zutat umbenennen
+      </h2>
+      <p class="text-gray-600 dark:text-gray-400 mb-4">
+        Geben Sie den neuen Namen für "<span id="rename-old-ingredient-name" class="font-semibold"></span>" ein:
+      </p>
+      <div class="mb-4">
+        <input
+          type="text"
+          id="rename-new-ingredient-input"
+          placeholder="Neuer Zutatenname..."
+          class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <div class="flex justify-end space-x-3">
+        <button
+          id="cancel-rename-btn"
+          class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          Abbrechen
+        </button>
+        <button
+          id="confirm-rename-btn"
+          class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+        >
+          Umbenennen
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Unify Modal -->
@@ -113,7 +167,10 @@ try {
     document.addEventListener('DOMContentLoaded', async () => {
       await loadIngredients();
       setupSearch();
+      setupRecipesButtons();
+      setupRenameButtons();
       setupUnifyButtons();
+      setupRenameModal();
       setupModal();
     });
 
@@ -147,6 +204,28 @@ try {
       });
     }
 
+    function setupRecipesButtons() {
+      const recipesButtons = document.querySelectorAll('.recipes-btn');
+      recipesButtons.forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const ingredientName = (e.currentTarget as HTMLElement).getAttribute('data-ingredient-name') || '';
+          if (window.openRecipesModal) {
+            window.openRecipesModal(ingredientName);
+          }
+        });
+      });
+    }
+
+    function setupRenameButtons() {
+      const renameButtons = document.querySelectorAll('.rename-btn');
+      renameButtons.forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const ingredientName = (e.currentTarget as HTMLElement).getAttribute('data-ingredient-name') || '';
+          openRenameModal(ingredientName);
+        });
+      });
+    }
+
     function setupUnifyButtons() {
       const unifyButtons = document.querySelectorAll('.unify-btn');
       unifyButtons.forEach((btn) => {
@@ -154,6 +233,56 @@ try {
           const ingredientName = (e.currentTarget as HTMLElement).getAttribute('data-ingredient-name') || '';
           openUnifyModal(ingredientName);
         });
+      });
+    }
+
+    function setupRenameModal() {
+      const modal = document.getElementById('rename-modal');
+      const cancelBtn = document.getElementById('cancel-rename-btn');
+      const confirmBtn = document.getElementById('confirm-rename-btn');
+      const newIngredientInput = document.getElementById('rename-new-ingredient-input') as HTMLInputElement;
+
+      if (!modal || !cancelBtn || !confirmBtn || !newIngredientInput) return;
+
+      cancelBtn.addEventListener('click', () => {
+        closeRenameModal();
+      });
+
+      confirmBtn.addEventListener('click', async () => {
+        const newName = newIngredientInput.value.trim();
+        if (!newName) {
+          if (window.showWarning) {
+            window.showWarning('Bitte geben Sie einen neuen Zutaten-Namen ein.');
+          } else {
+            alert('Bitte geben Sie einen neuen Zutaten-Namen ein.');
+          }
+          return;
+        }
+
+        if (newName === currentOldIngredient) {
+          if (window.showWarning) {
+            window.showWarning('Der neue Name muss sich vom alten Namen unterscheiden.');
+          } else {
+            alert('Der neue Name muss sich vom alten Namen unterscheiden.');
+          }
+          return;
+        }
+
+        await renameIngredient(currentOldIngredient, newName);
+      });
+
+      // Close modal on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeRenameModal();
+        }
+      });
+
+      // Close modal on ESC key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+          closeRenameModal();
+        }
       });
     }
 
@@ -219,6 +348,29 @@ try {
       });
     }
 
+    function openRenameModal(oldIngredient: string) {
+      currentOldIngredient = oldIngredient;
+      const modal = document.getElementById('rename-modal');
+      const oldNameSpan = document.getElementById('rename-old-ingredient-name');
+      const newIngredientInput = document.getElementById('rename-new-ingredient-input') as HTMLInputElement;
+
+      if (!modal || !oldNameSpan || !newIngredientInput) return;
+
+      oldNameSpan.textContent = oldIngredient;
+      newIngredientInput.value = oldIngredient;
+      modal.classList.remove('hidden');
+      newIngredientInput.focus();
+      newIngredientInput.select();
+    }
+
+    function closeRenameModal() {
+      const modal = document.getElementById('rename-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+      }
+      currentOldIngredient = '';
+    }
+
     function openUnifyModal(oldIngredient: string) {
       currentOldIngredient = oldIngredient;
       const modal = document.getElementById('unify-modal');
@@ -252,6 +404,57 @@ try {
         modal.classList.add('hidden');
       }
       currentOldIngredient = '';
+    }
+
+    async function renameIngredient(oldName: string, newName: string) {
+      try {
+        const response = await fetch('/api/ingredients', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'rename',
+            oldName: oldName,
+            newName: newName
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          if (window.showWarning) {
+            window.showWarning(error.error || 'Fehler beim Umbenennen der Zutat.');
+          } else {
+            alert(error.error || 'Fehler beim Umbenennen der Zutat.');
+          }
+          return;
+        }
+
+        const result = await response.json();
+        
+        let message = `"${oldName}" wurde erfolgreich in "${newName}" umbenannt. ${result.updated} Rezept(e) wurden aktualisiert.`;
+        if (result.shoppingListsUpdated > 0) {
+          message += ` ${result.shoppingListsUpdated} Einkaufsliste(n) wurden ebenfalls aktualisiert.`;
+        }
+        
+        if (window.showInfo) {
+          window.showInfo(message);
+        } else {
+          alert(message);
+        }
+
+        closeRenameModal();
+        
+        // Reload the page to show updated ingredients
+        window.location.reload();
+      } catch (error) {
+        console.error('Error renaming ingredient:', error);
+        if (window.showWarning) {
+          window.showWarning('Fehler beim Umbenennen der Zutat. Bitte versuchen Sie es erneut.');
+        } else {
+          alert('Fehler beim Umbenennen der Zutat. Bitte versuchen Sie es erneut.');
+        }
+      }
     }
 
     async function unifyIngredients(oldName: string, newName: string) {
