@@ -3,6 +3,7 @@ export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../lib/database';
 import type { ShoppingList } from '../../types/recipe';
+import GroupingSuggestionModal from '../../components/shopping_list/GroupingSuggestionModal.astro';
 
 const { id } = Astro.params;
 
@@ -162,6 +163,12 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             </span>
           </label>
           <div class="flex items-center gap-2">
+            <button id="suggest-grouping-btn" class="btn btn-secondary btn-sm flex items-center space-x-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+              </svg>
+              <span>Gruppierung vorschlagen</span>
+            </button>
             <button id="group-items-btn" class="btn btn-secondary btn-sm flex items-center space-x-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
@@ -327,6 +334,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     </div>
   </div>
 
+  <!-- Grouping Suggestion Modal -->
+  <GroupingSuggestionModal />
+
   <script define:vars={{ shoppingListId: id, shoppingListData: shoppingList }}>
     // Variables are already defined via define:vars
     let availableUnits = [];
@@ -419,6 +429,165 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       // Initialize ungroup button visibility
       if (ungroupBtn) {
         ungroupBtn.style.display = hasManualGroups() ? 'flex' : 'none';
+      }
+      
+      // Grouping suggestion functionality
+      const suggestGroupingBtn = document.getElementById('suggest-grouping-btn');
+      const suggestionModal = document.getElementById('grouping-suggestion-modal');
+      let suggestedGroupsData = []; // Store suggested groups data
+      
+      if (suggestGroupingBtn && suggestionModal) {
+        suggestGroupingBtn.addEventListener('click', () => {
+          openGroupingSuggestionModal();
+        });
+        
+        // Close modal handlers
+        const closeButtons = suggestionModal.querySelectorAll('.modal-close, .modal-overlay');
+        closeButtons.forEach(btn => {
+          btn.addEventListener('click', () => {
+            closeGroupingSuggestionModal();
+          });
+        });
+        
+        // Cancel button
+        const cancelBtn = document.getElementById('cancel-suggestion-btn');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', () => {
+            closeGroupingSuggestionModal();
+          });
+        }
+        
+        // Accept all button
+        const acceptAllBtn = document.getElementById('accept-all-btn');
+        if (acceptAllBtn) {
+          acceptAllBtn.addEventListener('click', () => {
+            acceptAllSuggestedGroups();
+          });
+        }
+      }
+      
+      // Function to open grouping suggestion modal
+      function openGroupingSuggestionModal() {
+        if (!suggestionModal || !window.GroupingSuggestionModal) return;
+        
+        const loadingEl = document.getElementById('suggestion-loading');
+        const contentEl = document.getElementById('suggestion-content');
+        const groupsContainer = document.getElementById('suggested-groups');
+        const acceptAllBtn = document.getElementById('accept-all-btn');
+        
+        // Show loading
+        loadingEl?.classList.remove('hidden');
+        contentEl?.classList.add('hidden');
+        suggestionModal.classList.remove('hidden');
+        
+        // Calculate suggestions
+        setTimeout(() => {
+          suggestedGroupsData = window.GroupingSuggestionModal.suggestGroups(shoppingListData.items);
+          
+          // Hide loading, show content
+          loadingEl?.classList.add('hidden');
+          contentEl?.classList.remove('hidden');
+          
+          // Render suggestions
+          if (groupsContainer && suggestedGroupsData.length > 0) {
+            window.GroupingSuggestionModal.renderSuggestedGroups(suggestedGroupsData, groupsContainer);
+            if (acceptAllBtn) {
+              acceptAllBtn.disabled = false;
+            }
+          } else {
+            groupsContainer.innerHTML = '';
+            if (acceptAllBtn) {
+              acceptAllBtn.disabled = true;
+            }
+          }
+        }, 100); // Small delay to show loading state
+      }
+      
+      // Function to close grouping suggestion modal
+      function closeGroupingSuggestionModal() {
+        if (suggestionModal) {
+          suggestionModal.classList.add('hidden');
+          suggestedGroupsData = [];
+        }
+      }
+      
+      // Function to accept all suggested groups
+      async function acceptAllSuggestedGroups() {
+        // Get groups data from the container (in case suggestedGroupsData was cleared)
+        const groupsContainer = document.getElementById('suggested-groups');
+        const groupsData = groupsContainer && window.GroupingSuggestionModal?.getGroupsData 
+          ? window.GroupingSuggestionModal.getGroupsData(groupsContainer)
+          : suggestedGroupsData;
+        
+        if (!groupsData || groupsData.length === 0) return;
+        
+        // Get all checked groups
+        const checkedGroupIds = new Set();
+        document.querySelectorAll('.group-accept-checkbox:checked').forEach(checkbox => {
+          checkedGroupIds.add(checkbox.getAttribute('data-group-id'));
+        });
+        
+        if (checkedGroupIds.size === 0) {
+          alert('Bitte wählen Sie mindestens eine Gruppierung aus.');
+          return;
+        }
+        
+        // Apply all accepted groups
+        const updatedItems = [...shoppingListData.items];
+        const groupsToApply = groupsData.filter(group => checkedGroupIds.has(group.id));
+        
+        groupsToApply.forEach((group, index) => {
+          // Generate unique group ID with timestamp and index to avoid collisions
+          const newGroupId = `manual_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          // Update all items in this group
+          group.items.forEach(groupItem => {
+            const itemIndex = updatedItems.findIndex(item => item.id === groupItem.id);
+            if (itemIndex !== -1) {
+              updatedItems[itemIndex] = {
+                ...updatedItems[itemIndex],
+                manualGroupId: newGroupId
+              };
+            }
+          });
+        });
+        
+        try {
+          const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              items: updatedItems
+            }),
+          });
+          
+          if (response.ok) {
+            const updatedList = await response.json();
+            shoppingListData.items = updatedList.items;
+            
+            // Close modal and re-render
+            closeGroupingSuggestionModal();
+            renderShoppingItems();
+            updateHeaderCounters();
+            
+            // Update ungroup button visibility
+            const ungroupBtn = document.getElementById('ungroup-items-btn');
+            if (ungroupBtn) {
+              ungroupBtn.style.display = hasManualGroups() ? 'flex' : 'none';
+            }
+            
+            const appliedCount = groupsToApply.length;
+            alert(`${appliedCount} Gruppierung${appliedCount !== 1 ? 'en' : ''} wurde${appliedCount !== 1 ? 'n' : ''} angewendet!`);
+          } else {
+            const error = await response.json();
+            alert(error.error || 'Fehler beim Anwenden der Gruppierungen');
+          }
+        } catch (error) {
+          console.error('Error applying groups:', error);
+          alert('Fehler beim Anwenden der Gruppierungen');
+        }
       }
       
       // Share button functionality
@@ -595,19 +764,21 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           const itemIds = group.items.map(item => item.id).join(',');
           const recipeIds = [...new Set(group.items.map(item => item.recipeId).filter(Boolean))].join(',');
           const hasMultipleItems = group.items.length > 1;
-          const hasMultipleUnits = group.quantitiesByUnit.size > 1;
           
-          // Format quantities by unit
+          // Format quantities by unit and filter out zero amounts
           const quantitiesByUnit = Array.from(group.quantitiesByUnit.entries())
             .map(([unitKey, amount]) => {
               const formattedAmount = amount % 1 === 0 ? 
                 amount.toString() : 
                 amount.toFixed(1).replace(/\.0$/, '');
               const unit = group.unitCasing.get(unitKey);
-              return { amount: formattedAmount, unit, unitKey };
-            });
+              return { amount: formattedAmount, unit, unitKey, numericAmount: amount };
+            })
+            .filter(({ numericAmount }) => numericAmount !== 0); // Filter out zero amounts
           
-          // First unit display (always shown, inline with description/buttons)
+          const hasMultipleUnits = quantitiesByUnit.length > 1;
+          
+          // First unit display (only shown if amount > 0)
           const firstUnitDisplay = quantitiesByUnit.length > 0 ? `
             <span class="${isChecked 
               ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-800 px-3 py-1.5 rounded border border-green-200 dark:border-green-700 flex-shrink-0'
@@ -618,7 +789,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           ` : '';
           
           // Additional units display (boxes below, aligned with first unit)
-          const additionalUnitsDisplay = hasMultipleUnits && quantitiesByUnit.length > 1 ? `
+          const additionalUnitsDisplay = hasMultipleUnits ? `
             <div class="flex flex-col gap-1.5 mt-1.5 items-end">
               ${quantitiesByUnit.slice(1).map(({ amount, unit }) => `
                 <span class="${isChecked 
@@ -637,7 +808,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             const sourceClass = item.recipeId ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400';
             
             let quantityDisplay = '';
-            if (item.quantity) {
+            if (item.quantity && item.quantity.amount !== 0) {
               const itemAmount = item.quantity.amount % 1 === 0 ? 
                 item.quantity.amount.toString() : 
                 item.quantity.amount.toFixed(1).replace(/\.0$/, '');
