@@ -115,6 +115,7 @@ try {
     const decreaseButton = document.getElementById('decrease-servings');
     const increaseButton = document.getElementById('increase-servings');
     const resetButton = document.getElementById('reset-servings');
+    const saveButton = document.getElementById('save-servings');
     
     if (currentServingsElement && decreaseButton && increaseButton && resetButton) {
       const originalServings = parseInt(currentServingsElement.getAttribute('data-original') || '1');
@@ -127,13 +128,14 @@ try {
           currentServingsElement.textContent = newServings.toString();
         }
         
-        // Show/hide reset button
+        const hasChanged = newServings !== originalServings;
+        
+        // Show/hide reset and save buttons
         if (resetButton) {
-          if (newServings !== originalServings) {
-            resetButton.style.display = 'inline-block';
-          } else {
-            resetButton.style.display = 'none';
-          }
+          resetButton.style.display = hasChanged ? 'inline-block' : 'none';
+        }
+        if (saveButton) {
+          saveButton.style.display = hasChanged ? 'flex' : 'none';
         }
         
         // Calculate scaling factor
@@ -163,6 +165,135 @@ try {
         });
       }
       
+      // Function to update recipe with new servings and scaled ingredients
+      async function saveServingsAsDefault() {
+        if (!saveButton) return;
+        
+        const currentServings = parseInt(currentServingsElement?.textContent || '1');
+        const originalServings = parseInt(currentServingsElement?.getAttribute('data-original') || '1');
+        
+        if (currentServings === originalServings) {
+          return; // Nothing to save
+        }
+        
+        // Disable button during save
+        saveButton.disabled = true;
+        const originalText = saveButton.innerHTML;
+        saveButton.innerHTML = '<svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Speichern...';
+        
+        try {
+          // Get current recipe data
+          const recipeId = window.location.pathname.split('/').pop();
+          const recipeResponse = await fetch(`/api/recipes?id=${recipeId}`);
+          
+          if (!recipeResponse.ok) {
+            throw new Error('Failed to fetch recipe');
+          }
+          
+          const currentRecipe = await recipeResponse.json();
+          
+          // Calculate scaling factor
+          const scalingFactor = currentServings / originalServings;
+          
+          // Update ingredient amounts in recipe data (recursively handles nested groups)
+          function scaleIngredientGroups(groups) {
+            if (!Array.isArray(groups)) return groups;
+            
+            return groups.map(group => {
+              if (!group || typeof group !== 'object') return group;
+              
+              // Check if it's an ingredient group
+              if ('ingredients' in group && Array.isArray(group.ingredients)) {
+                return {
+                  ...group,
+                  ingredients: group.ingredients.map(item => {
+                    if (!item || typeof item !== 'object') return item;
+                    
+                    // Check if it's an ingredient (has quantities)
+                    if ('quantities' in item && Array.isArray(item.quantities)) {
+                      return {
+                        ...item,
+                        quantities: item.quantities.map(qty => ({
+                          ...qty,
+                          amount: (qty.amount || 0) * scalingFactor
+                        }))
+                      };
+                    }
+                    
+                    // Check if it's a nested ingredient group (has ingredients)
+                    if ('ingredients' in item && Array.isArray(item.ingredients)) {
+                      return scaleIngredientGroups([item])[0];
+                    }
+                    
+                    return item;
+                  })
+                };
+              }
+              
+              return group;
+            });
+          }
+          
+          const updatedIngredientGroups = scaleIngredientGroups(currentRecipe.ingredientGroups);
+          
+          // Update recipe with new servings and scaled ingredients
+          const updateResponse = await fetch(`/api/recipes?id=${recipeId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              metadata: {
+                ...currentRecipe.metadata,
+                servings: currentServings
+              },
+              ingredientGroups: updatedIngredientGroups
+            })
+          });
+          
+          if (!updateResponse.ok) {
+            throw new Error('Failed to update recipe');
+          }
+          
+          const updatedRecipe = await updateResponse.json();
+          
+          // Update the original servings attribute to reflect the new default
+          if (currentServingsElement) {
+            currentServingsElement.setAttribute('data-original', currentServings.toString());
+          }
+          
+          // Hide save button since we're now at the default
+          if (saveButton) {
+            saveButton.style.display = 'none';
+          }
+          if (resetButton) {
+            resetButton.style.display = 'none';
+          }
+          
+          // Show success message
+          if (window.showSuccess) {
+            await window.showSuccess('Portionszahl und Zutatenmengen wurden als Standard gespeichert.');
+          } else {
+            alert('Portionszahl und Zutatenmengen wurden als Standard gespeichert.');
+          }
+          
+          // Reload page to show updated values
+          window.location.reload();
+          
+        } catch (error) {
+          console.error('Error saving servings:', error);
+          if (window.showError) {
+            window.showError('Fehler beim Speichern. Bitte versuchen Sie es erneut.');
+          } else {
+            alert('Fehler beim Speichern. Bitte versuchen Sie es erneut.');
+          }
+        } finally {
+          // Re-enable button
+          saveButton.disabled = false;
+          saveButton.innerHTML = originalText;
+        }
+      }
+      
       decreaseButton.addEventListener('click', () => {
         if (currentServingsElement) {
           const current = parseInt(currentServingsElement.textContent || '1');
@@ -180,6 +311,10 @@ try {
       resetButton.addEventListener('click', () => {
         updateServings(originalServings);
       });
+      
+      if (saveButton) {
+        saveButton.addEventListener('click', saveServingsAsDefault);
+      }
     }
 
     // Edit mode functionality
