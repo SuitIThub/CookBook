@@ -119,15 +119,32 @@ if (!shoppingList) {
               const isRecipeItem = item.recipeId;
               const recipe = shoppingList.recipes?.find(r => r.id === item.recipeId);
               const recipeTitle = recipe?.title;
+              const hasDescription = item.description && item.description.trim() !== '';
+              const descriptionVisible = hasDescription ? '' : 'hidden';
+              const isEvenRow = index % 2 === 0;
+              const rowBgClass = isEvenRow ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50';
               
               return (
-                <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4" 
+                <div class={`item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4 ${rowBgClass}`} 
                      data-item-id={item.id} 
                      data-item-index={index}
                      data-recipe-id={item.recipeId || ''}
                      data-recipe-ingredient-id={item.recipeIngredientId || ''}>
-                  <div class="grid grid-cols-12 gap-3 items-end">
-                    <div class="col-span-4">
+                  <!-- Main row: toggle, name, amount, unit -->
+                  <div class="flex items-end gap-3 flex-wrap">
+                    <!-- Toggle arrow for description -->
+                    <button 
+                      type="button" 
+                      class="description-toggle-btn flex-shrink-0 p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-transform"
+                      aria-label="Beschreibung ein-/ausblenden"
+                    >
+                      <svg class="w-5 h-5 description-toggle-icon transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={hasDescription ? 'transform: rotate(90deg);' : ''}>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                      </svg>
+                    </button>
+                    
+                    <!-- Name field -->
+                    <div class="flex-1 min-w-[150px]">
                       <div class="flex items-center space-x-2 mb-1">
                         <label class="form-label text-sm">Name *</label>
                         {isRecipeItem && (
@@ -138,27 +155,31 @@ if (!shoppingList) {
                       </div>
                       <input 
                         type="text" 
-                        class="item-name form-input"
+                        class="item-name form-input w-full"
                         value={item.name}
                         placeholder="Artikel..."
                         required
                       />
                     </div>
-                    <div class="col-span-2">
+                    
+                    <!-- Amount field -->
+                    <div class="w-24 sm:w-32">
                       <label class="form-label text-sm">Menge</label>
                       <input 
                         type="number" 
-                        class="item-amount form-input"
+                        class="item-amount form-input w-full"
                         value={item.quantity?.amount || ''}
                         placeholder="0"
                         step="0.1"
                         min="0"
                       />
                     </div>
-                    <div class="col-span-2">
+                    
+                    <!-- Unit field -->
+                    <div class="w-28 sm:w-36">
                       <label class="form-label text-sm">Einheit</label>
                       <select 
-                        class="item-unit form-input"
+                        class="item-unit form-input w-full"
                       >
                         <option value="">Einheit wählen...</option>
                         {item.quantity?.unit && (
@@ -166,21 +187,21 @@ if (!shoppingList) {
                         )}
                       </select>
                     </div>
-                    <div class="col-span-3">
-                      <label class="form-label text-sm">Beschreibung</label>
-                      <input 
-                        type="text" 
-                        class="item-description form-input"
-                        value={item.description || ''}
-                        placeholder="Optional..."
-                      />
-                    </div>
-                    <div class="col-span-1 flex items-center justify-between">
-                      <div class="flex flex-col items-center space-y-1">
-                        <label class="form-label text-xs">✓</label>
-                        <input type="checkbox" class="item-checked w-5 h-5 text-green-600" checked={item.isChecked} />
+                  </div>
+                  
+                  <!-- Description row (collapsible) -->
+                  <div class={`item-description-row mt-3 ${descriptionVisible}`}>
+                    <div class="flex items-end gap-3">
+                      <div class="flex-1">
+                        <label class="form-label text-sm">Beschreibung</label>
+                        <input 
+                          type="text" 
+                          class="item-description form-input w-full"
+                          value={item.description || ''}
+                          placeholder="Optional..."
+                        />
                       </div>
-                      <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
+                      <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900 flex-shrink-0">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                         </svg>
@@ -311,6 +332,38 @@ if (!shoppingList) {
       });
     }
 
+    // Toggle description visibility
+    function toggleDescription(itemRow) {
+      const descriptionRow = itemRow.querySelector('.item-description-row');
+      const toggleIcon = itemRow.querySelector('.description-toggle-icon');
+      
+      if (descriptionRow) {
+        const isHidden = descriptionRow.classList.contains('hidden');
+        if (isHidden) {
+          descriptionRow.classList.remove('hidden');
+          if (toggleIcon) {
+            toggleIcon.style.transform = 'rotate(90deg)';
+          }
+        } else {
+          descriptionRow.classList.add('hidden');
+          if (toggleIcon) {
+            toggleIcon.style.transform = 'rotate(0deg)';
+          }
+        }
+      }
+    }
+
+    // Initialize description toggles
+    function initializeDescriptionToggles() {
+      document.querySelectorAll('.description-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const itemRow = btn.closest('.item-edit-row');
+          toggleDescription(itemRow);
+        });
+      });
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       await loadUnits();
       const saveBtn = document.getElementById('save-edit-btn');
@@ -318,6 +371,9 @@ if (!shoppingList) {
       const itemsContainer = document.getElementById('items-edit-container');
       const emptyMessage = document.getElementById('empty-items-message');
       const deleteListBtn = document.getElementById('delete-list-btn');
+      
+      // Initialize description toggles for existing items
+      initializeDescriptionToggles();
 
       // Recipe management
       
@@ -439,6 +495,7 @@ if (!shoppingList) {
         renderRecipeManagement();
         updateEmptyMessage();
         updateGroupingIndicators();
+        updateRowColors(); // Update row colors after removing recipe
       }
       
       // Initial render of recipe management
@@ -498,36 +555,70 @@ if (!shoppingList) {
         }
       }
 
+      // Update row background colors to maintain alternating pattern
+      function updateRowColors() {
+        const itemRows = document.querySelectorAll('.item-edit-row');
+        itemRows.forEach((row, index) => {
+          const isEvenRow = index % 2 === 0;
+          const rowBgClass = isEvenRow ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50';
+          // Remove existing background classes
+          row.classList.remove('bg-white', 'dark:bg-gray-900', 'bg-gray-50', 'dark:bg-gray-800/50');
+          // Add new background class
+          row.classList.add(...rowBgClass.split(' '));
+        });
+      }
+
       // Add item in edit mode
       addItemEditBtn?.addEventListener('click', () => {
         const newItemId = `new-${itemCounter++}`;
+        // Determine row background based on current number of items
+        const currentItems = document.querySelectorAll('.item-edit-row');
+        const isEvenRow = currentItems.length % 2 === 0;
+        const rowBgClass = isEvenRow ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50';
         const itemHtml = `
-          <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4" data-item-id="${newItemId}">
-            <div class="grid grid-cols-12 gap-3 items-end">
-              <div class="col-span-4">
+          <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4 ${rowBgClass}" data-item-id="${newItemId}">
+            <!-- Main row: toggle, name, amount, unit -->
+            <div class="flex items-end gap-3 flex-wrap">
+              <!-- Toggle arrow for description -->
+              <button 
+                type="button" 
+                class="description-toggle-btn flex-shrink-0 p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-transform"
+                aria-label="Beschreibung ein-/ausblenden"
+              >
+                <svg class="w-5 h-5 description-toggle-icon transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+              </button>
+              
+              <!-- Name field -->
+              <div class="flex-1 min-w-[150px]">
                 <label class="form-label text-sm">Name *</label>
-                <input type="text" class="item-name form-input" placeholder="Artikel..." required />
+                <input type="text" class="item-name form-input w-full" placeholder="Artikel..." required />
               </div>
-              <div class="col-span-2">
+              
+              <!-- Amount field -->
+              <div class="w-24 sm:w-32">
                 <label class="form-label text-sm">Menge</label>
-                <input type="number" class="item-amount form-input" placeholder="0" step="0.1" min="0" />
+                <input type="number" class="item-amount form-input w-full" placeholder="0" step="0.1" min="0" />
               </div>
-              <div class="col-span-2">
+              
+              <!-- Unit field -->
+              <div class="w-28 sm:w-36">
                 <label class="form-label text-sm">Einheit</label>
-                <select class="item-unit form-input">
+                <select class="item-unit form-input w-full">
                   <option value="">Einheit wählen...</option>
                 </select>
               </div>
-              <div class="col-span-3">
-                <label class="form-label text-sm">Beschreibung</label>
-                <input type="text" class="item-description form-input" placeholder="Optional..." />
-              </div>
-              <div class="col-span-1 flex items-center justify-between">
-                <div class="flex flex-col items-center space-y-1">
-                  <label class="form-label text-xs">✓</label>
-                  <input type="checkbox" class="item-checked w-5 h-5 text-green-600" />
+            </div>
+            
+            <!-- Description row (collapsible, hidden by default) -->
+            <div class="item-description-row mt-3 hidden">
+              <div class="flex items-end gap-3">
+                <div class="flex-1">
+                  <label class="form-label text-sm">Beschreibung</label>
+                  <input type="text" class="item-description form-input w-full" placeholder="Optional..." />
                 </div>
-                <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
+                <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900 flex-shrink-0">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                   </svg>
@@ -539,12 +630,22 @@ if (!shoppingList) {
         itemsContainer?.insertAdjacentHTML('beforeend', itemHtml);
         updateEmptyMessage();
         updateGroupingIndicators();
+        updateRowColors(); // Update row colors after adding item
         
         // Populate unit dropdown for the new item
         const newRow = itemsContainer?.lastElementChild;
         const unitSelect = newRow?.querySelector('.item-unit');
         if (unitSelect) {
           populateUnitDropdown(unitSelect);
+        }
+        
+        // Initialize toggle for the new item
+        const toggleBtn = newRow?.querySelector('.description-toggle-btn');
+        if (toggleBtn) {
+          toggleBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleDescription(newRow);
+          });
         }
         
         // Focus on the new item's name field
@@ -579,6 +680,7 @@ if (!shoppingList) {
             itemRow?.remove();
             updateEmptyMessage();
             updateGroupingIndicators();
+            updateRowColors(); // Update row colors after deletion
           }
         }
       });
@@ -600,13 +702,18 @@ if (!shoppingList) {
           const amountValue = row.querySelector('.item-amount')?.value;
           const unitValue = row.querySelector('.item-unit')?.value.trim();
           const description = row.querySelector('.item-description')?.value.trim();
-          const isChecked = row.querySelector('.item-checked')?.checked || false;
           const itemId = row.getAttribute('data-item-id');
           const recipeId = row.getAttribute('data-recipe-id');
           const recipeIngredientId = row.getAttribute('data-recipe-ingredient-id');
 
           const amount = amountValue && !isNaN(parseFloat(amountValue)) ? parseFloat(amountValue) : null;
           const unit = unitValue && unitValue.trim() ? unitValue.trim() : null;
+
+          // Preserve original checked state (checkbox not shown in edit mode)
+          // For new items, default to false; for existing items, preserve their checked state
+          const isNewItem = itemId?.startsWith('new-');
+          const originalItem = isNewItem ? null : shoppingListData.items.find(i => i.id === itemId);
+          const isChecked = originalItem?.isChecked || false;
 
           const item = {
             id: itemId?.startsWith('new-') ? undefined : itemId,
@@ -868,37 +975,64 @@ if (!shoppingList) {
           
           // Add recipe ingredients as new items
           const recipeIngredients = getRecipeIngredients(recipe);
-          recipeIngredients.forEach(ingredient => {
+          recipeIngredients.forEach((ingredient, ingredientIndex) => {
             const newItemId = `new-${itemCounter++}`;
+            const hasDescription = ingredient.description && ingredient.description.trim() !== '';
+            const descriptionVisible = hasDescription ? '' : 'hidden';
+            // Determine row background based on current number of items + ingredient index
+            const currentItems = document.querySelectorAll('.item-edit-row');
+            const isEvenRow = (currentItems.length + ingredientIndex) % 2 === 0;
+            const rowBgClass = isEvenRow ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50';
             const itemHtml = `
-              <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4" data-item-id="${newItemId}" data-recipe-ingredient="true">
-                <div class="grid grid-cols-12 gap-3 items-end">
-                  <div class="col-span-4">
-                    <label class="form-label text-sm">Name *</label>
-                    <input type="text" class="item-name form-input" value="${ingredient.name}" placeholder="Artikel..." required />
-                    <div class="text-xs text-blue-600 mt-1">Aus Rezept: ${recipe.title}</div>
+              <div class="item-edit-row border border-gray-200 dark:border-gray-700 rounded-lg p-4 ${rowBgClass}" data-item-id="${newItemId}" data-recipe-ingredient="true">
+                <!-- Main row: toggle, name, amount, unit -->
+                <div class="flex items-end gap-3 flex-wrap">
+                  <!-- Toggle arrow for description -->
+                  <button 
+                    type="button" 
+                    class="description-toggle-btn flex-shrink-0 p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-transform"
+                    aria-label="Beschreibung ein-/ausblenden"
+                  >
+                    <svg class="w-5 h-5 description-toggle-icon transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="${hasDescription ? 'transform: rotate(90deg);' : ''}">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </button>
+                  
+                  <!-- Name field -->
+                  <div class="flex-1 min-w-[150px]">
+                    <div class="flex items-center space-x-2 mb-1">
+                      <label class="form-label text-sm">Name *</label>
+                      <span class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded" title="Zutat aus Rezept">
+                        🍳 ${recipe.title}
+                      </span>
+                    </div>
+                    <input type="text" class="item-name form-input w-full" value="${ingredient.name}" placeholder="Artikel..." required />
                   </div>
-                  <div class="col-span-2">
-                    <label class="form-label text-sm">Menge *</label>
-                    <input type="number" class="item-amount form-input" value="${ingredient.quantities[0]?.amount || 1}" placeholder="0" step="0.1" min="0" required />
+                  
+                  <!-- Amount field -->
+                  <div class="w-24 sm:w-32">
+                    <label class="form-label text-sm">Menge</label>
+                    <input type="number" class="item-amount form-input w-full" value="${ingredient.quantities[0]?.amount || 1}" placeholder="0" step="0.1" min="0" />
                   </div>
-                  <div class="col-span-2">
-                    <label class="form-label text-sm">Einheit *</label>
-                    <select class="item-unit form-input" required>
+                  
+                  <!-- Unit field -->
+                  <div class="w-28 sm:w-36">
+                    <label class="form-label text-sm">Einheit</label>
+                    <select class="item-unit form-input w-full">
                       <option value="">Einheit wählen...</option>
                       <option value="${ingredient.quantities[0]?.unit || 'Stück'}" selected>${ingredient.quantities[0]?.unit || 'Stück'}</option>
                     </select>
                   </div>
-                  <div class="col-span-3">
-                    <label class="form-label text-sm">Beschreibung</label>
-                    <input type="text" class="item-description form-input" value="${ingredient.description || ''}" placeholder="Optional..." />
-                  </div>
-                  <div class="col-span-1 flex items-center justify-between">
-                    <div class="flex flex-col items-center space-y-1">
-                      <label class="form-label text-xs">✓</label>
-                      <input type="checkbox" class="item-checked w-5 h-5 text-green-600" />
+                </div>
+                
+                <!-- Description row (collapsible) -->
+                <div class="item-description-row mt-3 ${descriptionVisible}">
+                  <div class="flex items-end gap-3">
+                    <div class="flex-1">
+                      <label class="form-label text-sm">Beschreibung</label>
+                      <input type="text" class="item-description form-input w-full" value="${ingredient.description || ''}" placeholder="Optional..." />
                     </div>
-                    <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900">
+                    <button type="button" class="delete-item-btn btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900 flex-shrink-0">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                       </svg>
@@ -909,6 +1043,11 @@ if (!shoppingList) {
             `;
             itemsContainer?.insertAdjacentHTML('beforeend', itemHtml);
             
+            // Update row colors after adding recipe ingredients
+            if (ingredientIndex === recipeIngredients.length - 1) {
+              updateRowColors();
+            }
+            
             // Populate unit dropdown for the new item
             const newRow = itemsContainer?.lastElementChild;
             const unitSelect = newRow?.querySelector('.item-unit');
@@ -916,6 +1055,15 @@ if (!shoppingList) {
               populateUnitDropdown(unitSelect);
               // Set the correct unit
               unitSelect.value = ingredient.quantities[0]?.unit || 'Stück';
+            }
+            
+            // Initialize toggle for the new item
+            const toggleBtn = newRow?.querySelector('.description-toggle-btn');
+            if (toggleBtn) {
+              toggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                toggleDescription(newRow);
+              });
             }
           });
           
