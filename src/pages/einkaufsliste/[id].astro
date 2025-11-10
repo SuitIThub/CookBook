@@ -337,9 +337,10 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
   <!-- Grouping Suggestion Modal -->
   <GroupingSuggestionModal />
 
-  <script define:vars={{ shoppingListId: id, shoppingListData: shoppingList }}>
+  <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList }}>
     // Variables are already defined via define:vars
     let availableUnits = [];
+    let unitConversionData = null; // Store unit conversion data for formatting
     
     // Recipe management variables
     let availableRecipes = [];
@@ -352,12 +353,54 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     let isGroupingMode = false;
     let selectedGroupIds = new Set();
 
-    // Load available units
+    // Format quantity for display using unit conversion data
+    function formatQuantityForDisplay(amount, unit) {
+      if (!unit || unit.trim() === '' || !unitConversionData) {
+        return { amount: Math.round(amount * 10) / 10, unit: unit || '' };
+      }
+      
+      const normalizedUnit = unit.trim();
+      
+      // Find display units for this base unit
+      const displayUnits = unitConversionData[normalizedUnit];
+      if (!displayUnits || displayUnits.length === 0) {
+        // No display units available, return as-is
+        return { amount: Math.round(amount * 10) / 10, unit: normalizedUnit };
+      }
+      
+      // Sort by factor (largest first)
+      const sortedDisplayUnits = [...displayUnits].sort((a, b) => b.factor - a.factor);
+      
+      // Find the largest unit that fits (amount >= 1 of that unit and < 1000)
+      for (const displayUnit of sortedDisplayUnits) {
+        const convertedAmount = amount / displayUnit.factor;
+        // Use this unit if the converted amount is >= 1 and is a "nice" number (< 1000)
+        if (convertedAmount >= 1 && convertedAmount < 1000) {
+          // Round to 1 decimal place if needed
+          const rounded = Math.round(convertedAmount * 10) / 10;
+          return {
+            amount: rounded,
+            unit: displayUnit.name
+          };
+        }
+      }
+      
+      // No suitable display unit found, use base unit
+      return {
+        amount: Math.round(amount * 10) / 10,
+        unit: normalizedUnit
+      };
+    }
+
+    // Load available units and conversion data from API
     async function loadUnits() {
       try {
         const response = await fetch('/api/units');
         if (response.ok) {
-          availableUnits = await response.json();
+          const data = await response.json();
+          // API returns { units: [...], conversions: {...} }
+          availableUnits = data.units || data; // Support both old and new format
+          unitConversionData = data.conversions || null;
           populateUnitDropdown();
         }
       } catch (error) {
@@ -768,11 +811,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           // Format quantities by unit and filter out zero amounts
           const quantitiesByUnit = Array.from(group.quantitiesByUnit.entries())
             .map(([unitKey, amount]) => {
-              const formattedAmount = amount % 1 === 0 ? 
-                amount.toString() : 
-                amount.toFixed(1).replace(/\.0$/, '');
               const unit = group.unitCasing.get(unitKey);
-              return { amount: formattedAmount, unit, unitKey, numericAmount: amount };
+              // Format for display (convert to larger units if appropriate)
+              const formatted = formatQuantityForDisplay(amount, unit);
+              const formattedAmount = formatted.amount % 1 === 0 ? 
+                formatted.amount.toString() : 
+                formatted.amount.toFixed(1).replace(/\.0$/, '');
+              return { amount: formattedAmount, unit: formatted.unit, unitKey, numericAmount: amount };
             })
             .filter(({ numericAmount }) => numericAmount !== 0); // Filter out zero amounts
           
@@ -809,10 +854,12 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             
             let quantityDisplay = '';
             if (item.quantity && item.quantity.amount !== 0) {
-              const itemAmount = item.quantity.amount % 1 === 0 ? 
-                item.quantity.amount.toString() : 
-                item.quantity.amount.toFixed(1).replace(/\.0$/, '');
-              quantityDisplay = `<span class="text-gray-700 dark:text-gray-300 font-mono">${itemAmount} ${item.quantity.unit}</span>`;
+              // Format for display (convert to larger units if appropriate)
+              const formatted = formatQuantityForDisplay(item.quantity.amount, item.quantity.unit);
+              const itemAmount = formatted.amount % 1 === 0 ? 
+                formatted.amount.toString() : 
+                formatted.amount.toFixed(1).replace(/\.0$/, '');
+              quantityDisplay = `<span class="text-gray-700 dark:text-gray-300 font-mono">${itemAmount} ${formatted.unit}</span>`;
             }
             
             return `

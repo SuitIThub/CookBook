@@ -273,7 +273,9 @@ if (!shoppingList) {
       try {
         const response = await fetch('/api/units');
         if (response.ok) {
-          availableUnits = await response.json();
+          const data = await response.json();
+          // API returns { units: [...], conversions: {...} } or just array (backward compatibility)
+          availableUnits = Array.isArray(data) ? data : (data.units || []);
           populateExistingUnitDropdowns();
         }
       } catch (error) {

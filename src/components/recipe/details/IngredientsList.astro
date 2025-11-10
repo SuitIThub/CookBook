@@ -1,11 +1,22 @@
 ---
 import type { Recipe, Ingredient } from '../../../types/recipe';
+import { formatQuantity } from '../../../lib/units';
 
 interface Props {
   recipe: Recipe;
 }
 
 const { recipe } = Astro.props;
+
+// Helper function to format quantity for display
+function formatQuantityForDisplay(amount: number, unit: string): { amount: number; unit: string } {
+  if (!unit || unit.trim() === '') {
+    return { amount, unit: '' };
+  }
+  
+  const formatted = formatQuantity(amount, unit);
+  return { amount: formatted.amount, unit: formatted.unit };
+}
 
 // Safety check: ensure ingredientGroups exists and handle empty arrays
 const ingredientGroups = recipe?.ingredientGroups || [];
@@ -47,11 +58,12 @@ const hasAnyIngredients = ingredientGroups.some(group =>
                     {((ingredient as Ingredient).quantities || []).map((qty, index) => {
                       // Only show quantity if amount > 0 or unit is not empty
                       if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                        const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
                         return (
                           <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
                                 data-original-amount={qty.amount} 
                                 data-unit={qty.unit}>
-                            <span class="amount-value">{qty.amount}</span> {qty.unit}
+                            <span class="amount-value">{formatted.amount}</span> {formatted.unit}
                           </span>
                         );
                       }
@@ -86,11 +98,12 @@ const hasAnyIngredients = ingredientGroups.some(group =>
                       {((ingredient as Ingredient).quantities || []).map((qty, index) => {
                         // Only show quantity if amount > 0 or unit is not empty
                         if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                          const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
                           return (
                             <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
                                   data-original-amount={qty.amount} 
                                   data-unit={qty.unit}>
-                              <span class="amount-value">{qty.amount}</span> {qty.unit}
+                              <span class="amount-value">{formatted.amount}</span> {formatted.unit}
                             </span>
                           );
                         }

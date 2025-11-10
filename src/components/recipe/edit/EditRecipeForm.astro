@@ -35,12 +35,69 @@ const { recipe } = Astro.props;
   // Make recipe data available globally for ingredient linking
   window.currentRecipe = recipe;
   
+  // Available units loaded from API
+  let availableUnits = [];
+  
+  // Load available units
+  async function loadUnits() {
+    try {
+      const response = await fetch('/api/units');
+      if (response.ok) {
+        const data = await response.json();
+        // API returns { units: [...], conversions: {...} } or just array (backward compatibility)
+        availableUnits = Array.isArray(data) ? data : (data.units || []);
+        populateUnitDropdowns();
+      }
+    } catch (error) {
+      console.error('Error loading units:', error);
+    }
+  }
+  
+  // Populate all unit dropdowns with available units
+  function populateUnitDropdowns() {
+    const unitSelects = document.querySelectorAll('.ingredient-unit-select');
+    unitSelects.forEach(select => {
+      populateUnitDropdown(select, select.value);
+    });
+  }
+  
+  // Populate a single unit dropdown
+  function populateUnitDropdown(selectElement, selectedValue = '') {
+    // Clear existing options except the first one (if it's a placeholder)
+    const firstOption = selectElement.querySelector('option');
+    const isPlaceholder = firstOption && (firstOption.value === '' || firstOption.textContent === 'Einheit');
+    
+    if (isPlaceholder) {
+      selectElement.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Einheit';
+      selectElement.appendChild(placeholder);
+    } else {
+      selectElement.innerHTML = '';
+    }
+    
+    // Add all available units
+    availableUnits.forEach(unit => {
+      const option = document.createElement('option');
+      option.value = unit.name;
+      option.textContent = unit.name;
+      if (unit.name === selectedValue) {
+        option.selected = true;
+      }
+      selectElement.appendChild(option);
+    });
+  }
+  
   // Add form submission handler
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
     const form = document.getElementById('edit-recipe-form');
     if (form) {
       form.addEventListener('submit', handleFormSubmit);
     }
+    
+    // Load units first
+    await loadUnits();
     
     // Initialize edit functionality
     initializeEditHandlers();
@@ -159,6 +216,12 @@ const { recipe } = Astro.props;
     
     ingredientsList.appendChild(ingredientElement);
     
+    // Populate unit dropdown for the new ingredient
+    const unitSelect = ingredientElement.querySelector('.ingredient-unit-select');
+    if (unitSelect) {
+      populateUnitDropdown(unitSelect, '');
+    }
+    
     // Focus on the name input
     const nameInput = ingredientElement.querySelector('.ingredient-name-input');
     if (nameInput) {
@@ -197,17 +260,8 @@ const { recipe } = Astro.props;
                 step="0.1"
                 class="w-20 sm:w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
               />
-              <select class="w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
+              <select class="ingredient-unit-select w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
                 <option value="${unit}" selected>${unit || 'Einheit'}</option>
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-                <option value="ml">ml</option>
-                <option value="l">l</option>
-                <option value="Stück">Stück</option>
-                <option value="TL">TL</option>
-                <option value="EL">EL</option>
-                <option value="Tasse">Tasse</option>
-                <option value="Prise">Prise</option>
               </select>
               <button 
                 type="button" 
