@@ -181,11 +181,23 @@ declare global {
         <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50" data-group-id="${groupId}">
           <div class="mb-3">
             <h3 class="font-semibold text-gray-900 dark:text-white mb-2">Gruppe ${groupIndex + 1}</h3>
-            <div class="space-y-1 mb-3">
-              ${group.map(ing => `
-                <div class="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600">
+            <div class="space-y-1 mb-3" id="ingredients-list-${groupIndex}">
+              ${group.map((ing, ingIndex) => `
+                <div class="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600" data-ingredient-name="${ing.name}" data-group-index="${groupIndex}">
                   <span class="text-gray-900 dark:text-white">${ing.name}</span>
-                  <span class="text-sm text-gray-500 dark:text-gray-400">${ing.usageCount} ${ing.usageCount === 1 ? 'Rezept' : 'Rezepte'}</span>
+                  <div class="flex items-center space-x-2">
+                    <span class="text-sm text-gray-500 dark:text-gray-400">${ing.usageCount} ${ing.usageCount === 1 ? 'Rezept' : 'Rezepte'}</span>
+                    <button
+                      class="remove-ingredient-btn text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors p-1"
+                      data-group-index="${groupIndex}"
+                      data-ingredient-name="${ing.name}"
+                      title="Zutat entfernen"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               `).join('')}
             </div>
@@ -299,10 +311,100 @@ declare global {
           groupElement.remove();
         }
 
+        // Remove from queue if present
+        const queueIndex = mergeQueue.findIndex(q => q.groupIndex === groupIndex);
+        if (queueIndex >= 0) {
+          mergeQueue.splice(queueIndex, 1);
+          updateQueueStatus();
+        }
+
         // Check if all groups are processed
         const remainingGroups = document.querySelectorAll('[data-group-id^="group-"]');
         if (remainingGroups.length === 0) {
           groupsList.innerHTML = '<div class="text-center py-8 text-gray-500 dark:text-gray-400">Alle Gruppen wurden bearbeitet.</div>';
+        }
+      });
+    });
+
+    // Setup event listeners for remove ingredient buttons
+    document.querySelectorAll('.remove-ingredient-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const groupIndex = parseInt((e.currentTarget as HTMLElement).getAttribute('data-group-index') || '0');
+        const ingredientName = (e.currentTarget as HTMLElement).getAttribute('data-ingredient-name') || '';
+        
+        // Remove ingredient from group
+        const group = groups[groupIndex];
+        if (!group) return;
+
+        const ingredientIndex = group.findIndex(ing => ing.name === ingredientName);
+        if (ingredientIndex < 0) return;
+
+        // Remove from group
+        group.splice(ingredientIndex, 1);
+
+        // If group has less than 2 ingredients, remove the entire group
+        if (group.length < 2) {
+          const groupElement = document.querySelector(`[data-group-id="group-${groupIndex}"]`);
+          if (groupElement) {
+            groupElement.remove();
+          }
+
+          // Remove from queue if present
+          const queueIndex = mergeQueue.findIndex(q => q.groupIndex === groupIndex);
+          if (queueIndex >= 0) {
+            mergeQueue.splice(queueIndex, 1);
+            updateQueueStatus();
+          }
+
+          // Check if all groups are processed
+          const remainingGroups = document.querySelectorAll('[data-group-id^="group-"]');
+          if (remainingGroups.length === 0) {
+            groupsList.innerHTML = '<div class="text-center py-8 text-gray-500 dark:text-gray-400">Alle Gruppen wurden bearbeitet.</div>';
+          }
+          return;
+        }
+
+        // Update the group in the UI
+        const groupElement = document.querySelector(`[data-group-id="group-${groupIndex}"]`) as HTMLElement;
+        if (!groupElement) return;
+
+        // Remove ingredient element from DOM
+        const ingredientElement = groupElement.querySelector(`[data-ingredient-name="${ingredientName}"]`);
+        if (ingredientElement) {
+          ingredientElement.remove();
+        }
+
+        // Update dropdown
+        const targetSelect = document.getElementById(`target-select-${groupIndex}`) as HTMLSelectElement;
+        if (targetSelect) {
+          const currentValue = targetSelect.value;
+          targetSelect.innerHTML = group.map(ing => `<option value="${ing.name}">${ing.name}</option>`).join('');
+          
+          // If the removed ingredient was selected, select the first one
+          if (currentValue === ingredientName) {
+            targetSelect.value = group[0].name;
+          } else {
+            targetSelect.value = currentValue;
+          }
+        }
+
+        // If group is in queue, update the queue entry
+        const queueIndex = mergeQueue.findIndex(q => q.groupIndex === groupIndex);
+        if (queueIndex >= 0) {
+          const queueItem = mergeQueue[queueIndex];
+          // Remove the ingredient from ingredientsToMerge if it's there
+          const mergeIndex = queueItem.ingredientsToMerge.indexOf(ingredientName);
+          if (mergeIndex >= 0) {
+            queueItem.ingredientsToMerge.splice(mergeIndex, 1);
+          }
+          
+          // If target ingredient was removed, update target
+          if (queueItem.targetIngredient === ingredientName) {
+            queueItem.targetIngredient = group[0].name;
+            if (targetSelect) {
+              targetSelect.value = queueItem.targetIngredient;
+            }
+          }
         }
       });
     });
