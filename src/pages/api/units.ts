@@ -1,49 +1,10 @@
 import type { APIRoute } from 'astro';
+import { getAvailableUnits, BASE_UNITS } from '../../lib/units';
 
 export const GET: APIRoute = async ({ url }) => {
   try {
-    // Standard units used in the application
-    const units = [
-      // Weight units
-      { name: 'g', category: 'weight', displayName: 'Gramm' },
-      { name: 'kg', category: 'weight', displayName: 'Kilogramm' },
-      
-      // Volume units
-      { name: 'ml', category: 'volume', displayName: 'Milliliter' },
-      { name: 'l', category: 'volume', displayName: 'Liter' },
-      { name: 'TL', category: 'volume', displayName: 'Teelöffel' },
-      { name: 'EL', category: 'volume', displayName: 'Esslöffel' },
-      { name: 'Tasse', category: 'volume', displayName: 'Tasse' },
-      { name: 'Becher', category: 'volume', displayName: 'Becher' },
-      { name: 'Glas', category: 'volume', displayName: 'Glas' },
-      
-      // Piece units
-      { name: 'Stück', category: 'piece', displayName: 'Stück' },
-      { name: 'Pck.', category: 'piece', displayName: 'Packung' },
-      { name: 'Dose', category: 'piece', displayName: 'Dose' },
-      { name: 'Flasche', category: 'piece', displayName: 'Flasche' },
-      { name: 'Tube', category: 'piece', displayName: 'Tube' },
-      { name: 'Würfel', category: 'piece', displayName: 'Würfel' },
-      { name: 'Riegel', category: 'piece', displayName: 'Riegel' },
-      
-      // Natural units
-      { name: 'Zehe', category: 'natural', displayName: 'Zehe' },
-      { name: 'Bund', category: 'natural', displayName: 'Bund' },
-      { name: 'Kopf', category: 'natural', displayName: 'Kopf' },
-      { name: 'Knolle', category: 'natural', displayName: 'Knolle' },
-      { name: 'Stange', category: 'natural', displayName: 'Stange' },
-      { name: 'Zweig', category: 'natural', displayName: 'Zweig' },
-      { name: 'Blatt', category: 'natural', displayName: 'Blatt' },
-      { name: 'Scheibe', category: 'natural', displayName: 'Scheibe' },
-      
-      // Small measurement units
-      { name: 'Prise', category: 'small', displayName: 'Prise' },
-      { name: 'Msp.', category: 'small', displayName: 'Messerspitze' },
-      { name: 'Tropfen', category: 'small', displayName: 'Tropfen' },
-      { name: 'Spritzer', category: 'small', displayName: 'Spritzer' },
-      { name: 'Schuss', category: 'small', displayName: 'Schuss' },
-      { name: 'Hauch', category: 'small', displayName: 'Hauch' }
-    ];
+    // Get base units from centralized configuration
+    const units = getAvailableUnits();
 
     // Sort by category and then by name
     const sortedUnits = units.sort((a, b) => {
@@ -55,7 +16,34 @@ export const GET: APIRoute = async ({ url }) => {
       return a.name.localeCompare(b.name);
     });
 
-    return new Response(JSON.stringify(sortedUnits), {
+    // Build conversion data for client-side formatting
+    // This maps base units to their display units (larger units for display)
+    const conversionData: Record<string, Array<{ name: string; factor: number }>> = {};
+    
+    // For each base unit, find all units that convert to it (for display purposes)
+    Object.values(BASE_UNITS).forEach(unit => {
+      if (unit.isBaseUnit) {
+        // Find all units that convert to this base unit
+        const displayUnits = Object.values(BASE_UNITS)
+          .filter(u => !u.isBaseUnit && u.baseUnit === unit.name && u.conversionFactor)
+          .map(u => ({
+            name: u.name,
+            factor: u.conversionFactor!
+          }))
+          .sort((a, b) => b.factor - a.factor); // Sort by factor (largest first)
+        
+        if (displayUnits.length > 0) {
+          conversionData[unit.name] = displayUnits;
+        } else {
+          conversionData[unit.name] = [];
+        }
+      }
+    });
+
+    return new Response(JSON.stringify({
+      units: sortedUnits,
+      conversions: conversionData
+    }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',

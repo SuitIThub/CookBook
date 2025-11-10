@@ -1,12 +1,23 @@
 ---
 import type { Recipe, PreparationStep, PreparationGroup, IngredientGroup, Ingredient, LinkedIngredient } from '../../../types/recipe';
 import MultiTimerManager from '../../timer/MultiTimerManager.astro';
+import { formatQuantity } from '../../../lib/units';
 
 interface Props {
   recipe: Recipe;
 }
 
 const { recipe } = Astro.props;
+
+// Helper function to format quantity for display
+function formatQuantityForDisplay(amount: number, unit: string): { amount: number; unit: string } {
+  if (!unit || unit.trim() === '') {
+    return { amount, unit: '' };
+  }
+  
+  const formatted = formatQuantity(amount, unit);
+  return { amount: formatted.amount, unit: formatted.unit };
+}
 
 // Helper function to convert Celsius to gas mark
 function celsiusToGasMark(celsius: number): string {
@@ -202,22 +213,23 @@ const totalSteps = preparationGroups.reduce((sum, group) => sum + group.steps.le
                       const ingredient = allIngredients.find(i => i.id === link.ingredientId);
                       if (!ingredient) return null;
                       const quantity = ingredient.quantities[link.selectedQuantityIndex];
-                      const shouldShowUnit = quantity.unit && 
-                        quantity.unit.trim() !== '' && 
-                        !['Stück', 'Stk.', 'Stk', 'stück', 'stk.', 'stk'].includes(quantity.unit.trim());
+                      const formatted = formatQuantityForDisplay(quantity.amount, quantity.unit);
+                      const shouldShowUnit = formatted.unit && 
+                        formatted.unit.trim() !== '' && 
+                        !['Stück', 'Stk.', 'Stk', 'stück', 'stk.', 'stk'].includes(formatted.unit.trim());
                       
                       return (
                         <span class="inline-flex items-center px-3 py-1 md:px-4 md:py-1.5 rounded-full text-sm sm:text-base md:text-lg lg:text-xl bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-100">
-                          {quantity.amount > 0 && (
-                            <span class="font-medium">{quantity.amount}</span>
+                          {formatted.amount > 0 && (
+                            <span class="font-medium">{formatted.amount}</span>
                           )}
-                          {quantity.amount > 0 && shouldShowUnit && (
+                          {formatted.amount > 0 && shouldShowUnit && (
                             <span class="ml-1">&nbsp;</span>
                           )}
                           {shouldShowUnit && (
-                            <span class="font-medium">{quantity.unit}</span>
+                            <span class="font-medium">{formatted.unit}</span>
                           )}
-                          {(quantity.amount > 0 || shouldShowUnit) && (
+                          {(formatted.amount > 0 || shouldShowUnit) && (
                             <span class="ml-1">&nbsp;</span>
                           )}
                           <span>{ingredient.name}</span>

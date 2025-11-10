@@ -1,4 +1,5 @@
 import type { Recipe, NutritionData } from '../../types/recipe';
+import { getUnitVariations, convertToBaseUnit } from '../../lib/units';
 
 export interface ExtractedRecipeData {
   title: string;
@@ -296,6 +297,23 @@ export abstract class BaseRecipeExtractor {
   }
 
   /**
+   * Normalize a unit and amount to base unit
+   */
+  private normalizeUnit(amount: number, unit: string): { amount: number; unit: string } {
+    if (!unit || unit.trim() === '') {
+      return { amount, unit: '' };
+    }
+    
+    const converted = convertToBaseUnit(amount, unit);
+    if (converted) {
+      return { amount: converted.amount, unit: converted.baseUnit };
+    }
+    
+    // Unit not found, return as-is (might be a base unit already)
+    return { amount, unit };
+  }
+
+  /**
    * Parse ingredient string to extract amount, unit, and name
    * Examples: "3 EL Olivenöl" -> { amount: 3, unit: "EL", name: "Olivenöl" }
    */
@@ -315,51 +333,17 @@ export abstract class BaseRecipeExtractor {
     const cleaned = this.cleanText(ingredientStr);
     console.log('Parsing ingredient:', cleaned);
     
-    // Define unit mappings with their variations
-    const unitMappings = [
-      // Small measurement units
-      { unit: 'Msp.', variations: ['Messerspitze', 'Msp\\.?', 'MSP\\.?'] },
-      { unit: 'Prise', variations: ['Prise', 'Pr\\.?', 'PR\\.?'] },
-      { unit: 'Tropfen', variations: ['Tropfen', 'Tr\\.?', 'TR\\.?'] },
-      { unit: 'Spritzer', variations: ['Spritzer'] },
-      { unit: 'Schuss', variations: ['Schuss'] },
-      { unit: 'Hauch', variations: ['Hauch'] },
-      
-      // Volume units
-      { unit: 'EL', variations: ['Esslöffel', 'EL', 'Eßlöffel'] },
-      { unit: 'TL', variations: ['Teelöffel', 'TL'] },
-      { unit: 'L', variations: ['Liter', 'l', 'L'] },
-      { unit: 'ml', variations: ['Milliliter', 'ml', 'ML'] },
-      { unit: 'Tasse', variations: ['Tasse', 'Tassen'] },
-      { unit: 'Becher', variations: ['Becher'] },
-      { unit: 'Glas', variations: ['Glas', 'Gläser'] },
-      
-      // Weight units
-      { unit: 'kg', variations: ['Kilogramm', 'kg', 'KG'] },
-      { unit: 'g', variations: ['Gramm', 'g', 'G'] },
-      
-      // Package/piece units
-      { unit: 'Pck.', variations: ['Packung', 'Pck\\.?', 'Pack'] },
-      { unit: 'Päckchen', variations: ['Päckchen'] },
-      { unit: 'Dose', variations: ['Dose', 'Dosen'] },
-      { unit: 'Flasche', variations: ['Flasche', 'Flaschen'] },
-      { unit: 'Tube', variations: ['Tube', 'Tuben'] },
-      { unit: 'Würfel', variations: ['Würfel'] },
-      { unit: 'Riegel', variations: ['Riegel'] },
-      { unit: 'Rolle', variations: ['Rolle', 'Rollen'] },
-      { unit: 'Stück', variations: ['Stück', 'St\\.?', 'St'] },
-      
-      // Natural units
-      { unit: 'Zehe', variations: ['Zehe', 'Zehen'] },
-      { unit: 'Bund', variations: ['Bund'] },
-      { unit: 'Kopf', variations: ['Kopf', 'Köpfe'] },
-      { unit: 'Knolle', variations: ['Knolle', 'Knollen'] },
-      { unit: 'Stange', variations: ['Stange', 'Stangen'] },
-      { unit: 'Zweig', variations: ['Zweig', 'Zweige'] },
-      { unit: 'Blatt', variations: ['Blatt', 'Blätter'] },
-      { unit: 'Scheibe', variations: ['Scheibe', 'Scheiben'] },
-      { unit: 'Handvoll', variations: ['Handvoll'] }
-    ];
+    // Get unit variations from centralized units configuration
+    const unitVariations = getUnitVariations();
+    
+    // Convert to format expected by the parser
+    const unitMappings = unitVariations.map(({ unit, variations }) => ({
+      unit, // This will be the base unit name
+      variations: variations.map(v => {
+        // Escape special regex characters
+        return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      })
+    }));
 
     // Generate unit patterns dynamically
     const unitPatterns = [];
@@ -501,14 +485,17 @@ export abstract class BaseRecipeExtractor {
           name = baseName + (additionalText ? ' ' + additionalText : '');
           extractedUnit = ingredientUnit;
           
+          // Normalize unit to base unit
+          const normalized = this.normalizeUnit(amount, extractedUnit);
+          
           // Store description separately
           const result = {
             id: this.generateId(),
             name: name.trim(),
             description: ingredientDescription,
             quantities: [{
-              amount: amount,
-              unit: extractedUnit
+              amount: normalized.amount,
+              unit: normalized.unit
             }]
           };
           
@@ -523,14 +510,17 @@ export abstract class BaseRecipeExtractor {
           
           name = ingredientName;
           
+          // Normalize unit to base unit
+          const normalized = this.normalizeUnit(amount, extractedUnit);
+          
           // Store descriptive text as description
           const result = {
             id: this.generateId(),
             name: name.trim(),
             description: descriptiveText,
             quantities: [{
-              amount: amount,
-              unit: extractedUnit
+              amount: normalized.amount,
+              unit: normalized.unit
             }]
           };
           
@@ -546,14 +536,17 @@ export abstract class BaseRecipeExtractor {
           extractedUnit = containerType;
           name = contents;
           
+          // Normalize unit to base unit
+          const normalized = this.normalizeUnit(amount, extractedUnit);
+          
           // Store container description as description
           const result = {
             id: this.generateId(),
             name: name.trim(),
             description: containerDescription,
             quantities: [{
-              amount: amount,
-              unit: extractedUnit
+              amount: normalized.amount,
+              unit: normalized.unit
             }]
           };
           
@@ -575,13 +568,16 @@ export abstract class BaseRecipeExtractor {
           
           // If there's descriptive text, store it as description
           if (descriptiveText) {
+            // Normalize unit to base unit
+            const normalized = this.normalizeUnit(amount, extractedUnit);
+            
             const result = {
               id: this.generateId(),
               name: name.trim(),
               description: descriptiveText,
               quantities: [{
-                amount: amount,
-                unit: extractedUnit
+                amount: normalized.amount,
+                unit: normalized.unit
               }]
             };
             
@@ -659,13 +655,16 @@ export abstract class BaseRecipeExtractor {
           }
         }
 
+        // Normalize unit to base unit
+        const normalized = this.normalizeUnit(amount, extractedUnit);
+        
         const result = {
           id: this.generateId(),
           name: finalName,
           description: ingredientDescription,
           quantities: [{
-            amount: amount,
-            unit: extractedUnit
+            amount: normalized.amount,
+            unit: normalized.unit
           }]
         };
         

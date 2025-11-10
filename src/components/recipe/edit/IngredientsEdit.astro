@@ -68,19 +68,10 @@ const { recipe } = Astro.props;
                         step="0.1"
                         class="w-20 sm:w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                       />
-                      <select class="w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
+                      <select class="ingredient-unit-select w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
                         <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
                           {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
                         </option>
-                        <option value="g">g</option>
-                        <option value="kg">kg</option>
-                        <option value="ml">ml</option>
-                        <option value="l">l</option>
-                        <option value="Stück">Stück</option>
-                        <option value="TL">TL</option>
-                        <option value="EL">EL</option>
-                        <option value="Tasse">Tasse</option>
-                        <option value="Prise">Prise</option>
                       </select>
                       <button 
                         type="button" 
@@ -165,19 +156,10 @@ const { recipe } = Astro.props;
                           step="0.1"
                           class="w-20 sm:w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                         />
-                        <select class="w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
+                        <select class="ingredient-unit-select w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
                           <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
                             {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
                           </option>
-                          <option value="g">g</option>
-                          <option value="kg">kg</option>
-                          <option value="ml">ml</option>
-                          <option value="l">l</option>
-                          <option value="Stück">Stück</option>
-                          <option value="TL">TL</option>
-                          <option value="EL">EL</option>
-                          <option value="Tasse">Tasse</option>
-                          <option value="Prise">Prise</option>
                         </select>
                         <button 
                           type="button" 
@@ -216,8 +198,65 @@ const { recipe } = Astro.props;
 </div> 
 
 <script>
+// Load and populate unit dropdowns
+let availableUnits = [];
+
+async function loadUnits() {
+  try {
+    const response = await fetch('/api/units');
+    if (response.ok) {
+      const data = await response.json();
+      // API returns { units: [...], conversions: {...} } or just array (backward compatibility)
+      availableUnits = Array.isArray(data) ? data : (data.units || []);
+      populateUnitDropdowns();
+    }
+  } catch (error) {
+    console.error('Error loading units:', error);
+  }
+}
+
+function populateUnitDropdowns() {
+  const unitSelects = document.querySelectorAll('.ingredient-unit-select');
+  unitSelects.forEach(select => {
+    const currentValue = select.querySelector('option[selected]')?.value || '';
+    populateUnitDropdown(select, currentValue);
+  });
+}
+
+function populateUnitDropdown(selectElement, selectedValue = '') {
+  // Keep the first option if it's a placeholder or has a value
+  const firstOption = selectElement.querySelector('option');
+  const hasValue = firstOption && firstOption.value !== '';
+  
+  if (!hasValue) {
+    // Clear and add placeholder
+    selectElement.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Einheit';
+    selectElement.appendChild(placeholder);
+  } else {
+    // Clear all options
+    selectElement.innerHTML = '';
+  }
+  
+  // Add all available units
+  availableUnits.forEach(unit => {
+    const option = document.createElement('option');
+    option.value = unit.name;
+    option.textContent = unit.name;
+    if (unit.name === selectedValue) {
+      option.selected = true;
+    }
+    selectElement.appendChild(option);
+  });
+}
+
 // Drag and Drop functionality for ingredients
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+  // Load units first
+  await loadUnits();
+  
   let draggedElement: HTMLElement | null = null;
   let draggedData: any = null;
   let placeholder: HTMLElement | null = null;
