@@ -1,0 +1,361 @@
+---
+// Grouping Suggestion Modal Component
+// This modal suggests groups based on naming similarity (~90%)
+---
+
+<div id="grouping-suggestion-modal" class="modal hidden">
+  <div class="modal-overlay"></div>
+  <div class="modal-content modal-lg">
+    <div class="modal-header">
+      <h2 class="modal-title">Gruppierungsvorschläge</h2>
+      <button class="modal-close">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <div id="suggestion-loading" class="text-center py-8 hidden">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+        <p class="text-muted mt-2">Vorschläge werden berechnet...</p>
+      </div>
+      
+      <div id="suggestion-content" class="hidden">
+        <p class="text-sm text-muted mb-4">
+          Die folgenden Gruppierungen wurden basierend auf Namensähnlichkeit vorgeschlagen. 
+          Sie können einzelne Vorschläge akzeptieren oder ablehnen.
+        </p>
+        
+        <div id="suggested-groups" class="space-y-3 max-h-96 overflow-y-auto">
+          <!-- Suggested groups will be populated by JavaScript -->
+        </div>
+        
+        <div id="no-suggestions" class="hidden text-center py-8">
+          <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <p class="text-muted">Keine Gruppierungsvorschläge gefunden</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer">
+      <button id="accept-all-btn" class="btn btn-success" disabled>
+        Alle akzeptieren
+      </button>
+      <button id="cancel-suggestion-btn" class="btn btn-secondary">
+        Abbrechen
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // @ts-nocheck
+  /**
+   * Calculate similarity between two strings using Levenshtein distance
+   * Returns a value between 0 and 1, where 1 means identical
+   */
+  function calculateSimilarity(str1, str2) {
+    const s1 = String(str1).toLowerCase().trim();
+    const s2 = String(str2).toLowerCase().trim();
+    
+    if (s1 === s2) return 1.0;
+    if (s1.length === 0 || s2.length === 0) return 0.0;
+    
+    // Calculate Levenshtein distance
+    const matrix = [];
+    for (let i = 0; i <= s2.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= s1.length; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= s2.length; i++) {
+      for (let j = 1; j <= s1.length; j++) {
+        if (s2.charAt(i - 1) === s1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1,     // insertion
+            matrix[i - 1][j] + 1      // deletion
+          );
+        }
+      }
+    }
+    
+    const distance = matrix[s2.length][s1.length];
+    const maxLength = Math.max(s1.length, s2.length);
+    return 1 - (distance / maxLength);
+  }
+  
+  /**
+   * Suggest groups based on naming similarity
+   * Groups items with similarity >= 0.9 (90%)
+   * Allows grouping ungrouped items with grouped items, but doesn't suggest
+   * grouping items that are already in the same group together
+   * @param {any[]} items
+   * @returns {any[]}
+   */
+  function suggestGroups(items) {
+    if (items.length < 2) {
+      return [];
+    }
+    
+    const suggestedGroups = [];
+    const processed = new Set();
+    const similarityThreshold = 0.9;
+    
+    // Helper function to check if two items are already in the same group
+    function areInSameGroup(item1, item2) {
+      // If they have the same manualGroupId, they're already in the same manual group
+      if (item1.manualGroupId && item2.manualGroupId) {
+        return item1.manualGroupId === item2.manualGroupId;
+      }
+      
+      // If both are ungrouped and have the same name (case-insensitive),
+      // they're already automatically grouped together by name
+      if (!item1.manualGroupId && !item2.manualGroupId) {
+        return item1.name.toLowerCase().trim() === item2.name.toLowerCase().trim();
+      }
+      
+      // One is grouped, one is not - they're not in the same group
+      return false;
+    }
+    
+    for (let i = 0; i < items.length; i++) {
+      if (processed.has(items[i].id)) continue;
+      
+      const currentItem = items[i];
+      const group = [currentItem];
+      processed.add(currentItem.id);
+      
+      // Find similar items
+      for (let j = i + 1; j < items.length; j++) {
+        if (processed.has(items[j].id)) continue;
+        
+        // Skip if items are already in the same group
+        if (areInSameGroup(currentItem, items[j])) {
+          continue;
+        }
+        
+        const similarity = calculateSimilarity(
+          currentItem.name,
+          items[j].name
+        );
+        
+        if (similarity >= similarityThreshold) {
+          group.push(items[j]);
+          processed.add(items[j].id);
+        }
+      }
+      
+      // Only add groups with at least 2 items
+      if (group.length >= 2) {
+        // Calculate average similarity for the group
+        let totalSimilarity = 0;
+        let similarityCount = 0;
+        for (let k = 0; k < group.length; k++) {
+          for (let l = k + 1; l < group.length; l++) {
+            totalSimilarity += calculateSimilarity(group[k].name, group[l].name);
+            similarityCount++;
+          }
+        }
+        const avgSimilarity = similarityCount > 0 ? totalSimilarity / similarityCount : 0;
+        
+        suggestedGroups.push({
+          id: `suggestion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          items: group,
+          similarity: avgSimilarity
+        });
+      }
+    }
+    
+    return suggestedGroups;
+  }
+  
+  /**
+   * Render suggested groups in the modal
+   * @param {any[]} groups
+   * @param {HTMLElement} container
+   */
+  function renderSuggestedGroups(groups, container) {
+    if (groups.length === 0) {
+      const noSuggestions = document.getElementById('no-suggestions');
+      const groupsContainer = document.getElementById('suggested-groups');
+      noSuggestions?.classList.remove('hidden');
+      if (groupsContainer) {
+        groupsContainer.innerHTML = '';
+      }
+      return;
+    }
+    
+    const noSuggestions = document.getElementById('no-suggestions');
+    noSuggestions?.classList.add('hidden');
+    
+    // Store groups data in a data attribute for later retrieval
+    container.setAttribute('data-groups', JSON.stringify(groups));
+    
+    container.innerHTML = groups.map((/** @type {any} */ group) => {
+      const similarityPercent = Math.round(group.similarity * 100);
+      
+      return `
+        <div class="suggested-group border border-gray-300 dark:border-gray-600 rounded-lg p-4" data-group-id="${group.id}">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-2">
+                <input 
+                  type="checkbox" 
+                  class="group-accept-checkbox w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
+                  data-group-id="${group.id}"
+                  checked
+                />
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  ${group.items.length} Artikel
+                </span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  (${similarityPercent}% Ähnlichkeit)
+                </span>
+              </div>
+              <div class="ml-7 space-y-1">
+                ${group.items.map((/** @type {any} */ item) => {
+                  const quantity = item.quantity && item.quantity.amount !== 0
+                    ? `${item.quantity.amount} ${item.quantity.unit}` 
+                    : '';
+                  const description = item.description ? ` • ${item.description}` : '';
+                  return `
+                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                      <span class="font-medium">${item.name}</span>
+                      ${quantity ? `<span class="text-gray-500">${quantity}</span>` : ''}
+                      ${description ? `<span class="text-gray-500">${description}</span>` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+            <button 
+              class="reject-group-btn btn btn-ghost btn-sm text-red-600 hover:text-red-700"
+              data-group-id="${group.id}"
+              title="Vorschlag ablehnen"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    // Attach event listeners
+    attachGroupListeners(groups);
+  }
+  
+  /**
+   * Get groups data from the container
+   * @param {HTMLElement} container
+   * @returns {any[]}
+   */
+  function getGroupsData(/** @type {HTMLElement} */ container) {
+    const dataAttr = container.getAttribute('data-groups');
+    if (dataAttr) {
+      try {
+        return JSON.parse(dataAttr);
+      } catch (e) {
+        console.error('Error parsing groups data:', e);
+        return [];
+      }
+    }
+    return [];
+  }
+  
+  /**
+   * Attach event listeners to group checkboxes and reject buttons
+   * @param {any[]} groups
+   */
+  function attachGroupListeners(/** @type {any[]} */ groups) {
+    // Checkbox listeners
+    document.querySelectorAll('.group-accept-checkbox').forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        updateAcceptAllButton();
+      });
+    });
+    
+    // Reject button listeners
+    document.querySelectorAll('.reject-group-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        if (!target) return;
+        const groupId = target.getAttribute('data-group-id');
+        if (!groupId) return;
+        const groupElement = document.querySelector(`[data-group-id="${groupId}"]`);
+        const checkbox = groupElement?.querySelector('.group-accept-checkbox') as HTMLInputElement;
+        
+        if (checkbox) {
+          checkbox.checked = false;
+          updateAcceptAllButton();
+        }
+      });
+    });
+  }
+  
+  /**
+   * Update the "Accept all" button state
+   */
+  function updateAcceptAllButton() {
+    const checkboxes = document.querySelectorAll('.group-accept-checkbox');
+    const checkedCount = document.querySelectorAll('.group-accept-checkbox:checked').length;
+    const acceptAllBtn = document.getElementById('accept-all-btn') as HTMLButtonElement;
+    
+    if (acceptAllBtn) {
+      acceptAllBtn.disabled = checkedCount === 0;
+    }
+  }
+  
+  /**
+   * Get accepted groups (checked checkboxes)
+   * @returns {string[]}
+   */
+  function getAcceptedGroups() {
+    /** @type {string[]} */
+    const acceptedGroups = [];
+    document.querySelectorAll('.group-accept-checkbox:checked').forEach(checkbox => {
+      const groupId = (checkbox as HTMLElement).getAttribute('data-group-id');
+      if (groupId) {
+        const groupElement = document.querySelector(`.suggested-group[data-group-id="${groupId}"]`);
+        if (groupElement) {
+          acceptedGroups.push(groupId);
+        }
+      }
+    });
+    return acceptedGroups;
+  }
+  
+  // Export functions for use in the shopping list page
+  // @ts-ignore
+  window.GroupingSuggestionModal = {
+    suggestGroups,
+    renderSuggestedGroups,
+    updateAcceptAllButton,
+    getAcceptedGroups,
+    getGroupsData
+  };
+</script>
+
+<style>
+  .suggested-group {
+    transition: all 0.2s ease;
+  }
+  
+  .suggested-group:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+  
+  .dark .suggested-group:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .group-accept-checkbox:not(:checked) ~ * {
+    opacity: 0.5;
+  }
+</style>
+
