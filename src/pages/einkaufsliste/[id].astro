@@ -202,6 +202,16 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           Einkaufsliste ({shoppingList.items.length} Artikel)
         </h2>
         
+        <!-- Search Field -->
+        <div class="mb-4">
+          <input
+            type="text"
+            id="shopping-items-search"
+            class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 focus:border-transparent"
+            placeholder="Zutaten durchsuchen..."
+          />
+        </div>
+        
         <div class="space-y-2" id="shopping-items">
           <!-- Items will be populated by JavaScript -->
         </div>
@@ -349,6 +359,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     // Toggle state for hiding checked items (default: false = show all items)
     let hideCheckedItems = false;
     
+    // Search filter state
+    let searchFilter = '';
+    
     // Grouping state
     let isGroupingMode = false;
     let selectedGroupIds = new Set();
@@ -429,6 +442,15 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 
     document.addEventListener('DOMContentLoaded', async () => {
       await loadUnits();
+      
+      // Search functionality
+      const searchInput = document.getElementById('shopping-items-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          searchFilter = e.target.value;
+          renderShoppingItems();
+        });
+      }
       
       // Hide checked items toggle functionality
       const hideCheckedToggle = document.getElementById('hide-checked-items-toggle');
@@ -788,20 +810,54 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         
         const groupedItems = groupItems(itemsToRender);
         
-        if (groupedItems.length === 0) {
+        // Filter groups based on search term
+        let filteredGroups = groupedItems;
+        if (searchFilter.trim() !== '') {
+          const searchTerm = searchFilter.toLowerCase().trim();
+          filteredGroups = groupedItems.filter(group => {
+            // Check if group name matches
+            if (group.name.toLowerCase().includes(searchTerm)) {
+              return true;
+            }
+            
+            // Check if any description matches
+            if (group.descriptions.some(desc => desc.toLowerCase().includes(searchTerm))) {
+              return true;
+            }
+            
+            // Check if any unit name matches
+            const unitNames = Array.from(group.unitCasing.values());
+            if (unitNames.some(unit => unit.toLowerCase().includes(searchTerm))) {
+              return true;
+            }
+            
+            // Check if any individual item name matches (for manual groups)
+            if (group.items.some(item => item.name.toLowerCase().includes(searchTerm))) {
+              return true;
+            }
+            
+            return false;
+          });
+        }
+        
+        if (filteredGroups.length === 0) {
+          const emptyMessage = searchFilter.trim() !== '' 
+            ? `<p class="text-muted mb-2">Keine Artikel gefunden für "${searchFilter}"</p>`
+            : `<p class="text-muted mb-2">Noch keine Artikel in der Einkaufsliste</p>
+               <p class="text-sm text-muted">Klicken Sie auf "Artikel hinzufügen" um zu beginnen</p>`;
+          
           container.innerHTML = `
             <div class="text-center py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
               <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v11a2 2 0 002 2h5.586a1 1 0 00.707-.293l5.414-5.414a1 1 0 00.293-.707V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
               </svg>
-              <p class="text-muted mb-2">Noch keine Artikel in der Einkaufsliste</p>
-              <p class="text-sm text-muted">Klicken Sie auf "Artikel hinzufügen" um zu beginnen</p>
+              ${emptyMessage}
             </div>
           `;
           return;
         }
         
-        container.innerHTML = groupedItems.map((group, index) => {
+        container.innerHTML = filteredGroups.map((group, index) => {
           const isChecked = group.allChecked;
           const isPartiallyChecked = group.anyChecked && !group.allChecked;
           const itemIds = group.items.map(item => item.id).join(',');
