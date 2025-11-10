@@ -152,23 +152,19 @@ export const BASE_UNITS: Record<string, UnitDefinition> = {
     aliases: ['Hauch', 'hauch']
   },
   
-  // Volume units that convert to ml
+  // Volume units - base units that don't convert
   'TL': {
     name: 'TL',
     category: 'volume',
     displayName: 'Teelöffel',
-    isBaseUnit: false,
-    baseUnit: 'ml',
-    conversionFactor: 5, // 1 TL = 5 ml
+    isBaseUnit: true,
     aliases: ['TL', 'Teelöffel', 'teelöffel', 'tl']
   },
   'EL': {
     name: 'EL',
     category: 'volume',
     displayName: 'Esslöffel',
-    isBaseUnit: false,
-    baseUnit: 'ml',
-    conversionFactor: 15, // 1 EL = 15 ml
+    isBaseUnit: true,
     aliases: ['EL', 'Esslöffel', 'Eßlöffel', 'esslöffel', 'eßlöffel', 'el']
   },
   'Tasse': {
@@ -394,6 +390,11 @@ export function convertFromBaseUnit(amount: number, baseUnit: string): { amount:
   
   // Find the largest unit that fits (amount >= 1 of that unit)
   for (const displayUnit of displayUnits) {
+    // Skip conversion if factor is 1 - no benefit in converting to equivalent unit
+    if (displayUnit.conversionFactor === 1) {
+      continue;
+    }
+    
     const convertedAmount = amount / (displayUnit.conversionFactor || 1);
     // Use this unit if the converted amount is >= 1 and is a "nice" number
     if (convertedAmount >= 1 && convertedAmount < 1000) {
@@ -431,6 +432,16 @@ export function formatQuantity(amount: number, unit: string): { amount: number; 
   // If already a base unit, try to convert to display unit
   if (normalized.baseUnit === unit) {
     return convertFromBaseUnit(amount, unit);
+  }
+  
+  // If conversion factor is 1, preserve the original unit (no actual conversion)
+  if (normalized.conversionFactor === 1) {
+    const unitDef = findUnit(unit);
+    return {
+      amount,
+      unit,
+      displayName: unitDef?.displayName || unit
+    };
   }
   
   // Convert to base unit first, then to display unit

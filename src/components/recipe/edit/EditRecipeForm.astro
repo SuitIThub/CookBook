@@ -57,12 +57,18 @@ const { recipe } = Astro.props;
   function populateUnitDropdowns() {
     const unitSelects = document.querySelectorAll('.ingredient-unit-select');
     unitSelects.forEach(select => {
-      populateUnitDropdown(select, select.value);
+      // Get the current value from the selected option, not from select.value
+      // This is more reliable when the select was just created from HTML
+      const currentValue = select.querySelector('option[selected]')?.value || select.value || '';
+      populateUnitDropdown(select, currentValue);
     });
   }
   
   // Populate a single unit dropdown
   function populateUnitDropdown(selectElement, selectedValue = '') {
+    // Store the original selected value before clearing
+    const originalValue = selectedValue || selectElement.value || '';
+    
     // Clear existing options except the first one (if it's a placeholder)
     const firstOption = selectElement.querySelector('option');
     const isPlaceholder = firstOption && (firstOption.value === '' || firstOption.textContent === 'Einheit');
@@ -77,16 +83,33 @@ const { recipe } = Astro.props;
       selectElement.innerHTML = '';
     }
     
+    // Use the original value for selection
+    const valueToSelect = originalValue;
+    let foundInAvailableUnits = false;
+    
     // Add all available units
-    availableUnits.forEach(unit => {
-      const option = document.createElement('option');
-      option.value = unit.name;
-      option.textContent = unit.name;
-      if (unit.name === selectedValue) {
-        option.selected = true;
-      }
-      selectElement.appendChild(option);
-    });
+    if (availableUnits.length > 0) {
+      availableUnits.forEach(unit => {
+        const option = document.createElement('option');
+        option.value = unit.name;
+        option.textContent = unit.name;
+        if (unit.name === valueToSelect) {
+          option.selected = true;
+          foundInAvailableUnits = true;
+        }
+        selectElement.appendChild(option);
+      });
+    }
+    
+    // If the original value wasn't found in base units, add it as a custom option
+    // This preserves units that might not be in the base units list
+    if (valueToSelect && !foundInAvailableUnits) {
+      const customOption = document.createElement('option');
+      customOption.value = valueToSelect;
+      customOption.textContent = valueToSelect;
+      customOption.selected = true;
+      selectElement.appendChild(customOption);
+    }
   }
   
   // Add form submission handler
