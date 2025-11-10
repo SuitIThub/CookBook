@@ -6,6 +6,16 @@ export const GET: APIRoute = async ({ url }) => {
     const searchParams = new URL(url).searchParams;
     const query = searchParams.get('q') || '';
     const all = searchParams.get('all') === 'true';
+    const ingredientName = searchParams.get('ingredient');
+
+    if (ingredientName) {
+      // Get all recipes that contain this ingredient
+      const recipes = db.getRecipesByIngredient(ingredientName);
+      return new Response(JSON.stringify(recipes), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     if (all) {
       // Get all ingredients from recipes with usage counts
@@ -37,9 +47,9 @@ export const POST: APIRoute = async ({ request }) => {
     const body = await request.json();
     const { action, oldName, newName } = body;
 
-    if (action === 'unify' && oldName && newName) {
+    if ((action === 'unify' || action === 'rename') && oldName && newName) {
       if (oldName === newName) {
-        return new Response(JSON.stringify({ error: 'Cannot unify ingredient with itself' }), {
+        return new Response(JSON.stringify({ error: 'Der neue Name muss sich vom alten Namen unterscheiden' }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         });
@@ -57,7 +67,7 @@ export const POST: APIRoute = async ({ request }) => {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('Error unifying ingredients:', error);
+    console.error('Error processing ingredient action:', error);
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }

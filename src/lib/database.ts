@@ -597,6 +597,41 @@ export class CookbookDatabase {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  // Get all recipes that contain a specific ingredient
+  getRecipesByIngredient(ingredientName: string): Array<{ id: string; title: string }> {
+    const recipes = this.getAllRecipes();
+    const matchingRecipes: Array<{ id: string; title: string }> = [];
+
+    const hasIngredient = (groups: any[]): boolean => {
+      for (const group of groups) {
+        if (group.ingredients) {
+          for (const item of group.ingredients) {
+            if (item.ingredients) {
+              // It's a nested group
+              if (hasIngredient([item])) {
+                return true;
+              }
+            } else if (item.name === ingredientName) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    recipes.forEach(recipe => {
+      if (hasIngredient(recipe.ingredientGroups)) {
+        matchingRecipes.push({
+          id: recipe.id,
+          title: recipe.title
+        });
+      }
+    });
+
+    return matchingRecipes.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
   // Unify ingredients: replace oldName with newName in all recipes
   unifyIngredients(oldName: string, newName: string): { updated: number; shoppingListsUpdated: number } {
     const recipes = this.getAllRecipes();

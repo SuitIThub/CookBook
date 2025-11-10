@@ -1,0 +1,113 @@
+---
+declare global {
+  interface Window {
+    openRecipesModal?: (ingredientName: string) => Promise<void>;
+  }
+}
+---
+
+<!-- Recipes Modal -->
+<div
+  id="recipes-modal"
+  class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
+      Rezepte mit "<span id="recipes-ingredient-name" class="font-semibold"></span>"
+    </h2>
+    <div id="recipes-list" class="flex-1 overflow-y-auto space-y-2 mb-4">
+      <!-- Recipes will be loaded here -->
+    </div>
+    <div class="flex justify-end">
+      <button
+        id="close-recipes-btn"
+        class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors"
+      >
+        Schließen
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function openRecipesModal(ingredientName: string) {
+    const modal = document.getElementById('recipes-modal');
+    const ingredientNameSpan = document.getElementById('recipes-ingredient-name');
+    const recipesList = document.getElementById('recipes-list');
+
+    if (!modal || !ingredientNameSpan || !recipesList) return;
+
+    ingredientNameSpan.textContent = ingredientName;
+    recipesList.innerHTML = '<div class="text-center py-4 text-gray-500 dark:text-gray-400">Lade Rezepte...</div>';
+    modal.classList.remove('hidden');
+
+    try {
+      const response = await fetch(`/api/ingredients?ingredient=${encodeURIComponent(ingredientName)}`);
+      if (!response.ok) {
+        throw new Error('Fehler beim Laden der Rezepte');
+      }
+
+      const recipes = await response.json();
+
+      if (recipes.length === 0) {
+        recipesList.innerHTML = '<div class="text-center py-4 text-gray-500 dark:text-gray-400">Keine Rezepte gefunden.</div>';
+        return;
+      }
+
+      recipesList.innerHTML = recipes.map((recipe: { id: string; title: string }) => `
+        <a
+          href="/rezept/${recipe.id}"
+          class="block p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+        >
+          <h3 class="font-medium text-gray-900 dark:text-white">${recipe.title}</h3>
+        </a>
+      `).join('');
+    } catch (error) {
+      console.error('Error loading recipes:', error);
+      recipesList.innerHTML = '<div class="text-center py-4 text-red-500">Fehler beim Laden der Rezepte.</div>';
+    }
+  }
+
+  function closeRecipesModal() {
+    const modal = document.getElementById('recipes-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+    }
+  }
+
+  function setupRecipesModal() {
+    const modal = document.getElementById('recipes-modal');
+    const closeBtn = document.getElementById('close-recipes-btn');
+
+    if (!modal || !closeBtn) return;
+
+    closeBtn.addEventListener('click', () => {
+      closeRecipesModal();
+    });
+
+    // Close modal on background click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeRecipesModal();
+      }
+    });
+
+    // Close modal on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+        closeRecipesModal();
+      }
+    });
+  }
+
+  // Expose function globally
+  window.openRecipesModal = openRecipesModal;
+
+  // Initialize on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupRecipesModal);
+  } else {
+    setupRecipesModal();
+  }
+</script>
+
