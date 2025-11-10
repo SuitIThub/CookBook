@@ -43,4 +43,7 @@ export const EVENTS = {
   SHOPPING_LIST_UPDATED: 'shopping-list-updated',
   SHOPPING_LIST_CREATED: 'shopping-list-created',
   SHOPPING_LIST_DELETED: 'shopping-list-deleted',
+  GLOBAL_TIMER_CREATED: 'global-timer-created',
+  GLOBAL_TIMER_UPDATED: 'global-timer-updated',
+  GLOBAL_TIMER_DELETED: 'global-timer-deleted',
 } as const; 

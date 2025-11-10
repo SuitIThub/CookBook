@@ -64,6 +64,7 @@
     remaining: number; // in seconds
     isRunning: boolean;
     isCompleted: boolean;
+    isGlobal?: boolean; // Whether this timer is global (synced across sessions)
     recipeName?: string; // Name of the recipe
     stepDescription?: string; // Description of the preparation step
     autoStarted?: boolean; // Whether this timer was auto-started from a recipe step
@@ -79,6 +80,9 @@
     private alarmIntervals: Map<string, NodeJS.Timeout> = new Map();
     private isExpanded = false;
     private isPortraitMode = false;
+    private eventSource: EventSource | null = null;
+    private syncInterval: NodeJS.Timeout | null = null;
+    private isSyncing = false; // Prevent sync loops
 
     constructor() {
       this.init();
@@ -86,6 +90,8 @@
       this.updateOrientation();
       // Ensure timer UI is always available
       this.showTimerUI();
+      // Connect to global timer sync
+      this.connectToGlobalTimers();
     }
 
     private init() {
@@ -183,6 +189,449 @@
       document.getElementById('add-timer-btn')?.addEventListener('click', () => {
         this.showAddTimerDialog();
       });
+
+      // Handle online/offline status for global timer sync
+      window.addEventListener('online', () => {
+        this.connectToGlobalTimers();
+      });
+
+      window.addEventListener('offline', () => {
+        if (this.eventSource) {
+          this.eventSource.close();
+          this.eventSource = null;
+        }
+      });
+    }
+
+    private async connectToGlobalTimers() {
+      // Close existing connection
+      if (this.eventSource) {
+        this.eventSource.close();
+      }
+
+      try {
+        // Connect to SSE stream
+        this.eventSource = new EventSource('/api/timers/stream');
+        
+        this.eventSource.onopen = () => {
+          console.log('✅ Global timer sync connected');
+        };
+
+        this.eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            this.handleGlobalTimerUpdate(data);
+          } catch (error) {
+            console.error('Error parsing timer update:', error);
+          }
+        };
+
+        this.eventSource.onerror = () => {
+          console.log('❌ Global timer sync disconnected');
+          // Attempt to reconnect after delay
+          setTimeout(() => {
+            if (navigator.onLine) {
+              this.connectToGlobalTimers();
+            }
+          }, 3000);
+        };
+
+        // Load existing global timers
+        this.loadGlobalTimers();
+
+        // Set up periodic sync for running timers (less frequent to avoid conflicts)
+        if (this.syncInterval) {
+          clearInterval(this.syncInterval);
+        }
+        this.syncInterval = setInterval(() => {
+          this.syncRunningGlobalTimers();
+        }, 10000); // Sync every 10 seconds (reduced frequency)
+
+      } catch (error) {
+        console.error('Error connecting to global timers:', error);
+      }
+    }
+
+    private async loadGlobalTimers() {
+      try {
+        const response = await fetch('/api/timers');
+        if (!response.ok) return;
+        
+        const globalTimers = await response.json();
+        const currentTime = Date.now();
+
+        globalTimers.forEach((serverTimer: any) => {
+          const timer: Timer = {
+            id: serverTimer.id,
+            label: serverTimer.label,
+            duration: serverTimer.duration,
+            remaining: serverTimer.remaining,
+            isRunning: serverTimer.isRunning,
+            isCompleted: serverTimer.isCompleted,
+            isGlobal: true,
+            recipeName: serverTimer.recipeName,
+            stepDescription: serverTimer.stepDescription,
+            recipeId: serverTimer.recipeId,
+            stepId: serverTimer.stepId,
+            startTime: serverTimer.startTime,
+            pauseTime: serverTimer.pauseTime
+          };
+
+          // Calculate remaining time if timer is running
+          if (timer.isRunning && timer.startTime) {
+            const elapsed = Math.floor((currentTime - timer.startTime) / 1000);
+            timer.remaining = Math.max(0, timer.remaining - elapsed);
+          }
+
+          // Add or update timer
+          const existingTimer = this.timers.get(timer.id);
+          if (!existingTimer || !existingTimer.isGlobal) {
+            // New timer - add it
+            this.timers.set(timer.id, timer);
+            
+            // Start interval if running
+            if (timer.isRunning && timer.remaining > 0) {
+              this.startTimerInterval(timer.id);
+            }
+          } else {
+            // Existing timer - update it
+            const wasRunning = existingTimer.isRunning;
+            const oldStartTime = existingTimer.startTime;
+            
+            // Update all properties
+            existingTimer.label = timer.label;
+            existingTimer.duration = timer.duration;
+            existingTimer.remaining = timer.remaining;
+            existingTimer.isRunning = timer.isRunning;
+            existingTimer.isCompleted = timer.isCompleted;
+            existingTimer.recipeName = timer.recipeName;
+            existingTimer.stepDescription = timer.stepDescription;
+            existingTimer.recipeId = timer.recipeId;
+            existingTimer.stepId = timer.stepId;
+            existingTimer.startTime = timer.startTime;
+            existingTimer.pauseTime = timer.pauseTime;
+            
+            // Update interval if running state changed
+            if (timer.isRunning && !wasRunning) {
+              // Timer was started/resumed
+              if (!this.intervals.has(timer.id)) {
+                this.startTimerInterval(timer.id);
+              }
+            } else if (!timer.isRunning && wasRunning) {
+              // Timer was paused/stopped
+              const interval = this.intervals.get(timer.id);
+              if (interval) {
+                clearInterval(interval);
+                this.intervals.delete(timer.id);
+              }
+            } else if (timer.isRunning && oldStartTime !== timer.startTime) {
+              // Timer was restarted with new startTime - restart interval
+              const interval = this.intervals.get(timer.id);
+              if (interval) {
+                clearInterval(interval);
+                this.intervals.delete(timer.id);
+              }
+              if (timer.remaining > 0) {
+                this.startTimerInterval(timer.id);
+              }
+            }
+          }
+        });
+
+        this.saveTimers();
+        this.renderTimers();
+      } catch (error) {
+        console.error('Error loading global timers:', error);
+      }
+    }
+
+    private async fetchAndUpdateTimer(timerId: string) {
+      try {
+        const response = await fetch('/api/timers');
+        if (!response.ok) return;
+        
+        const globalTimers = await response.json();
+        const serverTimer = globalTimers.find((t: any) => t.id === timerId);
+        
+        if (!serverTimer) return;
+        
+        const timer = this.timers.get(timerId);
+        if (!timer || !timer.isGlobal) return;
+        
+        const currentTime = Date.now();
+        const wasRunning = timer.isRunning;
+        const oldStartTime = timer.startTime;
+        
+        // Update timer properties
+        timer.isRunning = serverTimer.isRunning;
+        timer.isCompleted = serverTimer.isCompleted;
+        timer.startTime = serverTimer.startTime;
+        timer.pauseTime = serverTimer.pauseTime;
+        
+        // Calculate remaining time if timer is running
+        if (timer.isRunning && timer.startTime) {
+          const elapsed = Math.floor((currentTime - timer.startTime) / 1000);
+          timer.remaining = Math.max(0, serverTimer.remaining - elapsed);
+        } else {
+          timer.remaining = serverTimer.remaining;
+        }
+        
+        // Update interval if running state changed
+        if (timer.isRunning && !wasRunning) {
+          // Timer was started/resumed
+          if (!this.intervals.has(timerId)) {
+            this.startTimerInterval(timerId);
+          }
+        } else if (!timer.isRunning && wasRunning) {
+          // Timer was paused/stopped
+          const interval = this.intervals.get(timerId);
+          if (interval) {
+            clearInterval(interval);
+            this.intervals.delete(timerId);
+          }
+        } else if (timer.isRunning && oldStartTime !== timer.startTime) {
+          // Timer was restarted with new startTime - restart interval
+          const interval = this.intervals.get(timerId);
+          if (interval) {
+            clearInterval(interval);
+            this.intervals.delete(timerId);
+          }
+          if (timer.remaining > 0) {
+            this.startTimerInterval(timerId);
+          }
+        }
+        
+        this.saveTimers();
+        this.renderTimers();
+      } catch (error) {
+        console.error('Error fetching timer:', error);
+      }
+    }
+
+    private handleGlobalTimerUpdate(data: any) {
+      if (this.isSyncing) return; // Prevent sync loops
+
+      if (data.type === 'created' || data.type === 'updated') {
+        const serverTimer = data.timer || data;
+        const timerId = serverTimer.id || data.timerId;
+        
+        if (data.type === 'updated' && data.updates) {
+          // Update existing timer
+          const timer = this.timers.get(timerId);
+          if (timer && timer.isGlobal) {
+            const wasRunning = timer.isRunning;
+            const oldStartTime = timer.startTime;
+            
+            // Update timer properties
+            if (data.updates.isRunning !== undefined) {
+              timer.isRunning = data.updates.isRunning;
+            }
+            if (data.updates.isCompleted !== undefined) {
+              timer.isCompleted = data.updates.isCompleted;
+            }
+            if (data.updates.startTime !== undefined) {
+              timer.startTime = data.updates.startTime;
+            }
+            if (data.updates.pauseTime !== undefined) {
+              timer.pauseTime = data.updates.pauseTime;
+            }
+            
+            // Handle remaining time updates
+            if (data.updates.remaining !== undefined) {
+              if (timer.isRunning && timer.startTime) {
+                // Timer is running - the remaining value from server is the "base remaining"
+                // Calculate current remaining from base remaining and elapsed time
+                const elapsed = Math.floor((Date.now() - timer.startTime) / 1000);
+                timer.remaining = Math.max(0, data.updates.remaining - elapsed);
+                // Also update duration if remaining increased (time was added)
+                if (timer.remaining > timer.duration) {
+                  timer.duration = timer.remaining;
+                }
+              } else {
+                // Timer is paused/stopped - use the remaining value directly
+                timer.remaining = data.updates.remaining;
+                // Also update duration if remaining increased (time was added)
+                if (timer.remaining > timer.duration) {
+                  timer.duration = timer.remaining;
+                }
+              }
+            } else if (timer.isRunning && timer.startTime && oldStartTime !== timer.startTime) {
+              // Timer was just started/resumed - startTime changed but remaining not in update
+              // Fetch the full timer to get the correct remaining value
+              this.fetchAndUpdateTimer(timerId);
+              return;
+            } else if (timer.isRunning && oldStartTime === timer.startTime && !wasRunning) {
+              // Timer was resumed with same startTime (shouldn't happen, but handle it)
+              // This means the timer was already running, just ensure interval is active
+              if (!this.intervals.has(timerId)) {
+                this.startTimerInterval(timerId);
+              }
+            }
+
+            // Update interval if running state changed
+            if (timer.isRunning && !wasRunning) {
+              // Timer was started/resumed by another client
+              if (!this.intervals.has(timerId)) {
+                this.startTimerInterval(timerId);
+              }
+            } else if (!timer.isRunning && wasRunning) {
+              // Timer was paused/stopped by another client
+              const interval = this.intervals.get(timerId);
+              if (interval) {
+                clearInterval(interval);
+                this.intervals.delete(timerId);
+              }
+            }
+
+            this.saveTimers();
+            this.renderTimers();
+          } else {
+            // Load full timer if we don't have it
+            this.loadGlobalTimers();
+          }
+        } else if (data.type === 'created' && serverTimer) {
+          // Add new global timer
+          const timer: Timer = {
+            id: serverTimer.id,
+            label: serverTimer.label,
+            duration: serverTimer.duration,
+            remaining: serverTimer.remaining,
+            isRunning: serverTimer.isRunning,
+            isCompleted: serverTimer.isCompleted,
+            isGlobal: true,
+            recipeName: serverTimer.recipeName,
+            stepDescription: serverTimer.stepDescription,
+            recipeId: serverTimer.recipeId,
+            stepId: serverTimer.stepId,
+            startTime: serverTimer.startTime,
+            pauseTime: serverTimer.pauseTime
+          };
+
+          // Recalculate remaining time if running
+          if (timer.isRunning && timer.startTime) {
+            const elapsed = Math.floor((Date.now() - timer.startTime) / 1000);
+            timer.remaining = Math.max(0, timer.remaining - elapsed);
+          }
+
+          this.timers.set(timer.id, timer);
+          
+          if (timer.isRunning && timer.remaining > 0) {
+            this.startTimerInterval(timer.id);
+          }
+
+          this.saveTimers();
+          this.renderTimers();
+        }
+      } else if (data.type === 'deleted') {
+        const timerId = data.timerId;
+        const timer = this.timers.get(timerId);
+        if (timer && timer.isGlobal) {
+          this.removeTimer(timerId);
+        }
+      }
+    }
+
+    private async syncRunningGlobalTimers() {
+      if (this.isSyncing) return;
+
+      const globalTimers = Array.from(this.timers.values()).filter(t => t.isGlobal && t.isRunning);
+      if (globalTimers.length === 0) return;
+
+      this.isSyncing = true;
+
+      try {
+        for (const timer of globalTimers) {
+          // Only sync state changes, not remaining time during countdown
+          // Remaining time is calculated locally from startTime
+          // We only update the server's stored remaining when timer state changes
+          // This periodic sync just ensures startTime is up to date
+          await fetch('/api/timers', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: timer.id,
+              isRunning: timer.isRunning,
+              isCompleted: timer.isCompleted,
+              startTime: timer.startTime,
+              pauseTime: timer.pauseTime
+              // Don't send remaining during periodic sync - prevents jumps
+            })
+          });
+        }
+      } catch (error) {
+        console.error('Error syncing global timers:', error);
+      } finally {
+        this.isSyncing = false;
+      }
+    }
+
+    private async makeTimerGlobal(timerId: string) {
+      const timer = this.timers.get(timerId);
+      if (!timer || timer.isGlobal) return;
+
+      try {
+        // Create global timer on server
+        const response = await fetch('/api/timers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: timer.id,
+            label: timer.label,
+            duration: timer.duration,
+            remaining: timer.remaining,
+            isRunning: timer.isRunning,
+            isCompleted: timer.isCompleted,
+            recipeName: timer.recipeName,
+            stepDescription: timer.stepDescription,
+            recipeId: timer.recipeId,
+            stepId: timer.stepId,
+            startTime: timer.startTime,
+            pauseTime: timer.pauseTime
+          })
+        });
+
+        if (response.ok) {
+          timer.isGlobal = true;
+          this.saveTimers();
+          this.renderTimers();
+        }
+      } catch (error) {
+        console.error('Error making timer global:', error);
+      }
+    }
+
+    private async syncTimerToServer(timerId: string) {
+      const timer = this.timers.get(timerId);
+      if (!timer || !timer.isGlobal || this.isSyncing) return;
+
+      try {
+        const updateData: any = {
+          id: timer.id,
+          isRunning: timer.isRunning,
+          isCompleted: timer.isCompleted,
+          startTime: timer.startTime,
+          pauseTime: timer.pauseTime
+        };
+
+        if (!timer.isRunning) {
+          // Timer is paused/stopped - send current remaining time
+          updateData.remaining = timer.remaining;
+        } else if (timer.startTime) {
+          // Timer is running - calculate and store the remaining time at startTime
+          // This is the "base remaining" that other clients will use to calculate current remaining
+          const elapsed = Math.floor((Date.now() - timer.startTime) / 1000);
+          const baseRemaining = timer.remaining + elapsed;
+          updateData.remaining = baseRemaining;
+        }
+
+        await fetch('/api/timers', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData)
+        });
+      } catch (error) {
+        console.error('Error syncing timer to server:', error);
+      }
     }
 
     private updateOrientation() {
@@ -256,11 +705,21 @@
       return id;
     }
 
-    public removeTimer(id: string) {
+    public async removeTimer(id: string) {
       const timer = this.timers.get(id);
       if (timer) {
-        this.stopTimer(id);
+        await this.stopTimer(id);
         this.stopContinuousAlarm(id);
+        
+        // Delete from server if global
+        if (timer.isGlobal) {
+          try {
+            await fetch(`/api/timers?id=${id}`, { method: 'DELETE' });
+          } catch (error) {
+            console.error('Error deleting global timer:', error);
+          }
+        }
+        
         this.timers.delete(id);
         this.saveTimers();
         this.renderTimers();
@@ -270,7 +729,7 @@
       }
     }
 
-    public startTimer(id: string) {
+    public async startTimer(id: string) {
       const timer = this.timers.get(id);
       if (!timer || timer.isRunning) return;
 
@@ -281,6 +740,11 @@
       this.startTimerInterval(id);
       this.saveTimers();
       this.renderTimers();
+
+      // Sync with server if global
+      if (timer.isGlobal) {
+        await this.syncTimerToServer(id);
+      }
     }
 
     private startTimerInterval(id: string) {
@@ -316,7 +780,7 @@
       this.intervals.set(id, interval);
     }
 
-    public pauseTimer(id: string) {
+    public async pauseTimer(id: string) {
       const timer = this.timers.get(id);
       if (!timer || !timer.isRunning) return;
 
@@ -332,9 +796,14 @@
       
       this.saveTimers();
       this.renderTimers();
+
+      // Sync with server if global
+      if (timer.isGlobal) {
+        await this.syncTimerToServer(id);
+      }
     }
 
-    public stopTimer(id: string) {
+    public async stopTimer(id: string) {
       const timer = this.timers.get(id);
       if (!timer) return;
 
@@ -352,9 +821,14 @@
       
       this.saveTimers();
       this.renderTimers();
+
+      // Sync with server if global
+      if (timer.isGlobal) {
+        await this.syncTimerToServer(id);
+      }
     }
 
-    public adjustTimer(id: string, minutes: number) {
+    public async adjustTimer(id: string, minutes: number) {
       const timer = this.timers.get(id);
       if (!timer) return;
 
@@ -363,9 +837,14 @@
       
       this.saveTimers();
       this.renderTimers();
+
+      // Sync with server if global
+      if (timer.isGlobal) {
+        await this.syncTimerToServer(id);
+      }
     }
 
-    public extendCompletedTimer(id: string, minutes: number) {
+    public async extendCompletedTimer(id: string, minutes: number) {
       const timer = this.timers.get(id);
       if (!timer) return;
 
@@ -378,13 +857,13 @@
       timer.pauseTime = undefined;
       
       // Start the extended timer
-      this.startTimer(id);
+      await this.startTimer(id);
       
       this.saveTimers();
       this.renderTimers();
     }
 
-    public restartTimer(id: string) {
+    public async restartTimer(id: string) {
       const timer = this.timers.get(id);
       if (!timer) return;
 
@@ -396,13 +875,13 @@
       timer.pauseTime = undefined;
       
       // Start the restarted timer
-      this.startTimer(id);
+      await this.startTimer(id);
       
       this.saveTimers();
       this.renderTimers();
     }
 
-    private onTimerComplete(timer: Timer) {
+    private async onTimerComplete(timer: Timer) {
       // Show in-page notification with actions
       this.showTimerCompleteNotification(timer);
       
@@ -418,6 +897,11 @@
       
       // Start continuous notification sound
       this.startContinuousAlarm(timer.id);
+      
+      // Sync with server if global
+      if (timer.isGlobal) {
+        await this.syncTimerToServer(timer.id);
+      }
       
       this.renderTimers();
     }
@@ -601,12 +1085,22 @@
           <div class="timer-item-title">
             <span class="timer-item-label">${timer.label}</span>
             ${timer.autoStarted ? '<span class="timer-auto-badge">Auto</span>' : ''}
+            ${timer.isGlobal ? '<span class="timer-global-badge" title="Globaler Timer">🌐</span>' : ''}
           </div>
-          <button class="timer-remove-btn" data-timer-id="${timer.id}" title="Entfernen">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-            </svg>
-          </button>
+          <div class="flex items-center space-x-1">
+            ${!timer.isGlobal ? `
+              <button class="timer-global-btn" data-timer-id="${timer.id}" title="Global machen">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 2a6 6 0 00-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 00.515 1.05 32.97 32.97 0 003.256.508 3.5 3.5 0 006.972 0 32.975 32.975 0 003.256-.508.75.75 0 00.515-1.05A11.71 11.71 0 0116 8a6 6 0 00-6-6zM8.05 14.943a33.54 33.54 0 003.9 0 2 2 0 01-3.9 0z"/>
+                </svg>
+              </button>
+            ` : ''}
+            <button class="timer-remove-btn" data-timer-id="${timer.id}" title="Entfernen">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+          </div>
         </div>
         ${contextInfo}
         <div class="timer-item-display ${statusClass}">
@@ -638,6 +1132,11 @@
         if (timerId) this.removeTimer(timerId);
       });
 
+      div.querySelector('.timer-global-btn')?.addEventListener('click', (e) => {
+        const timerId = (e.currentTarget as HTMLElement).dataset.timerId;
+        if (timerId) this.makeTimerGlobal(timerId);
+      });
+
       // Add click listener for context info navigation
       div.querySelector('.timer-context-clickable')?.addEventListener('click', (e) => {
         const timerId = (e.currentTarget as HTMLElement).dataset.timerId;
@@ -667,17 +1166,17 @@
 
       switch (action) {
         case 'start':
-          this.startTimer(timerId);
+          this.startTimer(timerId).catch(err => console.error('Error starting timer:', err));
           break;
         case 'pause':
-          this.pauseTimer(timerId);
+          this.pauseTimer(timerId).catch(err => console.error('Error pausing timer:', err));
           break;
         case 'stop':
-          this.stopTimer(timerId);
+          this.stopTimer(timerId).catch(err => console.error('Error stopping timer:', err));
           break;
         case 'adjust':
           const minutes = parseInt(target.dataset.minutes || '0');
-          this.adjustTimer(timerId, minutes);
+          this.adjustTimer(timerId, minutes).catch(err => console.error('Error adjusting timer:', err));
           break;
       }
     }
@@ -1040,23 +1539,23 @@
       
       // Add event listeners
       notification.querySelectorAll('.extend-expired-timer-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
           const target = e.currentTarget as HTMLElement;
           const timerId = target.dataset.timerId;
           const minutes = parseInt(target.dataset.minutes || '0');
           if (timerId) {
-            this.extendCompletedTimer(timerId, minutes);
+            await this.extendCompletedTimer(timerId, minutes);
             notification.remove();
             overlay.remove();
           }
         });
       });
       
-      notification.querySelector('.restart-expired-timer-btn')?.addEventListener('click', (e) => {
+      notification.querySelector('.restart-expired-timer-btn')?.addEventListener('click', async (e) => {
         const target = e.currentTarget as HTMLElement;
         const timerId = target.dataset.timerId;
         if (timerId) {
-          this.restartTimer(timerId);
+          await this.restartTimer(timerId);
           notification.remove();
           overlay.remove();
         }
@@ -1258,25 +1757,25 @@
       
       // Add event listeners
       notification.querySelectorAll('.extend-timer-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
           const target = e.currentTarget as HTMLElement;
           const timerId = target.dataset.timerId;
           const minutes = parseInt(target.dataset.minutes || '0');
           if (timerId) {
             this.stopContinuousAlarm(timerId);
-            this.extendCompletedTimer(timerId, minutes);
+            await this.extendCompletedTimer(timerId, minutes);
             notification.remove();
             overlay.remove();
           }
         });
       });
       
-      notification.querySelector('.restart-timer-btn')?.addEventListener('click', (e) => {
+      notification.querySelector('.restart-timer-btn')?.addEventListener('click', async (e) => {
         const target = e.currentTarget as HTMLElement;
         const timerId = target.dataset.timerId;
         if (timerId) {
           this.stopContinuousAlarm(timerId);
-          this.restartTimer(timerId);
+          await this.restartTimer(timerId);
           notification.remove();
           overlay.remove();
         }
