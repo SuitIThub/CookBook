@@ -224,6 +224,9 @@ function populateUnitDropdowns() {
 }
 
 function populateUnitDropdown(selectElement, selectedValue = '') {
+  // Store the original selected value before clearing
+  const originalValue = selectedValue || selectElement.value || '';
+  
   // Keep the first option if it's a placeholder or has a value
   const firstOption = selectElement.querySelector('option');
   const hasValue = firstOption && firstOption.value !== '';
@@ -240,16 +243,33 @@ function populateUnitDropdown(selectElement, selectedValue = '') {
     selectElement.innerHTML = '';
   }
   
+  // Use the original value for selection
+  const valueToSelect = originalValue;
+  let foundInAvailableUnits = false;
+  
   // Add all available units
-  availableUnits.forEach(unit => {
-    const option = document.createElement('option');
-    option.value = unit.name;
-    option.textContent = unit.name;
-    if (unit.name === selectedValue) {
-      option.selected = true;
-    }
-    selectElement.appendChild(option);
-  });
+  if (availableUnits.length > 0) {
+    availableUnits.forEach(unit => {
+      const option = document.createElement('option');
+      option.value = unit.name;
+      option.textContent = unit.name;
+      if (unit.name === valueToSelect) {
+        option.selected = true;
+        foundInAvailableUnits = true;
+      }
+      selectElement.appendChild(option);
+    });
+  }
+  
+  // If the original value wasn't found in base units, add it as a custom option
+  // This preserves units that might not be in the base units list
+  if (valueToSelect && !foundInAvailableUnits) {
+    const customOption = document.createElement('option');
+    customOption.value = valueToSelect;
+    customOption.textContent = valueToSelect;
+    customOption.selected = true;
+    selectElement.appendChild(customOption);
+  }
 }
 
 // Drag and Drop functionality for ingredients
