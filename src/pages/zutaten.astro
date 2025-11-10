@@ -1,0 +1,309 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+import { db } from '../lib/database';
+
+// Load all ingredients from database
+let ingredients: Array<{ name: string; usageCount: number }> = [];
+try {
+  ingredients = db.getAllIngredientsFromRecipes();
+} catch (error) {
+  console.error('Error loading ingredients:', error);
+}
+---
+
+<Layout title="Zutaten">
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">Zutaten</h1>
+        <p class="text-gray-600 dark:text-gray-400">
+          Verwalten und vereinheitlichen Sie Zutaten aus allen Rezepten
+        </p>
+      </div>
+      <div class="text-sm text-gray-500 dark:text-gray-400">
+        {ingredients.length} {ingredients.length === 1 ? 'Zutat' : 'Zutaten'}
+      </div>
+    </div>
+
+    <!-- Search bar -->
+    <div class="mb-6">
+      <input
+        type="text"
+        id="ingredient-search"
+        placeholder="Zutaten suchen..."
+        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+      />
+    </div>
+
+    <!-- Ingredients list -->
+    <div id="ingredients-list" class="space-y-2">
+      {ingredients.map((ingredient) => (
+        <div
+          class="ingredient-item flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow"
+          data-ingredient-name={ingredient.name.toLowerCase()}
+        >
+          <div class="flex items-center space-x-4 flex-1">
+            <span class="font-medium text-gray-900 dark:text-white">{ingredient.name}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">
+              ({ingredient.usageCount} {ingredient.usageCount === 1 ? 'Rezept' : 'Rezepte'})
+            </span>
+          </div>
+          <button
+            class="unify-btn px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors text-sm font-medium"
+            data-ingredient-name={ingredient.name}
+          >
+            Vereinheitlichen
+          </button>
+        </div>
+      ))}
+    </div>
+
+    {ingredients.length === 0 && (
+      <div class="text-center py-12">
+        <p class="text-gray-500 dark:text-gray-400">Keine Zutaten gefunden.</p>
+      </div>
+    )}
+  </div>
+
+  <!-- Unify Modal -->
+  <div
+    id="unify-modal"
+    class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+  >
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">
+        Zutat vereinheitlichen
+      </h2>
+      <p class="text-gray-600 dark:text-gray-400 mb-4">
+        Wählen Sie die Zutat, mit der "<span id="old-ingredient-name" class="font-semibold"></span>" vereinheitlicht werden soll:
+      </p>
+      <div class="mb-4">
+        <input
+          type="text"
+          id="new-ingredient-input"
+          placeholder="Zutat eingeben oder auswählen..."
+          class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+          list="ingredient-suggestions"
+        />
+        <datalist id="ingredient-suggestions"></datalist>
+      </div>
+      <div class="flex justify-end space-x-3">
+        <button
+          id="cancel-unify-btn"
+          class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          Abbrechen
+        </button>
+        <button
+          id="confirm-unify-btn"
+          class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+        >
+          Vereinheitlichen
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allIngredients: Array<{ name: string; usageCount: number }> = [];
+    let currentOldIngredient: string = '';
+
+    // Load ingredients on page load
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadIngredients();
+      setupSearch();
+      setupUnifyButtons();
+      setupModal();
+    });
+
+    async function loadIngredients() {
+      try {
+        const response = await fetch('/api/ingredients?all=true');
+        if (response.ok) {
+          allIngredients = await response.json();
+        }
+      } catch (error) {
+        console.error('Error loading ingredients:', error);
+      }
+    }
+
+    function setupSearch() {
+      const searchInput = document.getElementById('ingredient-search') as HTMLInputElement;
+      if (!searchInput) return;
+
+      searchInput.addEventListener('input', (e) => {
+        const query = (e.target as HTMLInputElement).value.toLowerCase();
+        const items = document.querySelectorAll('.ingredient-item');
+
+        items.forEach((item) => {
+          const ingredientName = item.getAttribute('data-ingredient-name') || '';
+          if (ingredientName.includes(query)) {
+            (item as HTMLElement).style.display = '';
+          } else {
+            (item as HTMLElement).style.display = 'none';
+          }
+        });
+      });
+    }
+
+    function setupUnifyButtons() {
+      const unifyButtons = document.querySelectorAll('.unify-btn');
+      unifyButtons.forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const ingredientName = (e.currentTarget as HTMLElement).getAttribute('data-ingredient-name') || '';
+          openUnifyModal(ingredientName);
+        });
+      });
+    }
+
+    function setupModal() {
+      const modal = document.getElementById('unify-modal');
+      const cancelBtn = document.getElementById('cancel-unify-btn');
+      const confirmBtn = document.getElementById('confirm-unify-btn');
+      const newIngredientInput = document.getElementById('new-ingredient-input') as HTMLInputElement;
+
+      if (!modal || !cancelBtn || !confirmBtn || !newIngredientInput) return;
+
+      // Setup autocomplete
+      const datalist = document.getElementById('ingredient-suggestions');
+      if (datalist) {
+        allIngredients.forEach((ing) => {
+          if (ing.name !== currentOldIngredient) {
+            const option = document.createElement('option');
+            option.value = ing.name;
+            datalist.appendChild(option);
+          }
+        });
+      }
+
+      cancelBtn.addEventListener('click', () => {
+        closeUnifyModal();
+      });
+
+      confirmBtn.addEventListener('click', async () => {
+        const newName = newIngredientInput.value.trim();
+        if (!newName) {
+          if (window.showWarning) {
+            window.showWarning('Bitte geben Sie einen Zutaten-Namen ein.');
+          } else {
+            alert('Bitte geben Sie einen Zutaten-Namen ein.');
+          }
+          return;
+        }
+
+        if (newName === currentOldIngredient) {
+          if (window.showWarning) {
+            window.showWarning('Die neue Zutat muss sich von der alten unterscheiden.');
+          } else {
+            alert('Die neue Zutat muss sich von der alten unterscheiden.');
+          }
+          return;
+        }
+
+        await unifyIngredients(currentOldIngredient, newName);
+      });
+
+      // Close modal on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeUnifyModal();
+        }
+      });
+
+      // Close modal on ESC key
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+          closeUnifyModal();
+        }
+      });
+    }
+
+    function openUnifyModal(oldIngredient: string) {
+      currentOldIngredient = oldIngredient;
+      const modal = document.getElementById('unify-modal');
+      const oldNameSpan = document.getElementById('old-ingredient-name');
+      const newIngredientInput = document.getElementById('new-ingredient-input') as HTMLInputElement;
+
+      if (!modal || !oldNameSpan || !newIngredientInput) return;
+
+      oldNameSpan.textContent = oldIngredient;
+      newIngredientInput.value = '';
+      modal.classList.remove('hidden');
+      newIngredientInput.focus();
+
+      // Update datalist
+      const datalist = document.getElementById('ingredient-suggestions');
+      if (datalist) {
+        datalist.innerHTML = '';
+        allIngredients.forEach((ing) => {
+          if (ing.name !== oldIngredient) {
+            const option = document.createElement('option');
+            option.value = ing.name;
+            datalist.appendChild(option);
+          }
+        });
+      }
+    }
+
+    function closeUnifyModal() {
+      const modal = document.getElementById('unify-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+      }
+      currentOldIngredient = '';
+    }
+
+    async function unifyIngredients(oldName: string, newName: string) {
+      try {
+        const response = await fetch('/api/ingredients', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'unify',
+            oldName: oldName,
+            newName: newName
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          if (window.showWarning) {
+            window.showWarning(error.error || 'Fehler beim Vereinheitlichen der Zutat.');
+          } else {
+            alert(error.error || 'Fehler beim Vereinheitlichen der Zutat.');
+          }
+          return;
+        }
+
+        const result = await response.json();
+        
+        let message = `"${oldName}" wurde erfolgreich in "${newName}" umbenannt. ${result.updated} Rezept(e) wurden aktualisiert.`;
+        if (result.shoppingListsUpdated > 0) {
+          message += ` ${result.shoppingListsUpdated} Einkaufsliste(n) wurden ebenfalls aktualisiert.`;
+        }
+        
+        if (window.showInfo) {
+          window.showInfo(message);
+        } else {
+          alert(message);
+        }
+
+        closeUnifyModal();
+        
+        // Reload the page to show updated ingredients
+        window.location.reload();
+      } catch (error) {
+        console.error('Error unifying ingredients:', error);
+        if (window.showWarning) {
+          window.showWarning('Fehler beim Vereinheitlichen der Zutat. Bitte versuchen Sie es erneut.');
+        } else {
+          alert('Fehler beim Vereinheitlichen der Zutat. Bitte versuchen Sie es erneut.');
+        }
+      }
+    }
+  </script>
+</Layout>
+
