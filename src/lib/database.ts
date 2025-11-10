@@ -566,6 +566,106 @@ export class CookbookDatabase {
     });
   }
 
+  // Get all unique ingredients from all recipes
+  getAllIngredientsFromRecipes(): Array<{ name: string; usageCount: number }> {
+    const recipes = this.getAllRecipes();
+    const ingredientMap = new Map<string, number>();
+
+    const extractIngredients = (groups: any[]): void => {
+      groups.forEach(group => {
+        if (group.ingredients) {
+          group.ingredients.forEach((item: any) => {
+            if (item.ingredients) {
+              // It's a nested group
+              extractIngredients([item]);
+            } else if (item.name) {
+              // It's an ingredient
+              const currentCount = ingredientMap.get(item.name) || 0;
+              ingredientMap.set(item.name, currentCount + 1);
+            }
+          });
+        }
+      });
+    };
+
+    recipes.forEach(recipe => {
+      extractIngredients(recipe.ingredientGroups);
+    });
+
+    return Array.from(ingredientMap.entries())
+      .map(([name, usageCount]) => ({ name, usageCount }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // Unify ingredients: replace oldName with newName in all recipes
+  unifyIngredients(oldName: string, newName: string): { updated: number; shoppingListsUpdated: number } {
+    const recipes = this.getAllRecipes();
+    let updatedCount = 0;
+
+    const replaceIngredientName = (groups: any[]): boolean => {
+      let changed = false;
+      groups.forEach(group => {
+        if (group.ingredients) {
+          group.ingredients.forEach((item: any) => {
+            if (item.ingredients) {
+              // It's a nested group
+              if (replaceIngredientName([item])) {
+                changed = true;
+              }
+            } else if (item.name === oldName) {
+              // Replace the ingredient name
+              item.name = newName;
+              changed = true;
+            }
+          });
+        }
+      });
+      return changed;
+    };
+
+    recipes.forEach(recipe => {
+      if (replaceIngredientName(recipe.ingredientGroups)) {
+        this.updateRecipe(recipe.id, { ingredientGroups: recipe.ingredientGroups });
+        updatedCount++;
+      }
+    });
+
+    // Update shopping lists: replace old ingredient name with new name in all shopping list items
+    const shoppingLists = this.getAllShoppingLists();
+    let updatedShoppingLists = 0;
+    shoppingLists.forEach(list => {
+      let changed = false;
+      list.items.forEach(item => {
+        if (item.name === oldName) {
+          item.name = newName;
+          changed = true;
+        }
+      });
+      if (changed) {
+        this.updateShoppingList(list.id, { items: list.items });
+        updatedShoppingLists++;
+      }
+    });
+
+    // Update ingredients table: remove old name, update new name usage count
+    const deleteOldStmt = this.db.prepare('DELETE FROM ingredients WHERE name = ?');
+    deleteOldStmt.run(oldName);
+
+    // Get current usage count for new name
+    const getCurrentCountStmt = this.db.prepare('SELECT usage_count FROM ingredients WHERE name = ?');
+    const currentRow = getCurrentCountStmt.get(newName) as { usage_count: number } | undefined;
+    const currentCount = currentRow?.usage_count || 0;
+
+    // Update new name usage count (add the number of recipes that were updated)
+    const updateNewStmt = this.db.prepare(`
+      INSERT OR REPLACE INTO ingredients (id, name, description, usage_count) 
+      VALUES (?, ?, ?, ?)
+    `);
+    updateNewStmt.run(uuidv4(), newName, null, currentCount + updatedCount);
+
+    return { updated: updatedCount, shoppingListsUpdated: updatedShoppingLists };
+  }
+
   // Category methods
   getAllCategories(): string[] {
     const stmt = this.db.prepare(`
