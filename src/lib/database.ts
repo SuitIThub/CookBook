@@ -84,6 +84,26 @@ export class CookbookDatabase {
         conversion_factor REAL
       )
     `);
+
+    // Global timers table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS global_timers (
+        id TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        duration INTEGER NOT NULL,
+        remaining INTEGER NOT NULL,
+        is_running INTEGER NOT NULL DEFAULT 0,
+        is_completed INTEGER NOT NULL DEFAULT 0,
+        recipe_name TEXT,
+        step_description TEXT,
+        recipe_id TEXT,
+        step_id TEXT,
+        start_time INTEGER,
+        pause_time INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
   }
 
   // Recipe CRUD operations
@@ -675,6 +695,153 @@ export class CookbookDatabase {
       console.error('Error getting database stats:', error);
       return { recipes: 0, shoppingLists: 0 };
     }
+  }
+
+  // Global Timer operations
+  createGlobalTimer(timer: {
+    id: string;
+    label: string;
+    duration: number;
+    remaining: number;
+    isRunning: boolean;
+    isCompleted: boolean;
+    recipeName?: string;
+    stepDescription?: string;
+    recipeId?: string;
+    stepId?: string;
+    startTime?: number;
+    pauseTime?: number;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO global_timers (
+        id, label, duration, remaining, is_running, is_completed,
+        recipe_name, step_description, recipe_id, step_id,
+        start_time, pause_time, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    stmt.run(
+      timer.id,
+      timer.label,
+      timer.duration,
+      timer.remaining,
+      timer.isRunning ? 1 : 0,
+      timer.isCompleted ? 1 : 0,
+      timer.recipeName || null,
+      timer.stepDescription || null,
+      timer.recipeId || null,
+      timer.stepId || null,
+      timer.startTime || null,
+      timer.pauseTime || null
+    );
+
+    eventBus.emit(EVENTS.GLOBAL_TIMER_CREATED, { timer });
+  }
+
+  getAllGlobalTimers(): any[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM global_timers 
+      WHERE is_completed = 0 
+      ORDER BY created_at DESC
+    `);
+    const rows = stmt.all() as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      label: row.label,
+      duration: row.duration,
+      remaining: row.remaining,
+      isRunning: row.is_running === 1,
+      isCompleted: row.is_completed === 1,
+      recipeName: row.recipe_name,
+      stepDescription: row.step_description,
+      recipeId: row.recipe_id,
+      stepId: row.step_id,
+      startTime: row.start_time,
+      pauseTime: row.pause_time,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+  }
+
+  getGlobalTimer(id: string): any | null {
+    const stmt = this.db.prepare('SELECT * FROM global_timers WHERE id = ?');
+    const row = stmt.get(id) as any;
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      label: row.label,
+      duration: row.duration,
+      remaining: row.remaining,
+      isRunning: row.is_running === 1,
+      isCompleted: row.is_completed === 1,
+      recipeName: row.recipe_name,
+      stepDescription: row.step_description,
+      recipeId: row.recipe_id,
+      stepId: row.step_id,
+      startTime: row.start_time,
+      pauseTime: row.pause_time,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  updateGlobalTimer(id: string, updates: {
+    remaining?: number;
+    isRunning?: boolean;
+    isCompleted?: boolean;
+    startTime?: number | null;
+    pauseTime?: number | null;
+  }): void {
+    const setClauses: string[] = [];
+    const values: any[] = [];
+
+    if (updates.remaining !== undefined) {
+      setClauses.push('remaining = ?');
+      values.push(updates.remaining);
+    }
+    if (updates.isRunning !== undefined) {
+      setClauses.push('is_running = ?');
+      values.push(updates.isRunning ? 1 : 0);
+    }
+    if (updates.isCompleted !== undefined) {
+      setClauses.push('is_completed = ?');
+      values.push(updates.isCompleted ? 1 : 0);
+    }
+    if (updates.startTime !== undefined) {
+      setClauses.push('start_time = ?');
+      values.push(updates.startTime);
+    }
+    if (updates.pauseTime !== undefined) {
+      setClauses.push('pause_time = ?');
+      values.push(updates.pauseTime);
+    }
+
+    if (setClauses.length === 0) {
+      return;
+    }
+
+    setClauses.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    const stmt = this.db.prepare(`
+      UPDATE global_timers 
+      SET ${setClauses.join(', ')}
+      WHERE id = ?
+    `);
+
+    stmt.run(...values);
+    eventBus.emit(EVENTS.GLOBAL_TIMER_UPDATED, { timerId: id, updates });
+  }
+
+  deleteGlobalTimer(id: string): void {
+    const stmt = this.db.prepare('DELETE FROM global_timers WHERE id = ?');
+    stmt.run(id);
+    eventBus.emit(EVENTS.GLOBAL_TIMER_DELETED, { timerId: id });
   }
 
   close(): void {
