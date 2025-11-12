@@ -488,6 +488,53 @@ const totalSteps = preparationGroups.reduce((sum, group) => sum + group.steps.le
   // Initialize
   updateSlidePositions();
 
+  // Wake Lock API to prevent screen saver
+  let wakeLock = null;
+
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log('Wake lock activated - screen will stay on');
+        
+        // Handle wake lock release (e.g., when user switches tabs)
+        wakeLock.addEventListener('release', () => {
+          console.log('Wake lock was released');
+        });
+      } else {
+        console.warn('Wake Lock API not supported in this browser');
+      }
+    } catch (error) {
+      console.warn('Could not request wake lock:', error);
+    }
+  }
+
+  async function releaseWakeLock() {
+    if (wakeLock) {
+      try {
+        await wakeLock.release();
+        wakeLock = null;
+        console.log('Wake lock released');
+      } catch (error) {
+        console.warn('Could not release wake lock:', error);
+      }
+    }
+  }
+
+  // Request wake lock when entering cooking mode
+  requestWakeLock();
+
+  // Handle visibility changes - re-request wake lock when visible, release when hidden
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && !wakeLock) {
+      // Re-request wake lock if it was released (e.g., when page becomes visible again)
+      await requestWakeLock();
+    } else if (document.visibilityState === 'hidden') {
+      // Release wake lock when the page is hidden (user navigates away or switches tabs)
+      await releaseWakeLock();
+    }
+  });
+
   // Request fullscreen when entering cooking mode
   document.addEventListener('DOMContentLoaded', () => {
     const enterFullscreen = async () => {
@@ -502,8 +549,9 @@ const totalSteps = preparationGroups.reduce((sum, group) => sum + group.steps.le
     enterFullscreen();
   });
 
-  // Exit fullscreen when leaving cooking mode
-  window.addEventListener('beforeunload', () => {
+  // Exit fullscreen and release wake lock when leaving cooking mode
+  window.addEventListener('beforeunload', async () => {
+    await releaseWakeLock();
     if (document.fullscreenElement) {
       document.exitFullscreen();
     }
