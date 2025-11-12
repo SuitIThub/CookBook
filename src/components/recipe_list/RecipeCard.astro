@@ -226,10 +226,15 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
 
     // Handle selection mode clicks on the entire card
     document.querySelectorAll('.recipe-card').forEach(card => {
+      const recipeLink = card.querySelector('[data-recipe-link]') as HTMLAnchorElement;
+      const recipeId = card.getAttribute('data-recipe-id');
+      
       const handleCardSelection = (e: Event) => {
+        // Only handle clicks when in selection mode
         if (!card.classList.contains('selection-mode')) return;
         
         const target = e.target as HTMLElement;
+        
         // Prevent click if clicking on menu button, menu, or checkbox/selection indicator
         if (target.closest('.recipe-menu-btn') || 
             target.closest('.recipe-menu') ||
@@ -253,14 +258,68 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         }
       };
 
+      const handleCardClick = (e: Event) => {
+        const target = e.target as HTMLElement;
+        
+        // Don't handle clicks on interactive elements
+        if (target.closest('.recipe-menu-btn') || 
+            target.closest('.recipe-menu') ||
+            target.closest('.selection-indicator') ||
+            target.closest('[data-recipe-link]')) {
+          return;
+        }
+        
+        // If in selection mode, handle selection
+        if (card.classList.contains('selection-mode')) {
+          handleCardSelection(e);
+          return;
+        }
+        
+        // Otherwise, navigate to recipe when clicking anywhere on the card
+        if (recipeLink && recipeId) {
+          // If clicking directly on the link, let it handle navigation naturally
+          if (target.closest('[data-recipe-link]')) {
+            return;
+          }
+          
+          // Navigate to the recipe
+          window.location.href = recipeLink.href;
+        }
+      };
+
       // Add click handler to the entire card
-      card.addEventListener('click', handleCardSelection);
+      card.addEventListener('click', handleCardClick);
       
-      // Add touch handler for better mobile support
-      card.addEventListener('touchend', handleCardSelection);
+      // For mobile: handle touchend events
+      card.addEventListener('touchend', (e) => {
+        const target = e.target as HTMLElement;
+        
+        // Don't handle touches on interactive elements
+        if (target.closest('.recipe-menu-btn') || 
+            target.closest('.recipe-menu') ||
+            target.closest('.selection-indicator')) {
+          return;
+        }
+        
+        // If in selection mode, handle selection
+        if (card.classList.contains('selection-mode')) {
+          handleCardSelection(e);
+          return;
+        }
+        
+        // If touching the link, let it handle navigation naturally
+        if (target.closest('[data-recipe-link]')) {
+          return;
+        }
+        
+        // Otherwise, navigate to recipe when tapping anywhere on the card
+        if (recipeLink && recipeId) {
+          e.preventDefault();
+          window.location.href = recipeLink.href;
+        }
+      });
 
       // Prevent link clicks in selection mode
-      const recipeLink = card.querySelector('[data-recipe-link]');
       if (recipeLink) {
         recipeLink.addEventListener('click', (e) => {
           if (card.classList.contains('selection-mode')) {
@@ -358,10 +417,14 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
             countElement.textContent = (currentCount - 1).toString();
           }
 
-          await window.showSuccess('Rezept wurde gelöscht');
+          if (window.showSuccess) {
+            await window.showSuccess('Rezept wurde gelöscht');
+          }
         } catch (error) {
           console.error('Error deleting recipe:', error);
-          await window.showError('Fehler beim Löschen des Rezepts');
+          if (window.showError) {
+            await window.showError('Fehler beim Löschen des Rezepts');
+          }
         }
 
         menu.classList.add('hidden');
