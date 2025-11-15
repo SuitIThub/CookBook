@@ -215,14 +215,12 @@ export const BASE_UNITS: Record<string, UnitDefinition> = {
     aliases: ['kg', 'KG', 'Kilogramm', 'kilogramm', 'kilogram']
   },
   
-  // Piece units that convert to Stück
+  // Piece units - base unit: Pck.
   'Pck.': {
     name: 'Pck.',
     category: 'piece',
     displayName: 'Packung',
-    isBaseUnit: false,
-    baseUnit: 'Stück',
-    conversionFactor: 1, // 1 Pck. = 1 Stück
+    isBaseUnit: true,
     aliases: ['Pck.', 'Pck', 'Packung', 'Pack', 'pck.', 'pck', 'packung', 'pack']
   },
   'Päckchen': {
@@ -230,8 +228,8 @@ export const BASE_UNITS: Record<string, UnitDefinition> = {
     category: 'piece',
     displayName: 'Päckchen',
     isBaseUnit: false,
-    baseUnit: 'Stück',
-    conversionFactor: 1,
+    baseUnit: 'Pck.',
+    conversionFactor: 1, // 1 Päckchen = 1 Pck.
     aliases: ['Päckchen', 'päckchen']
   },
   'Dose': {

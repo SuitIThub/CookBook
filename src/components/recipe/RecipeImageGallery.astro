@@ -119,6 +119,20 @@ const images = recipe.images || [];
 
     // Lightbox handlers - functionality moved to LightboxModal component
 
+    function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white ${
+        type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+      }`;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 3000);
+    }
+
     async function handleImageDelete(event: Event) {
       const target = event.target as HTMLButtonElement;
       const targetRecipeId = target.dataset.recipeId || recipeId;

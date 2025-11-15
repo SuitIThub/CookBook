@@ -12,7 +12,7 @@ import PreparationSteps from '../../components/recipe/details/PreparationSteps.a
 import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
 import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro';
 import EditFormActions from '../../components/recipe/edit/EditFormActions.astro';
-import RecipeShoppingListModal from '../../components/modals/RecipeShoppingListModal.astro';
+import ShoppingListModal from '../../components/modals/ShoppingListModal.astro';
 
 const { id } = Astro.params;
 
@@ -74,8 +74,8 @@ try {
 
     <!-- Edit Mode Content (initially hidden) -->
     <div id="edit-content" class="hidden">
-      <!-- Draft status display -->
-      <div id="draft-status-bar" class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
+      <!-- Draft status display (hidden until draft exists) -->
+      <div id="draft-status-bar" class="hidden mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
         <p id="draft-last-updated" class="text-sm text-blue-700 dark:text-blue-300">
           Entwurf wird automatisch gespeichert...
         </p>
@@ -94,7 +94,7 @@ try {
     </div>
   </div>
 
-  <RecipeShoppingListModal recipeTitle={recipe.title} recipeId={recipe.id} />
+  <ShoppingListModal />
 
   <script define:vars={{ recipe }}>
     // Timer functionality
@@ -427,6 +427,25 @@ try {
     
     cancelButtons.forEach(cancelBtn => {
       cancelBtn?.addEventListener('click', async () => {
+        // Clear any pending debounced save and save immediately before canceling
+        // This ensures changes are saved even if the debounce timer hasn't fired yet
+        try {
+          if (window.saveDraftToStorage && typeof window.saveDraftToStorage === 'function') {
+            console.log('Calling saveDraftToStorage from cancel handler');
+            // Save the draft immediately and wait for it to complete
+            const saved = await window.saveDraftToStorage();
+            console.log('saveDraftToStorage returned:', saved);
+            if (saved) {
+              // Add a small delay to ensure the database update has fully completed
+              await new Promise(resolve => setTimeout(resolve, 150));
+            }
+          } else {
+            console.warn('saveDraftToStorage function not available');
+          }
+        } catch (error) {
+          console.error('Error saving draft before cancel:', error);
+        }
+        
         // Check if there are changes and delete draft if no changes
         await handleCancelEdit();
         toggleEditMode(); // Switch back to view mode
@@ -440,12 +459,43 @@ try {
         const recipeId = window.location.pathname.split('/').pop();
         if (!recipeId) return;
         
-        // Always delete the draft when discarding
-        await fetch(`/api/drafts?recipeId=${recipeId}`, {
+        // Check if this is a new recipe (hasn't been saved yet)
+        // A new recipe will have the default title "Neues Rezept"
+        // When you save a recipe, you'll change the title, so if it's still "Neues Rezept", it hasn't been saved
+        let isNewRecipe = false;
+        try {
+          const recipeResponse = await fetch(`/api/recipes?id=${recipeId}`);
+          if (recipeResponse.ok) {
+            const recipe = await recipeResponse.json();
+            // If the title is still the default, it's a new recipe that hasn't been saved
+            isNewRecipe = recipe.title === 'Neues Rezept';
+          } else {
+            // Recipe doesn't exist, so it's definitely new
+            isNewRecipe = true;
+          }
+        } catch (error) {
+          // If the fetch fails, assume it's a new recipe
+          isNewRecipe = true;
+        }
+        
+        // Delete the draft, and if it's a new recipe, delete the entire recipe
+        await fetch(`/api/drafts?recipeId=${recipeId}&deleteRecipe=${isNewRecipe}`, {
           method: 'DELETE'
         });
         
-        // Cancel edit mode
+        // Hide the status bar since draft is deleted
+        const statusBar = document.getElementById('draft-status-bar');
+        if (statusBar) {
+          statusBar.classList.add('hidden');
+        }
+        
+        // If it's a new recipe, redirect to recipe list after deletion
+        if (isNewRecipe) {
+          window.location.href = '/rezepte';
+          return;
+        }
+        
+        // Cancel edit mode for existing recipes
         toggleEditMode();
       } catch (error) {
         console.error('Error discarding draft:', error);
@@ -467,6 +517,9 @@ try {
         // Get the original recipe from the page
         const originalRecipe = recipe;
         
+        // Wait a bit to ensure the draft save has completed
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
         // Collect current form data (we need to access the collectRecipeData function)
         // Since it's in EditRecipeForm, we'll check via API if draft matches original
         const draftResponse = await fetch(`/api/drafts?recipeId=${recipeId}`);
@@ -474,7 +527,10 @@ try {
         
         const draft = await draftResponse.json();
         // API returns null when no draft exists (instead of 404)
-        if (draft === null) return; // No draft exists
+        if (draft === null) {
+          console.log('No draft exists, nothing to compare');
+          return; // No draft exists
+        }
         
         // Compare draft with original recipe
         const draftStr = JSON.stringify({
@@ -501,11 +557,26 @@ try {
           sourceUrl: originalRecipe.sourceUrl
         });
         
+        console.log('Comparing draft with original:', {
+          draftTitle: draft.title,
+          originalTitle: originalRecipe.title,
+          match: draftStr === originalStr
+        });
+        
         // If draft matches original (no changes), delete the draft
         if (draftStr === originalStr) {
+          console.log('Draft matches original, deleting draft');
           await fetch(`/api/drafts?recipeId=${recipeId}`, {
             method: 'DELETE'
           });
+          
+          // Hide the status bar since draft is deleted
+          const statusBar = document.getElementById('draft-status-bar');
+          if (statusBar) {
+            statusBar.classList.add('hidden');
+          }
+        } else {
+          console.log('Draft differs from original, keeping draft');
         }
       } catch (error) {
         console.error('Error handling cancel edit:', error);
@@ -779,12 +850,11 @@ try {
       exportRecipeMenuMobile?.classList.add('hidden');
     });
 
-    // Shopping list modal handling - functionality moved to RecipeShoppingListModal component
-
+    // Shopping list modal handling - using the same modal as recipe list overview
     [document.getElementById('add-to-shopping'), document.getElementById('add-to-shopping-mobile')].forEach(btn => {
       btn?.addEventListener('click', async () => {
-        if (window.openRecipeShoppingListModal) {
-          await window.openRecipeShoppingListModal();
+        if (window.openShoppingListModal) {
+          await window.openShoppingListModal(new Set([recipe.id]));
         }
       });
     });
