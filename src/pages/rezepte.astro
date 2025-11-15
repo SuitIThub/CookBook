@@ -59,8 +59,96 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
     }
   });
   
+  // Function to reapply search filter when returning to page
+  function reapplySearchFilter() {
+    // Check if we're on the recipe list page
+    if (window.location.pathname !== '/rezepte') {
+      return;
+    }
+    
+    // Check if URL has search parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get('search') || '';
+    const categoryParam = urlParams.get('category') || '';
+    
+    if (!searchParam && !categoryParam) {
+      return; // No search params, no need to filter
+    }
+    
+    // Wait a bit for DOM to be ready, then call the filter function
+    const tryReapply = (retryCount = 0) => {
+      const searchInput = document.getElementById('recipe-search') as HTMLInputElement;
+      const categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
+      const recipeCards = document.querySelectorAll('.recipe-card');
+      
+      // Check if elements are ready
+      if (searchInput && categoryFilter && recipeCards && recipeCards.length > 0) {
+        // Update input values to match URL
+        if (searchInput.value !== searchParam) {
+          searchInput.value = searchParam;
+        }
+        if (categoryFilter.value !== categoryParam) {
+          categoryFilter.value = categoryParam;
+        }
+        
+        // Try to call filter functions directly first (bypassing debounce)
+        // Wait a bit for SearchBar script to expose functions if needed
+        const applyFilter = () => {
+          if ((window as any).debouncedFilter) {
+            // Call with immediate flag to bypass debounce
+            (window as any).debouncedFilter(true);
+          } else if ((window as any).filterRecipes) {
+            // Fallback: call filter directly
+            (window as any).filterRecipes();
+            // Also update URL manually
+            const url = new URL(window.location.href);
+            if (searchInput.value) {
+              url.searchParams.set('search', searchInput.value);
+            }
+            if (categoryFilter.value) {
+              url.searchParams.set('category', categoryFilter.value);
+            }
+            window.history.replaceState({}, '', url);
+          } else {
+            // Last resort: trigger events (will use debounce, but better than nothing)
+            const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+            const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+            searchInput.dispatchEvent(inputEvent);
+            categoryFilter.dispatchEvent(changeEvent);
+          }
+        };
+        
+        // If functions aren't available yet, wait a bit more
+        if (!(window as any).debouncedFilter && !(window as any).filterRecipes && retryCount < 20) {
+          setTimeout(() => tryReapply(retryCount + 1), 50);
+        } else {
+          // Functions available or we've waited enough, apply filter
+          applyFilter();
+        }
+      } else if (retryCount < 30) {
+        // Retry up to 30 times (1.5 seconds total) to give more time
+        setTimeout(() => tryReapply(retryCount + 1), 50);
+      }
+    };
+    
+    tryReapply();
+  }
+
+  // Reapply filter when page is shown (including back/forward navigation)
+  window.addEventListener('pageshow', (event) => {
+    reapplySearchFilter();
+  });
+  
+  // Also listen for Astro navigation events
+  document.addEventListener('astro:after-swap', () => {
+    reapplySearchFilter();
+  });
+
   // Initialize create recipe button when DOM is loaded
   document.addEventListener('DOMContentLoaded', () => {
+    // Reapply filter on initial load if URL has params
+    reapplySearchFilter();
+    
     // Button in RecipeListHeader
     const createBtn = document.getElementById('create-recipe-btn');
     if (createBtn) {

@@ -290,8 +290,38 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       // Add click handler to the entire card
       card.addEventListener('click', handleCardClick);
       
-      // For mobile: handle touchend events
+      // For mobile: handle touch events and distinguish between taps and scrolls
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchMoved = false;
+      const TAP_THRESHOLD = 10; // Maximum movement in pixels to consider it a tap
+      
+      card.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        touchMoved = false;
+      });
+      
+      card.addEventListener('touchmove', (e) => {
+        if (!touchMoved && e.touches[0]) {
+          const touch = e.touches[0];
+          const deltaX = Math.abs(touch.clientX - touchStartX);
+          const deltaY = Math.abs(touch.clientY - touchStartY);
+          
+          // If the touch moved more than the threshold, it's a scroll
+          if (deltaX > TAP_THRESHOLD || deltaY > TAP_THRESHOLD) {
+            touchMoved = true;
+          }
+        }
+      });
+      
       card.addEventListener('touchend', (e) => {
+        // Only handle if it was a tap (not a scroll)
+        if (touchMoved) {
+          return;
+        }
+        
         const target = e.target as HTMLElement;
         
         // Don't handle touches on interactive elements

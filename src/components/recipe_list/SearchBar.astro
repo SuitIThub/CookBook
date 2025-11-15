@@ -37,10 +37,21 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
 </div>
 
 <script>
-  const searchInput = document.getElementById('recipe-search') as HTMLInputElement;
-  const categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
-  const recipeCards = document.querySelectorAll('.recipe-card');
-  const recipeCountElement = document.getElementById('recipe-count');
+  let searchInput: HTMLInputElement | null = null;
+  let categoryFilter: HTMLSelectElement | null = null;
+  let recipeCards: NodeListOf<Element> | null = null;
+  let recipeCountElement: HTMLElement | null = null;
+  
+  // Function to get/refresh all element references
+  function refreshElements() {
+    searchInput = document.getElementById('recipe-search') as HTMLInputElement;
+    categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
+    recipeCards = document.querySelectorAll('.recipe-card');
+    recipeCountElement = document.getElementById('recipe-count');
+  }
+  
+  // Initialize elements immediately
+  refreshElements();
 
   // Add styles for search highlights and tags
   const style = document.createElement('style');
@@ -93,6 +104,22 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
 
   // Function to filter recipes
   function filterRecipes() {
+    // Ensure elements are available
+    if (!searchInput || !categoryFilter || !recipeCards) {
+      refreshElements();
+      if (!searchInput || !categoryFilter || !recipeCards) {
+        return; // Still not available, skip filtering
+      }
+    }
+    
+    // Make sure recipeCards is not empty
+    if (recipeCards.length === 0) {
+      refreshElements();
+      if (!recipeCards || recipeCards.length === 0) {
+        return; // No cards found, skip filtering
+      }
+    }
+    
     // Parse search terms, handling quoted phrases and special tag search
     function parseSearchTerms(input: string): { regular: string[]; tagOnly: string[] } {
       const terms = {
@@ -309,24 +336,136 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     window.history.replaceState({}, '', url);
   }
 
+  // Debounce function to limit how often filterRecipes runs
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  function debouncedFilter(immediate = false) {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+      searchTimeout = null;
+    }
+    
+    if (immediate) {
+      // Run immediately without debounce (for restoring from URL)
+      filterRecipes();
+      updateURL();
+    } else {
+      // Normal debounced behavior
+      searchTimeout = setTimeout(() => {
+        filterRecipes();
+        updateURL();
+      }, 300); // Wait 300ms after user stops typing
+    }
+  }
+
   // Add event listeners with URL updates
   searchInput.addEventListener('input', () => {
-    filterRecipes();
-    updateURL();
+    debouncedFilter();
   });
 
   categoryFilter.addEventListener('change', () => {
+    // Category changes don't need debouncing since they're discrete events
     filterRecipes();
     updateURL();
   });
 
-  // Initial filter if we have URL parameters
-  if (searchInput.value || categoryFilter.value) {
+  // Function to apply initial filter based on URL parameters
+  function applyInitialFilter() {
+    // Refresh elements to ensure they're available
+    refreshElements();
+    
+    if (!searchInput || !categoryFilter) {
+      return;
+    }
+    
+    // Check both input values and URL parameters (URL takes precedence)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlSearch = urlParams.get('search') || '';
+    const urlCategory = urlParams.get('category') || '';
+    
+    // Update input values from URL if they differ
+    if (urlSearch && searchInput.value !== urlSearch) {
+      searchInput.value = urlSearch;
+    }
+    if (urlCategory && categoryFilter.value !== urlCategory) {
+      categoryFilter.value = urlCategory;
+    }
+    
+    // Apply filter if we have search query or category (from either source)
+    if (searchInput.value || categoryFilter.value || urlSearch || urlCategory) {
+      filterRecipes();
+    }
+  }
+
+  // Function to re-apply filter when returning to page
+  function reapplyFilterOnReturn(retryCount = 0) {
+    // Refresh all element references
+    refreshElements();
+    
+    // Check if URL parameters exist first (before checking elements)
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get('search') || '';
+    const categoryParam = urlParams.get('category') || '';
+    
+    // If no search params, no need to filter
+    if (!searchParam && !categoryParam) {
+      return;
+    }
+    
+    // If elements aren't ready yet, retry a few times
+    if (!searchInput || !categoryFilter || !recipeCards || recipeCards.length === 0) {
+      if (retryCount < 10) {
+        setTimeout(() => {
+          reapplyFilterOnReturn(retryCount + 1);
+        }, 50);
+      }
+      return;
+    }
+    
+    // Update input values to match URL (in case they're out of sync)
+    if (searchInput.value !== searchParam) {
+      searchInput.value = searchParam;
+    }
+    if (categoryFilter.value !== categoryParam) {
+      categoryFilter.value = categoryParam;
+    }
+    
+    // Re-apply filter
     filterRecipes();
   }
 
-  // Trigger initial filter if we have a category selected
-  if (categoryFilter.value) {
-    filterRecipes();
+  // Apply filter on initial load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyInitialFilter);
+  } else {
+    applyInitialFilter();
   }
+
+  // Re-apply filter when page is shown (including when restored from back/forward cache)
+  // This handles the case when user navigates back to the recipe list
+  window.addEventListener('pageshow', (event) => {
+    // Always check and reapply, not just when persisted
+    // This ensures filter is applied even if page wasn't from cache
+    // Refresh elements first, then reapply
+    refreshElements();
+    applyInitialFilter();
+    reapplyFilterOnReturn();
+  });
+  
+  // Also listen for Astro navigation events if using client-side routing
+  document.addEventListener('astro:after-swap', () => {
+    reapplyFilterOnReturn();
+  });
+  
+  // Also check on focus in case page was in background
+  window.addEventListener('focus', () => {
+    // Only reapply if we're on the recipe list page
+    if (window.location.pathname === '/rezepte') {
+      reapplyFilterOnReturn();
+    }
+  });
+  
+  // Expose filter functions globally so they can be called from page level
+  (window as any).reapplyRecipeFilter = reapplyFilterOnReturn;
+  (window as any).filterRecipes = filterRecipes;
+  (window as any).debouncedFilter = debouncedFilter;
 </script> 
