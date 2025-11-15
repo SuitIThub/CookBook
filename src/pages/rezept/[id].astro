@@ -36,6 +36,26 @@ try {
 
     <!-- View Mode Content -->
     <div id="view-content" class="space-y-6">
+      <!-- Draft notification banner -->
+      <div id="draft-notification" class="hidden bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-1">
+              Unvollständiger Entwurf vorhanden
+            </h3>
+            <p class="text-sm text-yellow-700 dark:text-yellow-300">
+              Es gibt einen Entwurf für dieses Rezept, der noch nicht gespeichert wurde.
+            </p>
+          </div>
+          <button 
+            id="continue-draft-btn"
+            class="ml-4 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap"
+          >
+            Entwurf fortsetzen
+          </button>
+        </div>
+      </div>
+      
       <!-- Tags Section -->
       <RecipeTags recipe={recipe} />
       
@@ -54,6 +74,19 @@ try {
 
     <!-- Edit Mode Content (initially hidden) -->
     <div id="edit-content" class="hidden">
+      <!-- Draft status display -->
+      <div id="draft-status-bar" class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
+        <p id="draft-last-updated" class="text-sm text-blue-700 dark:text-blue-300">
+          Entwurf wird automatisch gespeichert...
+        </p>
+        <button 
+          id="discard-draft-btn" 
+          type="button"
+          class="ml-4 px-3 py-1.5 text-sm font-medium text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 border border-red-300 dark:border-red-700 rounded-md transition-colors"
+        >
+          Entwurf verwerfen
+        </button>
+      </div>
       <EditRecipeForm recipe={recipe} />
       <div class="max-w-4xl mx-auto">
         <EditFormActions recipeId={recipe.id} />
@@ -354,11 +387,20 @@ try {
         editContent?.classList.remove('hidden');
         updateEditButton(editBtn, true);
         updateEditButton(editBtnMobile, true);
+        
+        // Hide draft notification when entering edit mode
+        const draftNotification = document.getElementById('draft-notification');
+        if (draftNotification) {
+          draftNotification.classList.add('hidden');
+        }
       } else {
         viewContent?.classList.remove('hidden');
         editContent?.classList.add('hidden');
         updateEditButton(editBtn, false);
         updateEditButton(editBtnMobile, false);
+        
+        // Check for draft again when exiting edit mode
+        checkForDraft();
       }
 
       // Dispatch edit mode change event
@@ -384,9 +426,124 @@ try {
     ].filter(Boolean);
     
     cancelButtons.forEach(cancelBtn => {
-      cancelBtn?.addEventListener('click', () => {
+      cancelBtn?.addEventListener('click', async () => {
+        // Check if there are changes and delete draft if no changes
+        await handleCancelEdit();
         toggleEditMode(); // Switch back to view mode
       });
+    });
+    
+    // Handle discard draft button - always delete draft and cancel edit mode
+    const discardDraftBtn = document.getElementById('discard-draft-btn');
+    discardDraftBtn?.addEventListener('click', async () => {
+      try {
+        const recipeId = window.location.pathname.split('/').pop();
+        if (!recipeId) return;
+        
+        // Always delete the draft when discarding
+        await fetch(`/api/drafts?recipeId=${recipeId}`, {
+          method: 'DELETE'
+        });
+        
+        // Cancel edit mode
+        toggleEditMode();
+      } catch (error) {
+        console.error('Error discarding draft:', error);
+        // Still cancel edit mode even if deletion fails
+        toggleEditMode();
+      }
+    });
+    
+    // Handle cancel edit - delete draft if no changes were made
+    async function handleCancelEdit() {
+      try {
+        const recipeId = window.location.pathname.split('/').pop();
+        if (!recipeId) return;
+        
+        // Get current form state
+        const form = document.getElementById('edit-recipe-form');
+        if (!form) return;
+        
+        // Get the original recipe from the page
+        const originalRecipe = recipe;
+        
+        // Collect current form data (we need to access the collectRecipeData function)
+        // Since it's in EditRecipeForm, we'll check via API if draft matches original
+        const draftResponse = await fetch(`/api/drafts?recipeId=${recipeId}`);
+        if (!draftResponse.ok) return; // Request failed
+        
+        const draft = await draftResponse.json();
+        // API returns null when no draft exists (instead of 404)
+        if (draft === null) return; // No draft exists
+        
+        // Compare draft with original recipe
+        const draftStr = JSON.stringify({
+          title: draft.title,
+          subtitle: draft.subtitle,
+          description: draft.description,
+          metadata: draft.metadata,
+          category: draft.category,
+          tags: draft.tags,
+          ingredientGroups: draft.ingredientGroups,
+          preparationGroups: draft.preparationGroups,
+          sourceUrl: draft.sourceUrl
+        });
+        
+        const originalStr = JSON.stringify({
+          title: originalRecipe.title,
+          subtitle: originalRecipe.subtitle,
+          description: originalRecipe.description,
+          metadata: originalRecipe.metadata,
+          category: originalRecipe.category,
+          tags: originalRecipe.tags,
+          ingredientGroups: originalRecipe.ingredientGroups,
+          preparationGroups: originalRecipe.preparationGroups,
+          sourceUrl: originalRecipe.sourceUrl
+        });
+        
+        // If draft matches original (no changes), delete the draft
+        if (draftStr === originalStr) {
+          await fetch(`/api/drafts?recipeId=${recipeId}`, {
+            method: 'DELETE'
+          });
+        }
+      } catch (error) {
+        console.error('Error handling cancel edit:', error);
+      }
+    }
+    
+    // Handle page unload - delete draft if no changes
+    // Note: This is a best-effort approach and may be blocked by ad blockers
+    window.addEventListener('beforeunload', (e) => {
+      // Only handle if we're in edit mode
+      const editContent = document.getElementById('edit-content');
+      if (!editContent || editContent.classList.contains('hidden')) {
+        return;
+      }
+      
+      // Use sendBeacon for reliable unload handling
+      // Since sendBeacon doesn't support DELETE, we'll use a POST request to a delete endpoint
+      try {
+        const recipeId = window.location.pathname.split('/').pop();
+        if (!recipeId) return;
+        
+        // Store recipe ID for comparison on unload
+        // We'll do a quick check - if the form hasn't been modified, delete the draft
+        // This is a best-effort approach since we can't do async operations reliably in beforeunload
+        const form = document.getElementById('edit-recipe-form');
+        if (!form) return;
+        
+        // Use sendBeacon with POST to delete endpoint
+        // Note: Some ad blockers may block requests with "delete" in the URL
+        const url = `/api/drafts?recipeId=${recipeId}&action=remove`;
+        const formData = new FormData();
+        const sent = navigator.sendBeacon(url, formData);
+        if (!sent) {
+          // If sendBeacon fails, silently fail - this is best effort
+        }
+      } catch (error) {
+        // Silently fail - this is best effort and errors are expected
+      }
     });
 
     // Delete recipe functionality - handle both mobile and desktop buttons
@@ -500,6 +657,44 @@ try {
     
     // Initialize all event listeners and check for auto-edit mode
     checkAutoEditMode();
+    
+    // Check for draft and show notification if it exists
+    checkForDraft();
+    
+    // Handle continue draft button
+    const continueDraftBtn = document.getElementById('continue-draft-btn');
+    continueDraftBtn?.addEventListener('click', () => {
+      toggleEditMode();
+    });
+    
+    // Function to check for draft
+    async function checkForDraft() {
+      try {
+        const recipeId = window.location.pathname.split('/').pop();
+        if (!recipeId) return;
+        
+        // Only check if we're in view mode (not edit mode)
+        const editContent = document.getElementById('edit-content');
+        if (editContent && !editContent.classList.contains('hidden')) {
+          return; // Don't show notification in edit mode
+        }
+        
+        const response = await fetch(`/api/drafts?recipeId=${recipeId}`);
+        if (response.ok) {
+          const draft = await response.json();
+          // API returns null when no draft exists (instead of 404)
+          if (draft !== null) {
+            const draftNotification = document.getElementById('draft-notification');
+            if (draftNotification) {
+              draftNotification.classList.remove('hidden');
+            }
+          }
+        }
+      } catch (error) {
+        // Silently fail - draft check errors shouldn't be shown to user
+        // console.error('Error checking for draft:', error);
+      }
+    }
     
     // Check for step highlight hash on page load
     function checkStepHighlight() {

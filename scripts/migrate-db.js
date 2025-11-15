@@ -21,8 +21,16 @@ const EXPECTED_SCHEMA = {
         { name: 'image_url', type: 'TEXT', nullable: true },
         { name: 'images', type: 'TEXT', nullable: true, defaultValue: "'[]'" },
         { name: 'source_url', type: 'TEXT', nullable: true },
+        { name: 'is_draft', type: 'INTEGER', nullable: false, defaultValue: '0' },
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
+      ]
+    },
+    recipe_drafts: {
+      columns: [
+        { name: 'recipe_id', type: 'TEXT', nullable: false, primaryKey: true },
+        { name: 'draft_recipe_id', type: 'TEXT', nullable: false, unique: true },
+        { name: 'last_updated', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
       ]
     },
     shopping_lists: {
@@ -483,6 +491,126 @@ function performDataMigrations(db) {
     console.log(`✅ Initialized recipes array for ${updateRecipesResult.changes} shopping lists.`);
   } else {
     console.log(`✅ All shopping lists already have recipes array initialized.`);
+  }
+
+  // Migration 8: Migrate old draft structure to new structure
+  console.log('📝 Migrating draft structure to new format...');
+  
+  // Check if old recipe_drafts table exists with old structure
+  const oldDraftTableInfo = db.prepare(`
+    SELECT name FROM sqlite_master 
+    WHERE type='table' AND name='recipe_drafts'
+  `).get();
+  
+  if (oldDraftTableInfo) {
+    // Check if it has the old structure (has title column)
+    const draftColumns = db.prepare('PRAGMA table_info(recipe_drafts)').all();
+    const hasTitleColumn = draftColumns.some(col => col.name === 'title');
+    
+    if (hasTitleColumn) {
+      console.log('🔄 Found old draft structure. Migrating to new format...');
+      
+      // Get all old drafts
+      const oldDrafts = db.prepare('SELECT * FROM recipe_drafts').all();
+      
+      if (oldDrafts.length > 0) {
+        console.log(`📋 Found ${oldDrafts.length} drafts to migrate...`);
+        
+        // Drop old table
+        db.exec('DROP TABLE recipe_drafts');
+        console.log('  ✅ Dropped old recipe_drafts table');
+        
+        // Create new table structure
+        db.exec(`
+          CREATE TABLE recipe_drafts (
+            recipe_id TEXT PRIMARY KEY,
+            draft_recipe_id TEXT NOT NULL UNIQUE,
+            last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
+            FOREIGN KEY (draft_recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+          )
+        `);
+        console.log('  ✅ Created new recipe_drafts table');
+        
+        // Migrate each draft
+        const insertDraftRef = db.prepare(`
+          INSERT INTO recipe_drafts (recipe_id, draft_recipe_id, last_updated)
+          VALUES (?, ?, ?)
+        `);
+        
+        let migratedCount = 0;
+        for (const oldDraft of oldDrafts) {
+          try {
+            // Create a draft recipe from the old draft data
+            const draftRecipeId = generateId();
+            const insertDraftRecipe = db.prepare(`
+              INSERT INTO recipes (
+                id, title, subtitle, description, metadata, category, tags,
+                ingredient_groups, preparation_groups, image_url, images, source_url,
+                is_draft, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
+            `);
+            
+            insertDraftRecipe.run(
+              draftRecipeId,
+              oldDraft.title,
+              oldDraft.subtitle || null,
+              oldDraft.description || null,
+              oldDraft.metadata || '{}',
+              oldDraft.category || null,
+              oldDraft.tags || '[]',
+              oldDraft.ingredient_groups || '[]',
+              oldDraft.preparation_groups || '[]',
+              oldDraft.image_url || null,
+              oldDraft.images || '[]',
+              oldDraft.source_url || null,
+              oldDraft.last_updated || new Date().toISOString()
+            );
+            
+            // Create reference
+            insertDraftRef.run(
+              oldDraft.recipe_id,
+              draftRecipeId,
+              oldDraft.last_updated || new Date().toISOString()
+            );
+            
+            migratedCount++;
+            console.log(`  ✅ Migrated draft for recipe: ${oldDraft.recipe_id}`);
+          } catch (error) {
+            console.log(`  ⚠️  Failed to migrate draft for recipe ${oldDraft.recipe_id}: ${error.message}`);
+          }
+        }
+        
+        console.log(`✅ Migrated ${migratedCount} drafts to new structure.`);
+      } else {
+        // No drafts to migrate, just recreate the table
+        db.exec('DROP TABLE recipe_drafts');
+        db.exec(`
+          CREATE TABLE recipe_drafts (
+            recipe_id TEXT PRIMARY KEY,
+            draft_recipe_id TEXT NOT NULL UNIQUE,
+            last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
+            FOREIGN KEY (draft_recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+          )
+        `);
+        console.log('✅ Recreated recipe_drafts table with new structure.');
+      }
+    } else {
+      console.log('✅ Draft structure is already in new format.');
+    }
+  } else {
+    // Table doesn't exist, create it
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS recipe_drafts (
+        recipe_id TEXT PRIMARY KEY,
+        draft_recipe_id TEXT NOT NULL UNIQUE,
+        last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
+        FOREIGN KEY (draft_recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('✅ Created recipe_drafts table.');
   }
 
   // Add more data migrations here as needed...
