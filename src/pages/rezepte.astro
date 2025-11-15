@@ -31,6 +31,27 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
 <Layout title="Rezepte">
   <div class="container mx-auto px-4 py-8">
     <RecipeListHeader recipeCount={recipes.length} />
+    
+    <!-- Draft notification box -->
+    <div id="draft-notification-box" class="hidden mb-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+      <div class="flex items-start justify-between">
+        <div class="flex-1">
+          <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-1">
+            Unvollständiger Entwurf vorhanden
+          </h3>
+          <p class="text-sm text-yellow-700 dark:text-yellow-300" id="draft-notification-text">
+            Es gibt einen Entwurf für ein Rezept, der noch nicht gespeichert wurde.
+          </p>
+        </div>
+        <button 
+          id="continue-draft-list-btn"
+          class="ml-4 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap"
+        >
+          Entwurf fortsetzen
+        </button>
+      </div>
+    </div>
+    
     <SearchBar 
       categories={categories}
       initialSearchQuery={searchQuery}
@@ -145,9 +166,12 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
   });
 
   // Initialize create recipe button when DOM is loaded
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
     // Reapply filter on initial load if URL has params
     reapplySearchFilter();
+    
+    // Check for drafts and show notification
+    await checkForDrafts();
     
     // Button in RecipeListHeader
     const createBtn = document.getElementById('create-recipe-btn');
@@ -212,4 +236,40 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
       });
     }
   });
+  
+  // Check for drafts and show notification
+  async function checkForDrafts() {
+    try {
+      const response = await fetch('/api/drafts');
+      if (!response.ok) return;
+      
+      const drafts = await response.json();
+      if (drafts && drafts.length > 0) {
+        const draftNotificationBox = document.getElementById('draft-notification-box');
+        const draftNotificationText = document.getElementById('draft-notification-text');
+        const continueDraftBtn = document.getElementById('continue-draft-list-btn');
+        
+        if (draftNotificationBox && draftNotificationText) {
+          // Show notification with draft info
+          if (drafts.length === 1) {
+            draftNotificationText.textContent = `Es gibt einen Entwurf für "${drafts[0].title}", der noch nicht gespeichert wurde.`;
+          } else {
+            draftNotificationText.textContent = `Es gibt ${drafts.length} Entwürfe, die noch nicht gespeichert wurden.`;
+          }
+          
+          draftNotificationBox.classList.remove('hidden');
+          
+          // Set up continue button
+          if (continueDraftBtn) {
+            continueDraftBtn.addEventListener('click', () => {
+              // Navigate to the first draft (most recent)
+              window.location.href = `/rezept/${drafts[0].recipeId}?edit=true`;
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for drafts:', error);
+    }
+  }
 </script> 

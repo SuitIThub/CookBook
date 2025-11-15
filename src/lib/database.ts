@@ -28,6 +28,7 @@ export class CookbookDatabase {
         image_url TEXT,
         images TEXT,
         source_url TEXT,
+        is_draft INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -104,6 +105,17 @@ export class CookbookDatabase {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Recipe drafts table - just references to draft recipes
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS recipe_drafts (
+        recipe_id TEXT PRIMARY KEY,
+        draft_recipe_id TEXT NOT NULL UNIQUE,
+        last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
+        FOREIGN KEY (draft_recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+      )
+    `);
   }
 
   // Recipe CRUD operations
@@ -118,8 +130,8 @@ export class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, is_draft, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -135,6 +147,7 @@ export class CookbookDatabase {
       newRecipe.imageUrl,
       JSON.stringify(newRecipe.images || []),
       newRecipe.sourceUrl,
+      0, // is_draft = false for regular recipes
       newRecipe.createdAt.toISOString(),
       newRecipe.updatedAt.toISOString()
     );
@@ -154,6 +167,33 @@ export class CookbookDatabase {
   }
 
   getRecipe(id: string): Recipe | null {
+    const stmt = this.db.prepare('SELECT * FROM recipes WHERE id = ? AND is_draft = 0');
+    const row = stmt.get(id) as any;
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle,
+      description: row.description,
+      metadata: JSON.parse(row.metadata),
+      category: row.category,
+      tags: row.tags ? JSON.parse(row.tags) : [],
+      ingredientGroups: JSON.parse(row.ingredient_groups),
+      preparationGroups: JSON.parse(row.preparation_groups),
+      imageUrl: row.image_url,
+      images: row.images ? JSON.parse(row.images) : [],
+      sourceUrl: row.source_url,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at)
+    };
+  }
+  
+  // Get recipe including drafts (for internal use)
+  getRecipeIncludingDraft(id: string): Recipe | null {
     const stmt = this.db.prepare('SELECT * FROM recipes WHERE id = ?');
     const row = stmt.get(id) as any;
 
@@ -180,7 +220,7 @@ export class CookbookDatabase {
   }
 
   getAllRecipes(): Recipe[] {
-    const stmt = this.db.prepare('SELECT * FROM recipes ORDER BY updated_at DESC');
+    const stmt = this.db.prepare('SELECT * FROM recipes WHERE is_draft = 0 ORDER BY updated_at DESC');
     const rows = stmt.all() as any[];
 
     return rows.map(row => ({
@@ -202,7 +242,7 @@ export class CookbookDatabase {
   }
 
   getRecipeBySourceUrl(sourceUrl: string): Recipe | null {
-    const stmt = this.db.prepare('SELECT * FROM recipes WHERE source_url = ?');
+    const stmt = this.db.prepare('SELECT * FROM recipes WHERE source_url = ? AND is_draft = 0');
     const row = stmt.get(sourceUrl) as any;
 
     if (!row) {
@@ -243,7 +283,7 @@ export class CookbookDatabase {
       UPDATE recipes 
       SET title = ?, subtitle = ?, description = ?, metadata = ?, category = ?, tags = ?,
           ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, source_url = ?, updated_at = ?
-      WHERE id = ?
+      WHERE id = ? AND is_draft = 0
     `);
 
     const result = stmt.run(
@@ -977,6 +1017,152 @@ export class CookbookDatabase {
     const stmt = this.db.prepare('DELETE FROM global_timers WHERE id = ?');
     stmt.run(id);
     eventBus.emit(EVENTS.GLOBAL_TIMER_DELETED, { timerId: id });
+  }
+
+  // Draft operations
+  saveDraft(recipeId: string, recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>): void {
+    // Check if draft already exists
+    const draftRefStmt = this.db.prepare('SELECT draft_recipe_id FROM recipe_drafts WHERE recipe_id = ?');
+    const draftRef = draftRefStmt.get(recipeId) as { draft_recipe_id: string } | undefined;
+    
+    let draftRecipeId: string;
+    
+    if (draftRef) {
+      // Update existing draft recipe (use ISO string for consistency)
+      draftRecipeId = draftRef.draft_recipe_id;
+      const now = new Date().toISOString();
+      const updateStmt = this.db.prepare(`
+        UPDATE recipes SET
+          title = ?, subtitle = ?, description = ?, metadata = ?, category = ?,
+          tags = ?, ingredient_groups = ?, preparation_groups = ?,
+          image_url = ?, images = ?, source_url = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      
+      updateStmt.run(
+        recipe.title,
+        recipe.subtitle,
+        recipe.description,
+        JSON.stringify(recipe.metadata),
+        recipe.category,
+        JSON.stringify(recipe.tags || []),
+        JSON.stringify(recipe.ingredientGroups),
+        JSON.stringify(recipe.preparationGroups),
+        recipe.imageUrl,
+        JSON.stringify(recipe.images || []),
+        recipe.sourceUrl,
+        now,
+        draftRecipeId
+      );
+      
+      // Update last_updated in draft reference (use ISO string for consistency)
+      const updateRefStmt = this.db.prepare('UPDATE recipe_drafts SET last_updated = ? WHERE recipe_id = ?');
+      updateRefStmt.run(now, recipeId);
+    } else {
+      // Create new draft recipe (use ISO strings for consistency)
+      draftRecipeId = uuidv4();
+      const now = new Date().toISOString();
+      const insertStmt = this.db.prepare(`
+        INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags,
+          ingredient_groups, preparation_groups, image_url, images, source_url, is_draft, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      `);
+      
+      insertStmt.run(
+        draftRecipeId,
+        recipe.title,
+        recipe.subtitle,
+        recipe.description,
+        JSON.stringify(recipe.metadata),
+        recipe.category,
+        JSON.stringify(recipe.tags || []),
+        JSON.stringify(recipe.ingredientGroups),
+        JSON.stringify(recipe.preparationGroups),
+        recipe.imageUrl,
+        JSON.stringify(recipe.images || []),
+        recipe.sourceUrl,
+        now,
+        now
+      );
+      
+      // Create draft reference (use ISO string for consistency)
+      const refStmt = this.db.prepare(`
+        INSERT INTO recipe_drafts (recipe_id, draft_recipe_id, last_updated)
+        VALUES (?, ?, ?)
+      `);
+      refStmt.run(recipeId, draftRecipeId, now);
+    }
+  }
+
+  getDraft(recipeId: string): Recipe & { draftLastUpdated?: Date } | null {
+    const stmt = this.db.prepare(`
+      SELECT r.*, rd.last_updated as draft_last_updated FROM recipes r
+      INNER JOIN recipe_drafts rd ON r.id = rd.draft_recipe_id
+      WHERE rd.recipe_id = ?
+    `);
+    const row = stmt.get(recipeId) as any;
+
+    if (!row) {
+      return null;
+    }
+
+    const draft: Recipe & { draftLastUpdated?: Date } = {
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle || undefined,
+      description: row.description || undefined,
+      metadata: JSON.parse(row.metadata),
+      category: row.category || undefined,
+      tags: JSON.parse(row.tags || '[]'),
+      ingredientGroups: JSON.parse(row.ingredient_groups),
+      preparationGroups: JSON.parse(row.preparation_groups),
+      imageUrl: row.image_url || undefined,
+      images: JSON.parse(row.images || '[]'),
+      sourceUrl: row.source_url || undefined,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.draft_last_updated || row.updated_at), // Use draft's last_updated timestamp
+      draftLastUpdated: new Date(row.draft_last_updated || row.updated_at)
+    };
+    
+    return draft;
+  }
+
+  deleteDraft(recipeId: string): void {
+    // Get draft recipe ID
+    const draftRefStmt = this.db.prepare('SELECT draft_recipe_id FROM recipe_drafts WHERE recipe_id = ?');
+    const draftRef = draftRefStmt.get(recipeId) as { draft_recipe_id: string } | undefined;
+    
+    if (draftRef) {
+      // Delete draft recipe
+      const deleteRecipeStmt = this.db.prepare('DELETE FROM recipes WHERE id = ?');
+      deleteRecipeStmt.run(draftRef.draft_recipe_id);
+      
+      // Delete draft reference (should cascade, but explicit is better)
+      const deleteRefStmt = this.db.prepare('DELETE FROM recipe_drafts WHERE recipe_id = ?');
+      deleteRefStmt.run(recipeId);
+    }
+  }
+
+  hasDraft(recipeId: string): boolean {
+    const stmt = this.db.prepare('SELECT 1 FROM recipe_drafts WHERE recipe_id = ?');
+    const row = stmt.get(recipeId);
+    return !!row;
+  }
+
+  getAllDrafts(): Array<{ recipeId: string; title: string; lastUpdated: Date }> {
+    const stmt = this.db.prepare(`
+      SELECT rd.recipe_id, r.title, rd.last_updated 
+      FROM recipe_drafts rd
+      INNER JOIN recipes r ON rd.draft_recipe_id = r.id
+      ORDER BY rd.last_updated DESC
+    `);
+    const rows = stmt.all() as Array<{ recipe_id: string; title: string; last_updated: string }>;
+    
+    return rows.map(row => ({
+      recipeId: row.recipe_id,
+      title: row.title,
+      lastUpdated: new Date(row.last_updated)
+    }));
   }
 
   close(): void {

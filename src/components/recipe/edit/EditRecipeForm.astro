@@ -38,6 +38,110 @@ const { recipe } = Astro.props;
   // Available units loaded from API
   let availableUnits = [];
   
+  // Draft auto-save debounce timer
+  let draftSaveTimeout = null;
+  const DRAFT_SAVE_DELAY = 1000; // Save draft 1 second after last change
+  
+  // Track initial recipe state for change detection
+  let initialRecipeState = null;
+  let hasChanges = false;
+  
+  // Store the last known draft timestamp for local time updates
+  let lastKnownDraftTimestamp = null;
+  
+  // Draft storage functions (using API)
+  async function saveDraft(recipeId, recipe) {
+    try {
+      const response = await fetch(`/api/drafts?recipeId=${recipeId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(recipe)
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to save draft');
+      }
+      
+      hasChanges = true;
+    } catch (error) {
+      console.error('Error saving draft:', error);
+    }
+  }
+  
+  async function loadDraft(recipeId) {
+    try {
+      const response = await fetch(`/api/drafts?recipeId=${recipeId}`);
+      if (!response.ok) {
+        console.error('Error loading draft:', response.status, response.statusText);
+        return null;
+      }
+      const draft = await response.json();
+      // API returns null when no draft exists (instead of 404)
+      return draft;
+    } catch (error) {
+      console.error('Error loading draft:', error);
+      return null;
+    }
+  }
+  
+  async function deleteDraft(recipeId) {
+    try {
+      const response = await fetch(`/api/drafts?recipeId=${recipeId}`, {
+        method: 'DELETE'
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('Error deleting draft:', error);
+      return false;
+    }
+  }
+  
+  async function hasDraft(recipeId) {
+    try {
+      const response = await fetch(`/api/drafts?recipeId=${recipeId}`);
+      if (!response.ok) {
+        return false;
+      }
+      const draft = await response.json();
+      // API returns null when no draft exists (instead of 404)
+      return draft !== null;
+    } catch (error) {
+      console.error('Error checking draft:', error);
+      return false;
+    }
+  }
+  
+  // Compare two recipe objects to detect changes
+  function recipesAreEqual(recipe1, recipe2) {
+    if (!recipe1 || !recipe2) return false;
+    
+    // Compare simple fields
+    if (recipe1.title !== recipe2.title) return false;
+    if (recipe1.subtitle !== recipe2.subtitle) return false;
+    if (recipe1.description !== recipe2.description) return false;
+    if (recipe1.sourceUrl !== recipe2.sourceUrl) return false;
+    if (recipe1.category !== recipe2.category) return false;
+    
+    // Compare metadata
+    if (JSON.stringify(recipe1.metadata) !== JSON.stringify(recipe2.metadata)) return false;
+    
+    // Compare tags
+    if (JSON.stringify(recipe1.tags || []) !== JSON.stringify(recipe2.tags || [])) return false;
+    
+    // Compare ingredient groups
+    if (JSON.stringify(recipe1.ingredientGroups) !== JSON.stringify(recipe2.ingredientGroups)) return false;
+    
+    // Compare preparation groups
+    if (JSON.stringify(recipe1.preparationGroups) !== JSON.stringify(recipe2.preparationGroups)) return false;
+    
+    // Compare images
+    if (JSON.stringify(recipe1.images || []) !== JSON.stringify(recipe2.images || [])) return false;
+    
+    return true;
+  }
+  
   // Load available units
   async function loadUnits() {
     try {
@@ -119,12 +223,474 @@ const { recipe } = Astro.props;
       form.addEventListener('submit', handleFormSubmit);
     }
     
+    // Store initial recipe state for change detection
+    initialRecipeState = JSON.parse(JSON.stringify(recipe));
+    
     // Load units first
     await loadUnits();
     
-    // Initialize edit functionality
+    // Initialize edit functionality first
     initializeEditHandlers();
+    
+    // Only initialize draft functionality if we're in edit mode
+    const editContent = document.getElementById('edit-content');
+    if (editContent && !editContent.classList.contains('hidden')) {
+      // Load draft if it exists
+      await loadDraftIfExists();
+      
+      // Set up auto-save draft on form changes
+      setupDraftAutoSave();
+      
+      // Create initial draft if it doesn't exist (when entering edit mode)
+      await createInitialDraftIfNeeded();
+      
+      // Update draft last updated time display
+      await updateDraftTimeDisplay();
+      
+      // Update draft time display more frequently (every 10 seconds) without API calls
+      // This makes the time display update smoothly as time passes
+      setInterval(() => {
+        // Only update if still in edit mode
+        const currentEditContent = document.getElementById('edit-content');
+        if (currentEditContent && !currentEditContent.classList.contains('hidden')) {
+          const timeDisplay = document.getElementById('draft-last-updated');
+          if (timeDisplay && lastKnownDraftTimestamp) {
+            // Update time display locally without API call
+            const now = new Date();
+            const diffMs = now.getTime() - lastKnownDraftTimestamp.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            let timeText = '';
+            if (diffMins < 1) {
+              timeText = 'gerade eben';
+            } else if (diffMins === 1) {
+              timeText = 'vor 1 Minute';
+            } else if (diffMins < 60) {
+              timeText = `vor ${diffMins} Minuten`;
+            } else {
+              const diffHours = Math.floor(diffMins / 60);
+              if (diffHours === 1) {
+                timeText = 'vor 1 Stunde';
+              } else if (diffHours < 24) {
+                timeText = `vor ${diffHours} Stunden`;
+              } else {
+                const diffDays = Math.floor(diffHours / 24);
+                if (diffDays === 1) {
+                  timeText = 'vor 1 Tag';
+                } else {
+                  timeText = `vor ${diffDays} Tagen`;
+                }
+              }
+            }
+            
+            timeDisplay.textContent = `Entwurf zuletzt aktualisiert: ${timeText}`;
+          }
+        }
+      }, 10000); // Update every 10 seconds
+      
+      // Check for external draft updates and refresh timestamp every minute
+      setInterval(async () => {
+        // Only update if still in edit mode
+        const currentEditContent = document.getElementById('edit-content');
+        if (currentEditContent && !currentEditContent.classList.contains('hidden')) {
+          await updateDraftTimeDisplay();
+          // Update the stored timestamp after fetching from API
+          const recipeId = window.location.pathname.split('/').pop();
+          if (recipeId) {
+            const draft = await loadDraft(recipeId);
+            if (draft && draft.updatedAt) {
+              lastKnownDraftTimestamp = new Date(draft.updatedAt);
+            }
+          }
+          await checkForExternalDraftUpdates();
+        }
+      }, 60000); // Check for external updates every minute
+      
+      // Also check for external updates when window gains focus
+      window.addEventListener('focus', async () => {
+        const currentEditContent = document.getElementById('edit-content');
+        if (currentEditContent && !currentEditContent.classList.contains('hidden')) {
+          await checkForExternalDraftUpdates();
+        }
+      });
+    }
+    
+    // Set up unload handlers once (they check edit mode internally)
+    // Save draft immediately on page unload (reload, close, etc.)
+    window.addEventListener('beforeunload', () => {
+      // Only save if we're in edit mode
+      const editContent = document.getElementById('edit-content');
+      if (editContent && !editContent.classList.contains('hidden')) {
+        // Clear debounce timeout and save immediately
+        if (draftSaveTimeout) {
+          clearTimeout(draftSaveTimeout);
+          draftSaveTimeout = null;
+        }
+        saveDraftImmediately();
+      }
+    });
+    
+    // Save draft when page becomes hidden (mobile: app switching, tab switching, etc.)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Only save if we're in edit mode
+        const editContent = document.getElementById('edit-content');
+        if (editContent && !editContent.classList.contains('hidden')) {
+          // Clear debounce timeout and save immediately
+          if (draftSaveTimeout) {
+            clearTimeout(draftSaveTimeout);
+            draftSaveTimeout = null;
+          }
+          saveDraftImmediately();
+        }
+      }
+    });
   });
+  
+  // Listen for edit mode changes to initialize draft functionality
+  document.addEventListener('editModeChanged', async (event) => {
+    const isEditMode = event.detail.isEditMode;
+    
+    if (isEditMode) {
+      // Entering edit mode - initialize draft functionality
+      await loadDraftIfExists();
+      setupDraftAutoSave();
+      await createInitialDraftIfNeeded();
+      await updateDraftTimeDisplay();
+    }
+  });
+  
+  // Load draft if it exists
+  async function loadDraftIfExists() {
+    try {
+      const recipeId = window.location.pathname.split('/').pop();
+      if (!recipeId) return;
+      
+      const draft = await loadDraft(recipeId);
+      if (draft) {
+        // Restore draft data to the form
+        restoreDraftToForm(draft);
+        window.currentRecipe = draft;
+        
+        // Update ingredient linker if available
+        if (window.ingredientLinker) {
+          window.ingredientLinker.recipe = draft;
+        }
+        
+        // Show notification that draft was loaded
+        showNotification('Entwurf wurde geladen.', 'info');
+      }
+    } catch (error) {
+      console.error('Error loading draft:', error);
+    }
+  }
+  
+  // Create initial draft when entering edit mode if it doesn't exist
+  async function createInitialDraftIfNeeded() {
+    try {
+      const recipeId = window.location.pathname.split('/').pop();
+      if (!recipeId) return;
+      
+      // Only create if we're in edit mode
+      const editContent = document.getElementById('edit-content');
+      if (!editContent || editContent.classList.contains('hidden')) {
+        return; // Not in edit mode, don't create draft
+      }
+      
+      // Check if draft already exists
+      const draftExists = await hasDraft(recipeId);
+      if (draftExists) {
+        return; // Draft already exists
+      }
+      
+      // Create initial draft from current form state
+      const initialDraft = collectRecipeData();
+      await saveDraft(recipeId, initialDraft);
+      hasChanges = false; // Initial save doesn't count as a change
+    } catch (error) {
+      console.error('Error creating initial draft:', error);
+    }
+  }
+  
+  // Check for external draft updates (from other sessions/devices)
+  async function checkForExternalDraftUpdates() {
+    try {
+      const recipeId = window.location.pathname.split('/').pop();
+      if (!recipeId) return;
+      
+      const draft = await loadDraft(recipeId);
+      if (!draft) return;
+      
+      // Compare current form state with draft
+      const currentState = collectRecipeData();
+      const currentStateStr = JSON.stringify(currentState);
+      const draftStr = JSON.stringify(draft);
+      
+      // If draft is different from current state, ask user if they want to load it
+      if (currentStateStr !== draftStr) {
+        // Check if current state matches initial state (no local changes)
+        const currentMatchesInitial = recipesAreEqual(currentState, initialRecipeState);
+        
+        if (currentMatchesInitial) {
+          // No local changes, automatically load the draft
+          restoreDraftToForm(draft);
+          window.currentRecipe = draft;
+          if (window.ingredientLinker) {
+            window.ingredientLinker.recipe = draft;
+          }
+          showNotification('Entwurf wurde von einem anderen Gerät aktualisiert.', 'info');
+        } else {
+          // Local changes exist, notify user but don't auto-load
+          showNotification('Entwurf wurde von einem anderen Gerät aktualisiert. Seite neu laden, um die Änderungen zu sehen.', 'info');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for external draft updates:', error);
+    }
+  }
+  
+  // Restore draft data to form fields
+  function restoreDraftToForm(draft) {
+    // Restore basic fields
+    const titleInput = document.getElementById('edit-title');
+    if (titleInput && draft.title) {
+      titleInput.value = draft.title;
+    }
+    
+    const subtitleInput = document.getElementById('edit-subtitle');
+    if (subtitleInput) {
+      subtitleInput.value = draft.subtitle || '';
+    }
+    
+    const descriptionInput = document.getElementById('edit-description');
+    if (descriptionInput) {
+      descriptionInput.value = draft.description || '';
+    }
+    
+    const sourceUrlInput = document.getElementById('edit-source-url');
+    if (sourceUrlInput) {
+      sourceUrlInput.value = draft.sourceUrl || '';
+    }
+    
+    // Restore servings
+    const servingsInput = document.getElementById('edit-servings');
+    if (servingsInput && draft.metadata?.servings) {
+      servingsInput.value = draft.metadata.servings.toString();
+    }
+    
+    // Restore difficulty
+    const difficultyInput = document.getElementById('edit-difficulty');
+    if (difficultyInput && draft.metadata?.difficulty) {
+      difficultyInput.value = draft.metadata.difficulty;
+    }
+    
+    // Restore nutrition
+    if (draft.metadata?.nutrition) {
+      const caloriesInput = document.getElementById('edit-calories');
+      if (caloriesInput) {
+        caloriesInput.value = draft.metadata.nutrition.calories?.toString() || '';
+      }
+      
+      const carbsInput = document.getElementById('edit-carbohydrates');
+      if (carbsInput) {
+        carbsInput.value = draft.metadata.nutrition.carbohydrates?.toString() || '';
+      }
+      
+      const proteinInput = document.getElementById('edit-protein');
+      if (proteinInput) {
+        proteinInput.value = draft.metadata.nutrition.protein?.toString() || '';
+      }
+      
+      const fatInput = document.getElementById('edit-fat');
+      if (fatInput) {
+        fatInput.value = draft.metadata.nutrition.fat?.toString() || '';
+      }
+    }
+    
+    // Note: Ingredient and preparation groups are more complex to restore
+    // They will be restored when the form is re-rendered with draft data
+    // For now, we rely on the server-side data being updated or manual restoration
+  }
+  
+  // Set up auto-save draft on form changes
+  function setupDraftAutoSave() {
+    const form = document.getElementById('edit-recipe-form');
+    if (!form) {
+      console.warn('Edit form not found, cannot set up auto-save');
+      return;
+    }
+    
+    // Listen to all input, change, and other relevant events on the form
+    form.addEventListener('input', handleDraftChange);
+    form.addEventListener('change', handleDraftChange);
+    
+    // Also listen to dynamically added elements (delegated events)
+    // This is important for elements added after page load
+    document.addEventListener('input', (e) => {
+      if (e.target && e.target.closest('#edit-recipe-form')) {
+        handleDraftChange(e);
+      }
+    });
+    
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.closest('#edit-recipe-form')) {
+        handleDraftChange(e);
+      }
+    });
+  }
+  
+  // Handle draft change with debouncing
+  function handleDraftChange(e) {
+    // Only save if we're in edit mode
+    const editContent = document.getElementById('edit-content');
+    if (!editContent || editContent.classList.contains('hidden')) {
+      return; // Not in edit mode, don't save
+    }
+    
+    // Clear existing timeout
+    if (draftSaveTimeout) {
+      clearTimeout(draftSaveTimeout);
+    }
+    
+    // Set new timeout to save draft
+    draftSaveTimeout = setTimeout(() => {
+      saveDraftToStorage();
+    }, DRAFT_SAVE_DELAY);
+  }
+  
+  // Save current form state as draft
+  async function saveDraftToStorage() {
+    try {
+      const recipeId = window.location.pathname.split('/').pop();
+      if (!recipeId) {
+        console.warn('No recipe ID found, cannot save draft');
+        return;
+      }
+      
+      // Only save if we're in edit mode
+      const editContent = document.getElementById('edit-content');
+      if (!editContent || editContent.classList.contains('hidden')) {
+        return; // Not in edit mode, don't save
+      }
+      
+      // Collect current recipe data
+      const currentRecipeData = collectRecipeData();
+      
+      // Save draft
+      await saveDraft(recipeId, currentRecipeData);
+      
+      // Update the timestamp immediately after saving
+      // The API will return the updated timestamp, so we fetch it
+      const draft = await loadDraft(recipeId);
+      if (draft && draft.updatedAt) {
+        lastKnownDraftTimestamp = new Date(draft.updatedAt);
+      }
+      
+      // Update last updated time display
+      await updateDraftTimeDisplay();
+    } catch (error) {
+      console.error('Error saving draft:', error);
+    }
+  }
+  
+  // Save draft immediately (synchronous, for page unload)
+  function saveDraftImmediately() {
+    try {
+      const recipeId = window.location.pathname.split('/').pop();
+      if (!recipeId) return false;
+      
+      // Only save if we're in edit mode
+      const editContent = document.getElementById('edit-content');
+      if (!editContent || editContent.classList.contains('hidden')) {
+        return false; // Not in edit mode, don't save
+      }
+      
+      // Collect current recipe data
+      const currentRecipeData = collectRecipeData();
+      
+      // Use fetch with keepalive for reliable unload handling
+      // This works better than sendBeacon for JSON data
+      fetch(`/api/drafts?recipeId=${recipeId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(currentRecipeData),
+        keepalive: true
+      }).catch(() => {
+        // Silently fail - this is best effort
+      });
+      
+      return true;
+    } catch (error) {
+      // Silently fail - this is best effort
+      return false;
+    }
+  }
+  
+  // Update draft last updated time display
+  async function updateDraftTimeDisplay() {
+    try {
+      const recipeId = window.location.pathname.split('/').pop();
+      if (!recipeId) return;
+      
+      const timeDisplay = document.getElementById('draft-last-updated');
+      if (!timeDisplay) return;
+      
+      // Check if draft exists first
+      const draftExists = await hasDraft(recipeId);
+      if (!draftExists) {
+        timeDisplay.textContent = 'Entwurf wird automatisch gespeichert...';
+        lastKnownDraftTimestamp = null;
+        return;
+      }
+      
+      const draft = await loadDraft(recipeId);
+      if (draft && draft.updatedAt) {
+        // updatedAt now contains the draft's last_updated timestamp from recipe_drafts table
+        const lastUpdated = new Date(draft.updatedAt);
+        lastKnownDraftTimestamp = lastUpdated; // Store for local updates
+        const now = new Date();
+        const diffMs = now.getTime() - lastUpdated.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        
+        let timeText = '';
+        if (diffMins < 1) {
+          timeText = 'gerade eben';
+        } else if (diffMins === 1) {
+          timeText = 'vor 1 Minute';
+        } else if (diffMins < 60) {
+          timeText = `vor ${diffMins} Minuten`;
+        } else {
+          const diffHours = Math.floor(diffMins / 60);
+          if (diffHours === 1) {
+            timeText = 'vor 1 Stunde';
+          } else if (diffHours < 24) {
+            timeText = `vor ${diffHours} Stunden`;
+          } else {
+            const diffDays = Math.floor(diffHours / 24);
+            if (diffDays === 1) {
+              timeText = 'vor 1 Tag';
+            } else {
+              timeText = `vor ${diffDays} Tagen`;
+            }
+          }
+        }
+        
+        timeDisplay.textContent = `Entwurf zuletzt aktualisiert: ${timeText}`;
+      } else {
+        timeDisplay.textContent = 'Entwurf wird automatisch gespeichert...';
+        lastKnownDraftTimestamp = null;
+      }
+    } catch (error) {
+      console.error('Error updating draft time display:', error);
+      const timeDisplay = document.getElementById('draft-last-updated');
+      if (timeDisplay) {
+        timeDisplay.textContent = 'Entwurf wird automatisch gespeichert...';
+      }
+      lastKnownDraftTimestamp = null;
+    }
+  }
 
   function initializeEditHandlers() {
     // Ingredient functionality
@@ -174,6 +740,7 @@ const { recipe } = Astro.props;
         clearTimeout(window.ingredientUpdateTimeout);
         window.ingredientUpdateTimeout = setTimeout(() => {
           updateIngredientLinker();
+          handleDraftChange(); // Also trigger draft save
         }, 300);
       }
     });
@@ -258,6 +825,9 @@ const { recipe } = Astro.props;
     
     // Update ingredient linker with current DOM state
     updateIngredientLinker();
+    
+    // Trigger draft save
+    handleDraftChange();
   }
 
   function createIngredientEditElement(id, name, amount, unit, description = '') {
@@ -368,6 +938,8 @@ const { recipe } = Astro.props;
       ingredientElement.remove();
       // Update ingredient linker with current DOM state
       updateIngredientLinker();
+      // Trigger draft save
+      handleDraftChange();
     }
   }
 
@@ -376,6 +948,8 @@ const { recipe } = Astro.props;
       groupElement.remove();
       // Update ingredient linker with current DOM state
       updateIngredientLinker();
+      // Trigger draft save
+      handleDraftChange();
     }
   }
 
@@ -409,6 +983,9 @@ const { recipe } = Astro.props;
 
     // Update step numbers
     updateStepNumbers(groupElement);
+    
+    // Trigger draft save
+    handleDraftChange();
   }
 
   function createStepEditElement(id, text, stepNumber) {
@@ -553,12 +1130,16 @@ const { recipe } = Astro.props;
       if (groupElement) {
         updateStepNumbers(groupElement);
       }
+      // Trigger draft save
+      handleDraftChange();
     }
   }
 
   function removePreparationGroup(groupElement) {
     if (groupElement && !groupElement.classList.contains('default-group')) {
       groupElement.remove();
+      // Trigger draft save
+      handleDraftChange();
     }
   }
 
@@ -715,6 +1296,12 @@ const { recipe } = Astro.props;
       if (response.ok) {
         const savedRecipe = await response.json();
         window.currentRecipe = savedRecipe;
+        
+        // Delete draft after successful save
+        const recipeId = window.location.pathname.split('/').pop();
+        if (recipeId) {
+          await deleteDraft(recipeId);
+        }
         
         // Show success notification
         showNotification('Rezept erfolgreich gespeichert!', 'success');
