@@ -339,22 +339,26 @@ const sourceYouTubeEmbed = recipe.sourceUrl ? getYouTubeEmbedUrl(recipe.sourceUr
     // Desktop buttons
     const exportContainer = document.getElementById('export-container');
     const addToShoppingBtn = document.getElementById('add-to-shopping');
+    const cookingModeBtn = document.getElementById('cooking-mode-btn');
     const saveBtn = document.getElementById('save-btn');
     
     // Mobile buttons
     const exportContainerMobile = document.getElementById('export-container-mobile');
     const addToShoppingBtnMobile = document.getElementById('add-to-shopping-mobile');
+    const cookingModeBtnMobile = document.getElementById('cooking-mode-btn-mobile');
     const saveBtnMobile = document.getElementById('save-btn-mobile');
     
     // Source URL section (hide in edit mode)
     const sourceUrlSection = document.getElementById('source-url-section');
     
     if (isEditMode) {
-      // Hide export and shopping list buttons
+      // Hide export, shopping list, and cookmode buttons
       exportContainer?.classList.add('hidden');
       addToShoppingBtn?.classList.add('hidden');
+      cookingModeBtn?.classList.add('hidden');
       exportContainerMobile?.classList.add('hidden');
       addToShoppingBtnMobile?.classList.add('hidden');
+      cookingModeBtnMobile?.classList.add('hidden');
       
       // Hide source URL section in edit mode
       sourceUrlSection?.classList.add('hidden');
@@ -365,11 +369,13 @@ const sourceYouTubeEmbed = recipe.sourceUrl ? getYouTubeEmbedUrl(recipe.sourceUr
       saveBtnMobile?.classList.remove('hidden');
       saveBtnMobile?.classList.add('flex');
     } else {
-      // Show export and shopping list buttons
+      // Show export, shopping list, and cookmode buttons
       exportContainer?.classList.remove('hidden');
       addToShoppingBtn?.classList.remove('hidden');
+      cookingModeBtn?.classList.remove('hidden');
       exportContainerMobile?.classList.remove('hidden');
       addToShoppingBtnMobile?.classList.remove('hidden');
+      cookingModeBtnMobile?.classList.remove('hidden');
       
       // Show source URL section in view mode
       sourceUrlSection?.classList.remove('hidden');
@@ -392,29 +398,4 @@ const sourceYouTubeEmbed = recipe.sourceUrl ? getYouTubeEmbedUrl(recipe.sourceUr
   const viewContent = document.getElementById('view-content');
   const isInitiallyHidden = viewContent?.classList.contains('hidden') ?? false;
   updateButtonVisibility(isInitiallyHidden);
-
-  // Handle edit mode
-  const editBtn = document.getElementById('edit-btn');
-  const editBtnMobile = document.getElementById('edit-btn-mobile');
-  const saveBtn = document.getElementById('save-btn');
-  const saveBtnMobile = document.getElementById('save-btn-mobile');
-  const cookingModeBtn = document.getElementById('cooking-mode-btn');
-  const cookingModeBtnMobile = document.getElementById('cooking-mode-btn-mobile');
-
-  function enterEditMode() {
-    // ... existing code ...
-    cookingModeBtn?.classList.add('hidden');
-    cookingModeBtnMobile?.classList.add('hidden');
-  }
-
-  function exitEditMode() {
-    // ... existing code ...
-    cookingModeBtn?.classList.remove('hidden');
-    cookingModeBtnMobile?.classList.remove('hidden');
-  }
-
-  editBtn?.addEventListener('click', enterEditMode);
-  editBtnMobile?.addEventListener('click', enterEditMode);
-  saveBtn?.addEventListener('click', exitEditMode);
-  saveBtnMobile?.addEventListener('click', exitEditMode);
 </script> 

@@ -42,12 +42,23 @@ const { recipe } = Astro.props;
   let draftSaveTimeout = null;
   const DRAFT_SAVE_DELAY = 1000; // Save draft 1 second after last change
   
+  // Flag to prevent draft saving right after a successful recipe save
+  let justSavedRecipe = false;
+  
   // Track initial recipe state for change detection
   let initialRecipeState = null;
   let hasChanges = false;
   
   // Store the last known draft timestamp for local time updates
   let lastKnownDraftTimestamp = null;
+  
+  // Store the time update interval ID so we can clear it when needed
+  let timeUpdateIntervalId = null;
+  
+  // Placeholder functions that will be defined later - expose them early so they're available
+  // This ensures the cancel handler can find them even if called before DOMContentLoaded
+  window.saveDraftToStorage = null;
+  window.collectRecipeData = null;
   
   // Draft storage functions (using API)
   async function saveDraft(recipeId, recipe) {
@@ -88,10 +99,20 @@ const { recipe } = Astro.props;
   
   async function deleteDraft(recipeId) {
     try {
+      console.log(`Attempting to delete draft for recipe: ${recipeId}`);
       const response = await fetch(`/api/drafts?recipeId=${recipeId}`, {
         method: 'DELETE'
       });
-      return response.ok;
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to delete draft: ${response.status} - ${errorText}`);
+        return false;
+      }
+      
+      const result = await response.json();
+      console.log('Draft deletion response:', result);
+      return true;
     } catch (error) {
       console.error('Error deleting draft:', error);
       return false;
@@ -136,8 +157,7 @@ const { recipe } = Astro.props;
     // Compare preparation groups
     if (JSON.stringify(recipe1.preparationGroups) !== JSON.stringify(recipe2.preparationGroups)) return false;
     
-    // Compare images
-    if (JSON.stringify(recipe1.images || []) !== JSON.stringify(recipe2.images || [])) return false;
+    // Note: Images are not compared - they are directly applied to recipes and not part of drafts
     
     return true;
   }
@@ -241,65 +261,32 @@ const { recipe } = Astro.props;
       // Set up auto-save draft on form changes
       setupDraftAutoSave();
       
-      // Create initial draft if it doesn't exist (when entering edit mode)
-      await createInitialDraftIfNeeded();
+      // Don't create initial draft - only create when user makes changes
+      // await createInitialDraftIfNeeded();
       
       // Update draft last updated time display
       await updateDraftTimeDisplay();
       
-      // Update draft time display more frequently (every 10 seconds) without API calls
-      // This makes the time display update smoothly as time passes
-      setInterval(() => {
-        // Only update if still in edit mode
-        const currentEditContent = document.getElementById('edit-content');
-        if (currentEditContent && !currentEditContent.classList.contains('hidden')) {
-          const timeDisplay = document.getElementById('draft-last-updated');
-          if (timeDisplay && lastKnownDraftTimestamp) {
-            // Update time display locally without API call
-            const now = new Date();
-            const diffMs = now.getTime() - lastKnownDraftTimestamp.getTime();
-            const diffMins = Math.floor(diffMs / 60000);
-            
-            let timeText = '';
-            if (diffMins < 1) {
-              timeText = 'gerade eben';
-            } else if (diffMins === 1) {
-              timeText = 'vor 1 Minute';
-            } else if (diffMins < 60) {
-              timeText = `vor ${diffMins} Minuten`;
-            } else {
-              const diffHours = Math.floor(diffMins / 60);
-              if (diffHours === 1) {
-                timeText = 'vor 1 Stunde';
-              } else if (diffHours < 24) {
-                timeText = `vor ${diffHours} Stunden`;
-              } else {
-                const diffDays = Math.floor(diffHours / 24);
-                if (diffDays === 1) {
-                  timeText = 'vor 1 Tag';
-                } else {
-                  timeText = `vor ${diffDays} Tagen`;
-                }
-              }
-            }
-            
-            timeDisplay.textContent = `Entwurf zuletzt aktualisiert: ${timeText}`;
-          }
-        }
-      }, 10000); // Update every 10 seconds
+      // Start the time update interval when entering edit mode
+      startTimeUpdateInterval();
       
       // Check for external draft updates and refresh timestamp every minute
+      // Only update timestamp if it's actually newer (to avoid overwriting with stale data)
       setInterval(async () => {
         // Only update if still in edit mode
         const currentEditContent = document.getElementById('edit-content');
         if (currentEditContent && !currentEditContent.classList.contains('hidden')) {
-          await updateDraftTimeDisplay();
-          // Update the stored timestamp after fetching from API
           const recipeId = window.location.pathname.split('/').pop();
           if (recipeId) {
             const draft = await loadDraft(recipeId);
             if (draft && draft.updatedAt) {
-              lastKnownDraftTimestamp = new Date(draft.updatedAt);
+              const serverTimestamp = new Date(draft.updatedAt);
+              // Only update if server timestamp is newer than our current timestamp
+              // This prevents overwriting with stale data when we just saved
+              if (!lastKnownDraftTimestamp || serverTimestamp.getTime() > lastKnownDraftTimestamp.getTime()) {
+                lastKnownDraftTimestamp = serverTimestamp;
+                await updateDraftTimeDisplay();
+              }
             }
           }
           await checkForExternalDraftUpdates();
@@ -355,8 +342,14 @@ const { recipe } = Astro.props;
       // Entering edit mode - initialize draft functionality
       await loadDraftIfExists();
       setupDraftAutoSave();
-      await createInitialDraftIfNeeded();
+      // Don't create initial draft - only create when user makes changes
+      // await createInitialDraftIfNeeded();
       await updateDraftTimeDisplay();
+      // Start the time update interval
+      startTimeUpdateInterval();
+    } else {
+      // Exiting edit mode - stop the time update interval
+      stopTimeUpdateInterval();
     }
   });
   
@@ -368,6 +361,12 @@ const { recipe } = Astro.props;
       
       const draft = await loadDraft(recipeId);
       if (draft) {
+        // Show the status bar since a draft exists
+        const statusBar = document.getElementById('draft-status-bar');
+        if (statusBar) {
+          statusBar.classList.remove('hidden');
+        }
+        
         // Restore draft data to the form
         restoreDraftToForm(draft);
         window.currentRecipe = draft;
@@ -386,6 +385,7 @@ const { recipe } = Astro.props;
   }
   
   // Create initial draft when entering edit mode if it doesn't exist
+  // Only creates a draft if there are actual changes from the original recipe
   async function createInitialDraftIfNeeded() {
     try {
       const recipeId = window.location.pathname.split('/').pop();
@@ -403,10 +403,19 @@ const { recipe } = Astro.props;
         return; // Draft already exists
       }
       
-      // Create initial draft from current form state
-      const initialDraft = collectRecipeData();
-      await saveDraft(recipeId, initialDraft);
-      hasChanges = false; // Initial save doesn't count as a change
+      // Get current form state
+      const currentState = collectRecipeData();
+      
+      // Compare with original recipe state - only create draft if there are changes
+      if (initialRecipeState && recipesAreEqual(currentState, initialRecipeState)) {
+        // No changes detected, don't create a draft
+        console.log('No changes detected, skipping initial draft creation');
+        return;
+      }
+      
+      // There are changes, create initial draft
+      await saveDraft(recipeId, currentState);
+      hasChanges = false; // Initial save doesn't count as a change (we'll track future changes)
     } catch (error) {
       console.error('Error creating initial draft:', error);
     }
@@ -561,41 +570,113 @@ const { recipe } = Astro.props;
   // Save current form state as draft
   async function saveDraftToStorage() {
     try {
+      // Clear any pending debounce timeout since we're saving now
+      if (draftSaveTimeout) {
+        clearTimeout(draftSaveTimeout);
+        draftSaveTimeout = null;
+      }
+      
       const recipeId = window.location.pathname.split('/').pop();
       if (!recipeId) {
         console.warn('No recipe ID found, cannot save draft');
-        return;
+        return false;
       }
       
       // Only save if we're in edit mode
       const editContent = document.getElementById('edit-content');
       if (!editContent || editContent.classList.contains('hidden')) {
-        return; // Not in edit mode, don't save
+        return false; // Not in edit mode, don't save
       }
       
-      // Collect current recipe data
-      const currentRecipeData = collectRecipeData();
-      
-      // Save draft
-      await saveDraft(recipeId, currentRecipeData);
-      
-      // Update the timestamp immediately after saving
-      // The API will return the updated timestamp, so we fetch it
-      const draft = await loadDraft(recipeId);
-      if (draft && draft.updatedAt) {
-        lastKnownDraftTimestamp = new Date(draft.updatedAt);
+      // Collect current recipe data directly from the form
+      // We don't need to trigger events - collectRecipeData reads directly from the DOM
+      let currentRecipeData;
+      try {
+        currentRecipeData = collectRecipeData();
+        if (!currentRecipeData) {
+          throw new Error('collectRecipeData returned null or undefined');
+        }
+      } catch (error) {
+        console.error('Error collecting recipe data:', error);
+        throw error;
       }
       
-      // Update last updated time display
-      await updateDraftTimeDisplay();
+      // Check if there are actual changes before saving
+      if (initialRecipeState && recipesAreEqual(currentRecipeData, initialRecipeState)) {
+        console.log('No changes detected, skipping draft save');
+        return false; // No changes, don't save draft
+      }
+      
+      console.log('Saving draft with data:', {
+        title: currentRecipeData.title,
+        recipeId: recipeId
+      });
+      
+      // Save draft and wait for it to complete
+      const response = await fetch(`/api/drafts?recipeId=${recipeId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(currentRecipeData)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to save draft:', response.status, errorText);
+        throw new Error('Failed to save draft');
+      }
+      
+      console.log('Draft saved successfully');
+      hasChanges = true;
+      
+      // Show the status bar now that a draft exists
+      const statusBar = document.getElementById('draft-status-bar');
+      if (statusBar) {
+        statusBar.classList.remove('hidden');
+      }
+      
+      // Update the timestamp immediately to current time for instant display update
+      // This ensures the time display shows "gerade eben" or "vor 1 Sekunde" immediately
+      const saveTime = new Date();
+      lastKnownDraftTimestamp = saveTime;
+      
+      // Update last updated time display immediately
+      const timeDisplay = document.getElementById('draft-last-updated');
+      if (timeDisplay) {
+        timeDisplay.textContent = 'Entwurf zuletzt aktualisiert: gerade eben';
+      }
+      
+      // Don't overwrite the timestamp with server response - we just saved, so our immediate timestamp is correct
+      // The interval will continue to update the display based on this timestamp
+      
+      return true;
     } catch (error) {
       console.error('Error saving draft:', error);
+      return false;
     }
+  }
+  
+  // Expose save function and collectRecipeData globally so they can be called from cancel handler
+  // Do this immediately when the script loads, not just in DOMContentLoaded
+  // Wrap in try-catch to handle any errors during exposure
+  try {
+    window.saveDraftToStorage = saveDraftToStorage;
+    window.collectRecipeData = collectRecipeData;
+    console.log('saveDraftToStorage function exposed globally');
+  } catch (error) {
+    console.error('Error exposing saveDraftToStorage:', error);
   }
   
   // Save draft immediately (synchronous, for page unload)
   function saveDraftImmediately() {
     try {
+      // Don't save draft if we just saved the recipe (prevents creating new draft on reload)
+      if (justSavedRecipe) {
+        console.log('Skipping draft save - recipe was just saved');
+        return false;
+      }
+      
       const recipeId = window.location.pathname.split('/').pop();
       if (!recipeId) return false;
       
@@ -607,6 +688,15 @@ const { recipe } = Astro.props;
       
       // Collect current recipe data
       const currentRecipeData = collectRecipeData();
+      
+      // Check if there are actual changes before saving
+      if (initialRecipeState && recipesAreEqual(currentRecipeData, initialRecipeState)) {
+        console.log('No changes detected in saveDraftImmediately, skipping save');
+        return false; // No changes, don't save
+      }
+      
+      // Update timestamp immediately for display
+      lastKnownDraftTimestamp = new Date();
       
       // Use fetch with keepalive for reliable unload handling
       // This works better than sendBeacon for JSON data
@@ -628,6 +718,77 @@ const { recipe } = Astro.props;
     }
   }
   
+  // Start the time update interval
+  function startTimeUpdateInterval() {
+    // Clear any existing interval first
+    if (timeUpdateIntervalId !== null) {
+      clearInterval(timeUpdateIntervalId);
+      timeUpdateIntervalId = null;
+    }
+    
+    // Create new interval to update time display every second
+    timeUpdateIntervalId = setInterval(() => {
+      // Only update if still in edit mode
+      const currentEditContent = document.getElementById('edit-content');
+      if (currentEditContent && !currentEditContent.classList.contains('hidden')) {
+        const timeDisplay = document.getElementById('draft-last-updated');
+        if (timeDisplay && lastKnownDraftTimestamp) {
+          // Update time display locally without API call
+          const now = new Date();
+          const diffMs = now.getTime() - lastKnownDraftTimestamp.getTime();
+          const diffSecs = Math.floor(diffMs / 1000);
+          const diffMins = Math.floor(diffMs / 60000);
+          
+          let timeText = '';
+          if (diffSecs < 1) {
+            timeText = 'gerade eben';
+          } else if (diffSecs === 1) {
+            timeText = 'vor 1 Sekunde';
+          } else if (diffSecs < 60) {
+            timeText = `vor ${diffSecs} Sekunden`;
+          } else if (diffMins === 1) {
+            timeText = 'vor 1 Minute';
+          } else if (diffMins < 60) {
+            timeText = `vor ${diffMins} Minuten`;
+          } else {
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours === 1) {
+              timeText = 'vor 1 Stunde';
+            } else if (diffHours < 24) {
+              timeText = `vor ${diffHours} Stunden`;
+            } else {
+              const diffDays = Math.floor(diffHours / 24);
+              if (diffDays === 1) {
+                timeText = 'vor 1 Tag';
+              } else {
+                timeText = `vor ${diffDays} Tagen`;
+              }
+            }
+          }
+          
+          timeDisplay.textContent = `Entwurf zuletzt aktualisiert: ${timeText}`;
+        } else if (timeDisplay && !lastKnownDraftTimestamp) {
+          // If we don't have a timestamp yet, show loading message
+          timeDisplay.textContent = 'Entwurf wird automatisch gespeichert...';
+        }
+      } else {
+        // Not in edit mode anymore, clear the interval
+        if (timeUpdateIntervalId !== null) {
+          clearInterval(timeUpdateIntervalId);
+          timeUpdateIntervalId = null;
+        }
+      }
+    }, 1000); // Update every second for precise time display
+  }
+  
+  // Stop the time update interval
+  function stopTimeUpdateInterval() {
+    if (timeUpdateIntervalId !== null) {
+      clearInterval(timeUpdateIntervalId);
+      timeUpdateIntervalId = null;
+    }
+  }
+  
   // Update draft last updated time display
   async function updateDraftTimeDisplay() {
     try {
@@ -639,24 +800,44 @@ const { recipe } = Astro.props;
       
       // Check if draft exists first
       const draftExists = await hasDraft(recipeId);
+      const statusBar = document.getElementById('draft-status-bar');
+      
       if (!draftExists) {
+        // Hide the status bar if no draft exists
+        if (statusBar) {
+          statusBar.classList.add('hidden');
+        }
         timeDisplay.textContent = 'Entwurf wird automatisch gespeichert...';
         lastKnownDraftTimestamp = null;
         return;
+      }
+      
+      // Show the status bar if draft exists
+      if (statusBar) {
+        statusBar.classList.remove('hidden');
       }
       
       const draft = await loadDraft(recipeId);
       if (draft && draft.updatedAt) {
         // updatedAt now contains the draft's last_updated timestamp from recipe_drafts table
         const lastUpdated = new Date(draft.updatedAt);
-        lastKnownDraftTimestamp = lastUpdated; // Store for local updates
+        // Only update timestamp if it's newer than what we have (or if we don't have one)
+        // This prevents overwriting a more recent timestamp we set when saving
+        if (!lastKnownDraftTimestamp || lastUpdated.getTime() > lastKnownDraftTimestamp.getTime()) {
+          lastKnownDraftTimestamp = lastUpdated; // Store for local updates
+        }
         const now = new Date();
         const diffMs = now.getTime() - lastUpdated.getTime();
+        const diffSecs = Math.floor(diffMs / 1000);
         const diffMins = Math.floor(diffMs / 60000);
         
         let timeText = '';
-        if (diffMins < 1) {
+        if (diffSecs < 1) {
           timeText = 'gerade eben';
+        } else if (diffSecs === 1) {
+          timeText = 'vor 1 Sekunde';
+        } else if (diffSecs < 60) {
+          timeText = `vor ${diffSecs} Sekunden`;
         } else if (diffMins === 1) {
           timeText = 'vor 1 Minute';
         } else if (diffMins < 60) {
@@ -1263,10 +1444,12 @@ const { recipe } = Astro.props;
   async function handleFormSubmit(e) {
     e.preventDefault();
     
-    // Get the save buttons
+    // Get the save buttons (from header and bottom)
     const saveBtn = document.getElementById('save-btn');
     const saveBtnMobile = document.getElementById('save-btn-mobile');
-    const saveButtons = [saveBtn, saveBtnMobile].filter(btn => btn instanceof HTMLButtonElement);
+    const saveBtnBottom = document.getElementById('save-btn-bottom');
+    const saveBtnBottomMobile = document.getElementById('save-btn-bottom-mobile');
+    const saveButtons = [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].filter(btn => btn instanceof HTMLButtonElement);
     
     try {
       // Show loading state on all save buttons
@@ -1300,11 +1483,35 @@ const { recipe } = Astro.props;
         // Delete draft after successful save
         const recipeId = window.location.pathname.split('/').pop();
         if (recipeId) {
-          await deleteDraft(recipeId);
+          try {
+            console.log('Deleting draft after successful save...');
+            const deleted = await deleteDraft(recipeId);
+            if (deleted) {
+              console.log('Draft deleted successfully');
+              // Hide the status bar since draft is deleted
+              const statusBar = document.getElementById('draft-status-bar');
+              if (statusBar) {
+                statusBar.classList.add('hidden');
+              }
+            } else {
+              console.warn('Failed to delete draft - API returned non-OK status');
+            }
+          } catch (error) {
+            console.error('Error deleting draft after save:', error);
+            // Continue anyway - the draft will be cleaned up later or on next page load
+          }
         }
+        
+        // Set flag to prevent draft saving right after successful save
+        justSavedRecipe = true;
         
         // Show success notification
         showNotification('Rezept erfolgreich gespeichert!', 'success');
+        
+        // Exit edit mode before reloading to prevent beforeunload from creating a new draft
+        if (window.toggleEditMode && typeof window.toggleEditMode === 'function') {
+          window.toggleEditMode();
+        }
         
         // Reload the page to show updated content after a short delay
         setTimeout(() => {

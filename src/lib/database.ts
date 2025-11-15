@@ -1021,6 +1021,11 @@ export class CookbookDatabase {
 
   // Draft operations
   saveDraft(recipeId: string, recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>): void {
+    // Get current recipe to always use its images (images are directly applied, not part of drafts)
+    const currentRecipe = this.getRecipe(recipeId);
+    const currentImages = currentRecipe?.images || [];
+    const currentImageUrl = currentRecipe?.imageUrl;
+    
     // Check if draft already exists
     const draftRefStmt = this.db.prepare('SELECT draft_recipe_id FROM recipe_drafts WHERE recipe_id = ?');
     const draftRef = draftRefStmt.get(recipeId) as { draft_recipe_id: string } | undefined;
@@ -1029,6 +1034,7 @@ export class CookbookDatabase {
     
     if (draftRef) {
       // Update existing draft recipe (use ISO string for consistency)
+      // Always use current recipe's images instead of draft's images
       draftRecipeId = draftRef.draft_recipe_id;
       const now = new Date().toISOString();
       const updateStmt = this.db.prepare(`
@@ -1048,8 +1054,8 @@ export class CookbookDatabase {
         JSON.stringify(recipe.tags || []),
         JSON.stringify(recipe.ingredientGroups),
         JSON.stringify(recipe.preparationGroups),
-        recipe.imageUrl,
-        JSON.stringify(recipe.images || []),
+        currentImageUrl, // Use current recipe's imageUrl
+        JSON.stringify(currentImages), // Always use current recipe's images
         recipe.sourceUrl,
         now,
         draftRecipeId
@@ -1060,6 +1066,7 @@ export class CookbookDatabase {
       updateRefStmt.run(now, recipeId);
     } else {
       // Create new draft recipe (use ISO strings for consistency)
+      // Always use current recipe's images instead of draft's images
       draftRecipeId = uuidv4();
       const now = new Date().toISOString();
       const insertStmt = this.db.prepare(`
@@ -1078,8 +1085,8 @@ export class CookbookDatabase {
         JSON.stringify(recipe.tags || []),
         JSON.stringify(recipe.ingredientGroups),
         JSON.stringify(recipe.preparationGroups),
-        recipe.imageUrl,
-        JSON.stringify(recipe.images || []),
+        currentImageUrl, // Use current recipe's imageUrl
+        JSON.stringify(currentImages), // Always use current recipe's images
         recipe.sourceUrl,
         now,
         now
@@ -1106,6 +1113,11 @@ export class CookbookDatabase {
       return null;
     }
 
+    // Always use current recipe's images (images are directly applied, not part of drafts)
+    const currentRecipe = this.getRecipe(recipeId);
+    const currentImages = currentRecipe?.images || [];
+    const currentImageUrl = currentRecipe?.imageUrl;
+
     const draft: Recipe & { draftLastUpdated?: Date } = {
       id: row.id,
       title: row.title,
@@ -1116,8 +1128,8 @@ export class CookbookDatabase {
       tags: JSON.parse(row.tags || '[]'),
       ingredientGroups: JSON.parse(row.ingredient_groups),
       preparationGroups: JSON.parse(row.preparation_groups),
-      imageUrl: row.image_url || undefined,
-      images: JSON.parse(row.images || '[]'),
+      imageUrl: currentImageUrl, // Always use current recipe's imageUrl
+      images: currentImages, // Always use current recipe's images
       sourceUrl: row.source_url || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.draft_last_updated || row.updated_at), // Use draft's last_updated timestamp
@@ -1143,13 +1155,53 @@ export class CookbookDatabase {
     }
   }
 
+  deleteDraftReference(recipeId: string): void {
+    // Delete only the draft reference (not the draft recipe itself)
+    const deleteRefStmt = this.db.prepare('DELETE FROM recipe_drafts WHERE recipe_id = ?');
+    deleteRefStmt.run(recipeId);
+  }
+
   hasDraft(recipeId: string): boolean {
     const stmt = this.db.prepare('SELECT 1 FROM recipe_drafts WHERE recipe_id = ?');
     const row = stmt.get(recipeId);
     return !!row;
   }
 
+  cleanupOrphanedDrafts(): void {
+    // Find and delete drafts that reference recipes that no longer exist
+    const checkStmt = this.db.prepare(`
+      SELECT rd.recipe_id, rd.draft_recipe_id
+      FROM recipe_drafts rd
+      WHERE NOT EXISTS (
+        SELECT 1 FROM recipes r WHERE r.id = rd.recipe_id
+      )
+    `);
+    const orphanedDrafts = checkStmt.all() as Array<{ recipe_id: string; draft_recipe_id: string }>;
+    
+    // Delete each orphaned draft
+    for (const orphan of orphanedDrafts) {
+      try {
+        // Delete the draft recipe first (if it exists)
+        if (orphan.draft_recipe_id) {
+          try {
+            this.deleteRecipe(orphan.draft_recipe_id);
+          } catch (error) {
+            // Draft recipe might already be deleted, which is fine
+          }
+        }
+        // Delete the draft reference
+        this.deleteDraftReference(orphan.recipe_id);
+      } catch (error) {
+        // Silently continue if deletion fails
+        console.log('Error cleaning up orphaned draft:', orphan.recipe_id, error);
+      }
+    }
+  }
+
   getAllDrafts(): Array<{ recipeId: string; title: string; lastUpdated: Date }> {
+    // Clean up orphaned drafts before returning the list
+    this.cleanupOrphanedDrafts();
+    
     const stmt = this.db.prepare(`
       SELECT rd.recipe_id, r.title, rd.last_updated 
       FROM recipe_drafts rd

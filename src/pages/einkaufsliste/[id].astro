@@ -386,6 +386,12 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       
       // Find the largest unit that fits (amount >= 1 of that unit and < 1000)
       for (const displayUnit of sortedDisplayUnits) {
+        // Skip conversion if factor is 1 - no benefit in converting to equivalent unit
+        // This prevents base units like "Stück" from being converted to other units with factor 1
+        if (displayUnit.factor === 1) {
+          continue;
+        }
+        
         const convertedAmount = amount / displayUnit.factor;
         // Use this unit if the converted amount is >= 1 and is a "nice" number (< 1000)
         if (convertedAmount >= 1 && convertedAmount < 1000) {

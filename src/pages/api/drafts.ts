@@ -82,6 +82,7 @@ export const DELETE: APIRoute = async ({ url, request }) => {
     const searchParams = new URL(url).searchParams;
     const recipeId = searchParams.get('recipeId');
     const action = searchParams.get('action');
+    const deleteRecipe = searchParams.get('deleteRecipe') === 'true'; // Flag to delete entire recipe
 
     if (!recipeId) {
       return new Response(JSON.stringify({ error: 'Recipe ID required' }), {
@@ -90,7 +91,44 @@ export const DELETE: APIRoute = async ({ url, request }) => {
       });
     }
 
-    db.deleteDraft(recipeId);
+    // If deleteRecipe flag is set, delete the entire recipe (for new recipes that haven't been saved)
+    if (deleteRecipe) {
+      // First, get the draft recipe ID before we delete anything
+      const draft = db.getDraft(recipeId);
+      const draftRecipeId = draft?.id;
+      
+      // Delete the draft reference explicitly first (this prevents the draft from showing up)
+      try {
+        db.deleteDraftReference(recipeId);
+      } catch (error) {
+        // Draft reference might not exist, which is fine
+        console.log('Draft reference deletion note (might not exist):', error);
+      }
+      
+      // Delete the draft recipe (if it exists)
+      if (draftRecipeId) {
+        try {
+          db.deleteRecipe(draftRecipeId);
+        } catch (error) {
+          // Draft recipe might already be deleted, which is fine
+          console.log('Draft recipe deletion note (might already be deleted):', error);
+        }
+      }
+      
+      // Finally, delete the original recipe (the one with recipeId)
+      // This is the recipe that was created but never saved
+      try {
+        const deleted = db.deleteRecipe(recipeId);
+        if (!deleted) {
+          console.log('Recipe not found for deletion:', recipeId);
+        }
+      } catch (error) {
+        console.error('Error deleting recipe:', error);
+      }
+    } else {
+      // Normal draft deletion
+      db.deleteDraft(recipeId);
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
