@@ -72,8 +72,67 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
   // Note: Filter reapplication is handled by SearchBar.astro component
   // This script only handles page-specific functionality
 
+  // Cleanup function to remove any leftover overlays or blocking elements
+  function cleanupBlockingElements() {
+    // Remove any leftover timer overlays
+    document.querySelectorAll('.add-timer-overlay, .expired-timer-overlay, .timer-notification-overlay').forEach(el => {
+      if (el instanceof HTMLElement && !el.closest('.modal:not(.hidden)')) {
+        el.remove();
+      }
+    });
+    
+    // Check for any hidden modals that might be blocking
+    document.querySelectorAll('.modal.hidden, [class*="overlay"].hidden').forEach(el => {
+      if (el instanceof HTMLElement) {
+        const style = window.getComputedStyle(el);
+        if (style.pointerEvents !== 'none' && style.zIndex && parseInt(style.zIndex) > 10) {
+          el.style.pointerEvents = 'none';
+        }
+      }
+    });
+    
+    // Reset body overflow in case it's stuck
+    if (document.body.style.overflow === 'hidden') {
+      // Check if any modal is actually visible
+      const visibleModals = document.querySelectorAll('.modal:not(.hidden), [id*="modal"]:not(.hidden)');
+      if (visibleModals.length === 0) {
+        document.body.style.overflow = '';
+      }
+    }
+    
+    // Force pointer-events on body and main container
+    document.body.style.pointerEvents = '';
+    const container = document.querySelector('.container');
+    if (container instanceof HTMLElement) {
+      container.style.pointerEvents = '';
+    }
+  }
+  
+  // Diagnostic function to check what's blocking clicks
+  function diagnoseClickBlocking() {
+    const testElement = document.querySelector('.recipe-card');
+    if (!testElement) return;
+    
+    const rect = testElement.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    const elementAtPoint = document.elementFromPoint(centerX, centerY);
+    if (elementAtPoint) {
+      const style = window.getComputedStyle(elementAtPoint);
+      if (style.pointerEvents === 'none') {
+        console.warn('Click blocking detected: element has pointer-events: none', elementAtPoint);
+      }
+      if (parseInt(style.zIndex) > 100) {
+        console.warn('High z-index element detected:', elementAtPoint, 'z-index:', style.zIndex);
+      }
+    }
+  }
+
   // Initialize create recipe button when DOM is loaded
   document.addEventListener('DOMContentLoaded', async () => {
+    // Cleanup any blocking elements first
+    cleanupBlockingElements();
     // Note: Filter reapplication is handled automatically by SearchBar.astro component
     
     // Check for drafts and show notification
@@ -141,6 +200,26 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
         }
       });
     }
+  });
+
+  // Cleanup on page show (Android back button)
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      // Page restored from cache - cleanup and reinitialize
+      cleanupBlockingElements();
+      diagnoseClickBlocking();
+      
+      // Force a small delay to let page settle
+      setTimeout(() => {
+        cleanupBlockingElements();
+        diagnoseClickBlocking();
+      }, 100);
+    }
+  });
+
+  // Also cleanup on popstate (Android back button)
+  window.addEventListener('popstate', () => {
+    cleanupBlockingElements();
   });
   
   // Check for drafts and show notification

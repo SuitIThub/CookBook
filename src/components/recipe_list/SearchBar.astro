@@ -591,6 +591,35 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
         }
       }, 100);
     });
+    
+    // Listen for PWA-specific pageshow event from Layout.astro
+    window.addEventListener('pwa-pageshow', () => {
+      // Reset all state and reinitialize
+      isNavigating = false;
+      isReapplyingFilter = false;
+      isFiltering = false;
+      
+      if (reapplyTimeout) {
+        clearTimeout(reapplyTimeout);
+        reapplyTimeout = null;
+      }
+      if (pageEventTimeout) {
+        clearTimeout(pageEventTimeout);
+        pageEventTimeout = null;
+      }
+      
+      // Reset element references and reinitialize
+      searchInput = null;
+      categoryFilter = null;
+      recipeCards = null;
+      recipeCountElement = null;
+      
+      setTimeout(() => {
+        if (window.location.pathname === '/rezepte') {
+          initializeSearchBar();
+        }
+      }, 100);
+    });
   }
   
   // Function to re-apply filter when returning to page

@@ -562,6 +562,29 @@ const { title } = Astro.props;
         });
       }
 
+      // PWA-specific: Handle back button navigation in standalone mode
+      // When page is restored from cache, reinitialize everything to avoid stale state
+      if (window.matchMedia('(display-mode: standalone)').matches || 
+          (window.navigator as any).standalone === true) {
+        window.addEventListener('pageshow', (event) => {
+          if (event.persisted) {
+            // Page was restored from back/forward cache in PWA
+            // Reinitialize all functionality to ensure fresh state
+            console.log('PWA: Page restored from cache, reinitializing...');
+            
+            // Small delay to let page settle
+            setTimeout(() => {
+              initializeTheme();
+              initializeMobileMenu();
+              initializeModal();
+              
+              // Trigger a custom event that components can listen to
+              window.dispatchEvent(new CustomEvent('pwa-pageshow', { detail: { persisted: true } }));
+            }, 50);
+          }
+        });
+      }
+
       // Initialize all functionality
       document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM Content Loaded - Initializing...'); // Debug log
