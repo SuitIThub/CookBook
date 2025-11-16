@@ -296,6 +296,38 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       const TAP_THRESHOLD = 10;
       const CLICK_DELAY = 300; // Delay after touch to prevent click event
       
+      // Function to clean up stale touch data entries (cards that no longer exist in DOM)
+      function cleanupStaleTouchData() {
+        const existingCards = new Set(document.querySelectorAll('.recipe-card[data-recipe-id]'));
+        const keysToDelete: HTMLElement[] = [];
+        
+        touchData.forEach((_, card) => {
+          if (!existingCards.has(card) || !document.contains(card)) {
+            keysToDelete.push(card);
+          }
+        });
+        
+        keysToDelete.forEach(card => touchData.delete(card));
+      }
+      
+      // Store interval ID for cleanup
+      let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+      
+      // Clean up touch data on navigation
+      document.addEventListener('astro:before-swap', () => {
+        touchData.clear();
+        if (cleanupInterval) {
+          clearInterval(cleanupInterval);
+          cleanupInterval = null;
+        }
+      });
+      
+      // Periodically clean up stale entries (every 5 seconds)
+      // Only start if not already running
+      if (!cleanupInterval) {
+        cleanupInterval = setInterval(cleanupStaleTouchData, 5000);
+      }
+      
       // Handle card clicks via delegation
       (window as any).recipeCardClickHandler = (e: Event) => {
         const target = e.target as HTMLElement;
@@ -305,11 +337,19 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
         if (!card) return; // Not a recipe card, let other handlers process it
         
+        // Clean up stale entries before checking
+        if (!document.contains(card)) {
+          touchData.delete(card);
+          return;
+        }
+        
         // Check if this click was already handled by touch event
         const data = touchData.get(card);
         if (data && data.handled) {
           e.preventDefault();
           e.stopPropagation();
+          // Clean up after handling
+          setTimeout(() => touchData.delete(card), CLICK_DELAY);
           return;
         }
         
@@ -353,6 +393,12 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
         if (!card) return; // Not a recipe card, let other handlers process it
         
+        // Clean up if card no longer exists
+        if (!document.contains(card)) {
+          touchData.delete(card);
+          return;
+        }
+        
         // Don't handle touches on interactive elements
         if (target.closest('a') || 
             target.closest('button') || 
@@ -362,6 +408,8 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         }
         
         const touch = e.touches[0];
+        if (!touch) return;
+        
         touchData.set(card, {
           startX: touch.clientX,
           startY: touch.clientY,
@@ -374,6 +422,12 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         const target = e.target as HTMLElement;
         const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
         if (!card) return; // Not a recipe card, ignore
+        
+        // Clean up if card no longer exists
+        if (!document.contains(card)) {
+          touchData.delete(card);
+          return;
+        }
         
         const data = touchData.get(card);
         if (!data || !e.touches[0]) return;
@@ -391,6 +445,12 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         const target = e.target as HTMLElement;
         const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
         if (!card) return; // Not a recipe card, let other handlers process it
+        
+        // Clean up if card no longer exists
+        if (!document.contains(card)) {
+          touchData.delete(card);
+          return;
+        }
         
         // Don't handle touches on interactive elements
         if (target.closest('a') || 
