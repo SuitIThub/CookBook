@@ -106,6 +106,7 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
   let isFiltering = false;
   let lastFilterTime = 0;
   const MIN_FILTER_INTERVAL = 50; // Minimum milliseconds between filter runs
+  let isUpdatingInputs = false; // Flag to prevent event cascades when programmatically updating inputs
   
   // Function to filter recipes
   function filterRecipes() {
@@ -134,6 +135,25 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
           return; // No cards found, skip filtering
         }
       }
+      
+      // Safety check: if there are too many cards, use requestAnimationFrame to avoid blocking
+      if (recipeCards.length > 100) {
+        // Use requestAnimationFrame to break up the work
+        requestAnimationFrame(() => {
+          performFiltering();
+        });
+        return;
+      }
+      
+      performFiltering();
+    } finally {
+      // Always reset the filtering flag
+      isFiltering = false;
+    }
+  }
+  
+  // Separate function for the actual filtering logic
+  function performFiltering() {
     
     // Parse search terms, handling quoted phrases and special tag search
     function parseSearchTerms(input: string): { regular: string[]; tagOnly: string[] } {
@@ -330,10 +350,6 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     if (recipeCountElement) {
       recipeCountElement.textContent = visibleCount.toString();
     }
-    } finally {
-      // Always reset the filtering flag
-      isFiltering = false;
-    }
   }
 
   // Update URL when search or category changes
@@ -376,19 +392,32 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     }
   }
 
-  // Add event listeners with URL updates
-  searchInput.addEventListener('input', () => {
-    debouncedFilter();
-  });
+  // Add event listeners with URL updates (only if elements exist)
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      // Skip if we're programmatically updating the input
+      if (isUpdatingInputs) return;
+      debouncedFilter();
+    });
+  }
 
-  categoryFilter.addEventListener('change', () => {
-    // Category changes don't need debouncing since they're discrete events
-    filterRecipes();
-    updateURL();
-  });
+  if (categoryFilter) {
+    categoryFilter.addEventListener('change', () => {
+      // Skip if we're programmatically updating the input
+      if (isUpdatingInputs) return;
+      // Category changes don't need debouncing since they're discrete events
+      filterRecipes();
+      updateURL();
+    });
+  }
 
   // Function to apply initial filter based on URL parameters
   function applyInitialFilter() {
+    // Prevent running if already filtering
+    if (isFiltering || isReapplyingFilter) {
+      return;
+    }
+    
     // Refresh elements to ensure they're available
     refreshElements();
     
@@ -401,12 +430,17 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     const urlSearch = urlParams.get('search') || '';
     const urlCategory = urlParams.get('category') || '';
     
-    // Update input values from URL if they differ
-    if (urlSearch && searchInput.value !== urlSearch) {
-      searchInput.value = urlSearch;
-    }
-    if (urlCategory && categoryFilter.value !== urlCategory) {
-      categoryFilter.value = urlCategory;
+    // Update input values from URL if they differ (without triggering events)
+    isUpdatingInputs = true;
+    try {
+      if (urlSearch && searchInput.value !== urlSearch) {
+        searchInput.value = urlSearch;
+      }
+      if (urlCategory && categoryFilter.value !== urlCategory) {
+        categoryFilter.value = urlCategory;
+      }
+    } finally {
+      isUpdatingInputs = false;
     }
     
     // Apply filter if we have search query or category (from either source)
@@ -465,11 +499,17 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     }
     
     // Update input values to match URL (in case they're out of sync)
-    if (searchInput.value !== searchParam) {
-      searchInput.value = searchParam;
-    }
-    if (categoryFilter.value !== categoryParam) {
-      categoryFilter.value = categoryParam;
+    // Use flag to prevent event cascades
+    isUpdatingInputs = true;
+    try {
+      if (searchInput.value !== searchParam) {
+        searchInput.value = searchParam;
+      }
+      if (categoryFilter.value !== categoryParam) {
+        categoryFilter.value = categoryParam;
+      }
+    } finally {
+      isUpdatingInputs = false;
     }
     
     // Re-apply filter
@@ -488,18 +528,32 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
 
   // Debounce function for page events to prevent multiple simultaneous calls
   let pageEventTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isReapplyingPage = false;
   function debouncedReapply() {
+    // Prevent multiple simultaneous calls
+    if (isReapplyingPage) {
+      return;
+    }
+    
     if (pageEventTimeout) {
       clearTimeout(pageEventTimeout);
     }
     pageEventTimeout = setTimeout(() => {
       // Only reapply if we're on the recipe list page
       if (window.location.pathname === '/rezepte') {
-        refreshElements();
-        applyInitialFilter();
-        reapplyFilterOnReturn();
+        isReapplyingPage = true;
+        try {
+          refreshElements();
+          // Only call reapplyFilterOnReturn, which handles everything
+          // Don't call applyInitialFilter separately to avoid double filtering
+          reapplyFilterOnReturn();
+        } finally {
+          isReapplyingPage = false;
+          pageEventTimeout = null;
+        }
+      } else {
+        pageEventTimeout = null;
       }
-      pageEventTimeout = null;
     }, 100); // Small delay to batch multiple rapid events
   }
   
