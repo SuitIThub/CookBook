@@ -208,58 +208,110 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
 </style>
 
 <script>
-  // Initialize content decoding
-  document.querySelectorAll('[data-content]').forEach(element => {
-    const content = element.getAttribute('data-content');
-    if (content) {
-      const textarea = document.createElement('textarea');
-      textarea.innerHTML = content;
-      element.textContent = textarea.value;
-    }
-  });
-
-  document.addEventListener('DOMContentLoaded', () => {
-    const menuBtns = document.querySelectorAll('.recipe-menu-btn');
-    const menu = document.querySelector('.recipe-menu') as HTMLElement;
+  // Guard to prevent multiple initializations
+  if ((window as any).recipeCardInitialized) {
+    // Already initialized, just decode content for new cards
+    document.querySelectorAll('[data-content]:not([data-decoded])').forEach(element => {
+      const content = element.getAttribute('data-content');
+      if (content) {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = content;
+        element.textContent = textarea.value;
+        element.setAttribute('data-decoded', 'true');
+      }
+    });
+  } else {
+    (window as any).recipeCardInitialized = true;
     
-    if (!menu) return;
+    // Initialize content decoding
+    document.querySelectorAll('[data-content]').forEach(element => {
+      const content = element.getAttribute('data-content');
+      if (content) {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = content;
+        element.textContent = textarea.value;
+        element.setAttribute('data-decoded', 'true');
+      }
+    });
 
-    // Handle selection mode clicks on the entire card
-    document.querySelectorAll('.recipe-card').forEach(card => {
-      const recipeLink = card.querySelector('[data-recipe-link]') as HTMLAnchorElement;
-      const recipeId = card.getAttribute('data-recipe-id');
+    // Use event delegation for all recipe cards
+    let menu: HTMLElement | null = null;
+    let menuClickHandler: ((e: Event) => void) | null = null;
+    let documentClickHandler: ((e: Event) => void) | null = null;
+    
+    function initializeRecipeCards() {
+      // Get or create menu element
+      menu = document.querySelector('.recipe-menu') as HTMLElement;
+      if (!menu) return;
       
-      const handleCardSelection = (e: Event) => {
-        // Only handle clicks when in selection mode
-        if (!card.classList.contains('selection-mode')) return;
-        
-        const target = e.target as HTMLElement;
-        
-        // Prevent click if clicking on menu button, menu, or checkbox/selection indicator
-        if (target.closest('.recipe-menu-btn') || 
-            target.closest('.recipe-menu') ||
-            target.closest('.selection-indicator') ||
-            target.classList.contains('recipe-select-checkbox') ||
-            target === card.querySelector('.recipe-select-checkbox')) {
-          return;
-        }
-
-        // Prevent the link from being followed in selection mode
-        e.preventDefault();
+      // Remove old handlers if they exist
+      if (menuClickHandler) {
+        menu.removeEventListener('click', menuClickHandler);
+      }
+      if (documentClickHandler) {
+        document.removeEventListener('click', documentClickHandler);
+      }
+      
+      // Use event delegation for menu clicks
+      menuClickHandler = (e: Event) => {
         e.stopPropagation();
-        
-        // Find the checkbox and toggle it
-        const checkbox = card.querySelector('.recipe-select-checkbox') as HTMLInputElement;
-        if (checkbox) {
-          checkbox.checked = !checkbox.checked;
-          // Trigger the change event manually
-          const event = new Event('change', { bubbles: true });
-          checkbox.dispatchEvent(event);
+      };
+      menu.addEventListener('click', menuClickHandler);
+      
+      // Close menu when clicking outside (delegated)
+      documentClickHandler = () => {
+        if (menu) {
+          menu.classList.add('hidden');
         }
       };
+      document.addEventListener('click', documentClickHandler);
+    }
+    
+    // Initialize on DOM ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeRecipeCards);
+    } else {
+      initializeRecipeCards();
+    }
+    
+    // Re-initialize on Astro navigation
+    document.addEventListener('astro:after-swap', () => {
+      // Decode new content
+      document.querySelectorAll('[data-content]:not([data-decoded])').forEach(element => {
+        const content = element.getAttribute('data-content');
+        if (content) {
+          const textarea = document.createElement('textarea');
+          textarea.innerHTML = content;
+          element.textContent = textarea.value;
+          element.setAttribute('data-decoded', 'true');
+        }
+      });
+      initializeRecipeCards();
+    });
+  }
 
-      const handleCardClick = (e: Event) => {
+  // Use event delegation for card clicks (only add once)
+  if (!(window as any).recipeCardClickHandler) {
+      const touchData = new Map<HTMLElement, { startX: number; startY: number; moved: boolean; handled: boolean }>();
+      const TAP_THRESHOLD = 10;
+      const CLICK_DELAY = 300; // Delay after touch to prevent click event
+      
+      // Handle card clicks via delegation
+      (window as any).recipeCardClickHandler = (e: Event) => {
         const target = e.target as HTMLElement;
+        const card = target.closest('.recipe-card') as HTMLElement;
+        if (!card) return;
+        
+        // Check if this click was already handled by touch event
+        const data = touchData.get(card);
+        if (data && data.handled) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        
+        const recipeLink = card.querySelector('[data-recipe-link]') as HTMLAnchorElement;
+        const recipeId = card.getAttribute('data-recipe-id');
         
         // Don't handle clicks on interactive elements
         if (target.closest('.recipe-menu-btn') || 
@@ -271,99 +323,150 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         
         // If in selection mode, handle selection
         if (card.classList.contains('selection-mode')) {
-          handleCardSelection(e);
+          e.preventDefault();
+          e.stopPropagation();
+          const checkbox = card.querySelector('.recipe-select-checkbox') as HTMLInputElement;
+          if (checkbox) {
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+          }
           return;
         }
         
         // Otherwise, navigate to recipe when clicking anywhere on the card
         if (recipeLink && recipeId) {
-          // If clicking directly on the link, let it handle navigation naturally
-          if (target.closest('[data-recipe-link]')) {
-            return;
-          }
-          
-          // Navigate to the recipe
           window.location.href = recipeLink.href;
         }
       };
-
-      // Add click handler to the entire card
-      card.addEventListener('click', handleCardClick);
       
-      // For mobile: handle touch events and distinguish between taps and scrolls
-      let touchStartX = 0;
-      let touchStartY = 0;
-      let touchMoved = false;
-      const TAP_THRESHOLD = 10; // Maximum movement in pixels to consider it a tap
-      
-      card.addEventListener('touchstart', (e) => {
+      // Handle touch events via delegation
+      (window as any).recipeCardTouchStartHandler = (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        const card = target.closest('.recipe-card') as HTMLElement;
+        if (!card) return;
+        
         const touch = e.touches[0];
-        touchStartX = touch.clientX;
-        touchStartY = touch.clientY;
-        touchMoved = false;
-      });
+        touchData.set(card, {
+          startX: touch.clientX,
+          startY: touch.clientY,
+          moved: false,
+          handled: false
+        });
+      };
       
-      card.addEventListener('touchmove', (e) => {
-        if (!touchMoved && e.touches[0]) {
-          const touch = e.touches[0];
-          const deltaX = Math.abs(touch.clientX - touchStartX);
-          const deltaY = Math.abs(touch.clientY - touchStartY);
-          
-          // If the touch moved more than the threshold, it's a scroll
-          if (deltaX > TAP_THRESHOLD || deltaY > TAP_THRESHOLD) {
-            touchMoved = true;
-          }
+      (window as any).recipeCardTouchMoveHandler = (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        const card = target.closest('.recipe-card') as HTMLElement;
+        if (!card) return;
+        
+        const data = touchData.get(card);
+        if (!data || !e.touches[0]) return;
+        
+        const touch = e.touches[0];
+        const deltaX = Math.abs(touch.clientX - data.startX);
+        const deltaY = Math.abs(touch.clientY - data.startY);
+        
+        if (deltaX > TAP_THRESHOLD || deltaY > TAP_THRESHOLD) {
+          data.moved = true;
         }
-      });
+      };
       
-      card.addEventListener('touchend', (e) => {
+      (window as any).recipeCardTouchEndHandler = (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        const card = target.closest('.recipe-card') as HTMLElement;
+        if (!card) return;
+        
+        const data = touchData.get(card);
+        if (!data) return;
+        
         // Only handle if it was a tap (not a scroll)
-        if (touchMoved) {
+        if (data.moved) {
+          touchData.delete(card);
           return;
         }
-        
-        const target = e.target as HTMLElement;
         
         // Don't handle touches on interactive elements
         if (target.closest('.recipe-menu-btn') || 
             target.closest('.recipe-menu') ||
-            target.closest('.selection-indicator')) {
+            target.closest('.selection-indicator') ||
+            target.closest('[data-recipe-link]')) {
+          touchData.delete(card);
           return;
         }
         
+        const recipeLink = card.querySelector('[data-recipe-link]') as HTMLAnchorElement;
+        const recipeId = card.getAttribute('data-recipe-id');
+        
         // If in selection mode, handle selection
         if (card.classList.contains('selection-mode')) {
-          handleCardSelection(e);
+          e.preventDefault();
+          e.stopPropagation();
+          data.handled = true;
+          const checkbox = card.querySelector('.recipe-select-checkbox') as HTMLInputElement;
+          if (checkbox) {
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          setTimeout(() => {
+            touchData.delete(card);
+          }, CLICK_DELAY);
           return;
         }
         
         // If touching the link, let it handle navigation naturally
         if (target.closest('[data-recipe-link]')) {
+          touchData.delete(card);
           return;
         }
         
         // Otherwise, navigate to recipe when tapping anywhere on the card
         if (recipeLink && recipeId) {
           e.preventDefault();
+          e.stopPropagation();
+          data.handled = true;
+          
+          // Prevent click event from firing after touch
+          setTimeout(() => {
+            touchData.delete(card);
+          }, CLICK_DELAY);
+          
           window.location.href = recipeLink.href;
+        } else {
+          touchData.delete(card);
         }
-      });
-
+      };
+      
+      // Add delegated event listeners (only once)
+      document.addEventListener('click', (window as any).recipeCardClickHandler, true);
+      document.addEventListener('touchstart', (window as any).recipeCardTouchStartHandler, { passive: true });
+      document.addEventListener('touchmove', (window as any).recipeCardTouchMoveHandler, { passive: true });
+      document.addEventListener('touchend', (window as any).recipeCardTouchEndHandler, { passive: false });
+      
       // Prevent link clicks in selection mode
-      if (recipeLink) {
-        recipeLink.addEventListener('click', (e) => {
-          if (card.classList.contains('selection-mode')) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        });
-      }
-    });
+      document.addEventListener('click', (e: Event) => {
+        const target = e.target as HTMLElement;
+        const link = target.closest('[data-recipe-link]') as HTMLAnchorElement;
+        if (!link) return;
+        
+        const card = link.closest('.recipe-card') as HTMLElement;
+        if (card && card.classList.contains('selection-mode')) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+    }
 
-    // Handle menu positioning
-    menuBtns.forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    // Handle menu positioning via delegation (only add once)
+    if (!(window as any).recipeMenuHandler) {
+      (window as any).recipeMenuHandler = (e: Event) => {
+        const target = e.target as HTMLElement;
+        const btn = target.closest('.recipe-menu-btn') as HTMLElement;
+        if (!btn) return;
+        
         e.stopPropagation();
+        
+        const menu = document.querySelector('.recipe-menu') as HTMLElement;
+        if (!menu) return;
         
         // Close all other menus first
         document.querySelectorAll('.recipe-menu').forEach(m => {
@@ -371,12 +474,12 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         });
 
         // Position and show menu
-        const rect = (btn as HTMLElement).getBoundingClientRect();
+        const rect = btn.getBoundingClientRect();
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
         menu.style.top = `${rect.bottom + scrollTop + 4}px`;
-        menu.style.left = `${rect.left + scrollLeft - menu.offsetWidth + (btn as HTMLElement).offsetWidth}px`;
+        menu.style.left = `${rect.left + scrollLeft - menu.offsetWidth + btn.offsetWidth}px`;
         
         // Copy recipe ID to menu
         const recipeId = (btn.closest('.recipe-card') as HTMLElement)?.dataset.recipeId;
@@ -405,84 +508,84 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
             menu.classList.remove('align-submenu-left');
           }
         }
-      });
-    });
+      };
+      
+      document.addEventListener('click', (window as any).recipeMenuHandler, true);
+    }
 
-    // Handle export options
-    menu.querySelectorAll('.export-json, .export-rcb').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
-        const format = (e.currentTarget as HTMLElement).classList.contains('export-json') ? 'json' : 'rcb';
-        window.location.href = `/api/recipes/export?id=${recipeId}&format=${format}`;
-        menu.classList.add('hidden');
-      });
-    });
-
-    // Handle delete option
-    menu.querySelectorAll('.delete-recipe').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
-        const card = document.querySelector(`.recipe-card[data-recipe-id="${recipeId}"]`);
+    // Handle menu actions via delegation (only add once)
+    if (!(window as any).recipeMenuActionHandler) {
+      (window as any).recipeMenuActionHandler = async (e: Event) => {
+        const target = e.target as HTMLElement;
+        const menu = document.querySelector('.recipe-menu') as HTMLElement;
+        if (!menu || !menu.contains(target)) return;
         
-        if (!recipeId || !card) return;
-
-        const confirmed = await window.showDeleteConfirm('Möchtest du dieses Rezept wirklich löschen?');
-        if (!confirmed) return;
-
-        try {
-          const response = await fetch(`/api/recipes?id=${recipeId}`, {
-            method: 'DELETE',
-          });
-
-          if (!response.ok) throw new Error('Fehler beim Löschen des Rezepts');
-
-          // Remove card with animation
-          card.classList.add('fade-out');
-          setTimeout(() => card.remove(), 300);
-          
-          // Update recipe count
-          const countElement = document.getElementById('recipe-count');
-          if (countElement) {
-            const currentCount = parseInt(countElement.textContent || '0');
-            countElement.textContent = (currentCount - 1).toString();
-          }
-
-          if (window.showSuccess) {
-            await window.showSuccess('Rezept wurde gelöscht');
-          }
-        } catch (error) {
-          console.error('Error deleting recipe:', error);
-          if (window.showError) {
-            await window.showError('Fehler beim Löschen des Rezepts');
-          }
-        }
-
-        menu.classList.add('hidden');
-      });
-    });
-
-    // Handle add to shopping list
-    menu.querySelectorAll('.add-to-shopping-list').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const recipeId = (e.currentTarget as HTMLElement).dataset.recipeId;
+        const btn = target.closest('.menu-item') as HTMLElement;
+        if (!btn) return;
+        
+        const recipeId = btn.dataset.recipeId;
         if (!recipeId) return;
-
-        // Use the ShoppingListModal (same as bulk operations)
-        if (window.openShoppingListModal) {
-          await window.openShoppingListModal(new Set([recipeId]));
+        
+        // Handle export options
+        if (btn.classList.contains('export-json') || btn.classList.contains('export-rcb')) {
+          const format = btn.classList.contains('export-json') ? 'json' : 'rcb';
+          window.location.href = `/api/recipes/export?id=${recipeId}&format=${format}`;
+          menu.classList.add('hidden');
+          return;
         }
-        menu.classList.add('hidden');
-      });
-    });
-    
-    // Close menu when clicking outside
-    document.addEventListener('click', () => {
-      menu.classList.add('hidden');
-    });
+        
+        // Handle delete option
+        if (btn.classList.contains('delete-recipe')) {
+          const card = document.querySelector(`.recipe-card[data-recipe-id="${recipeId}"]`);
+          if (!card) return;
 
-    // Prevent menu from closing when clicking inside it
-    menu.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+          const confirmed = await window.showDeleteConfirm('Möchtest du dieses Rezept wirklich löschen?');
+          if (!confirmed) return;
+
+          try {
+            const response = await fetch(`/api/recipes?id=${recipeId}`, {
+              method: 'DELETE',
+            });
+
+            if (!response.ok) throw new Error('Fehler beim Löschen des Rezepts');
+
+            // Remove card with animation
+            card.classList.add('fade-out');
+            setTimeout(() => card.remove(), 300);
+            
+            // Update recipe count
+            const countElement = document.getElementById('recipe-count');
+            if (countElement) {
+              const currentCount = parseInt(countElement.textContent || '0');
+              countElement.textContent = (currentCount - 1).toString();
+            }
+
+            if (window.showSuccess) {
+              await window.showSuccess('Rezept wurde gelöscht');
+            }
+          } catch (error) {
+            console.error('Error deleting recipe:', error);
+            if (window.showError) {
+              await window.showError('Fehler beim Löschen des Rezepts');
+            }
+          }
+
+          menu.classList.add('hidden');
+          return;
+        }
+        
+        // Handle add to shopping list
+        if (btn.classList.contains('add-to-shopping-list')) {
+          // Use the ShoppingListModal (same as bulk operations)
+          if (window.openShoppingListModal) {
+            await window.openShoppingListModal(new Set([recipeId]));
+          }
+          menu.classList.add('hidden');
+          return;
+        }
+      };
+      
+      document.addEventListener('click', (window as any).recipeMenuActionHandler, true);
+    }
   });
 </script> 
