@@ -523,11 +523,73 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     window.addEventListener('beforeunload', disableFiltering);
     
     document.addEventListener('astro:after-swap', enableFiltering);
+    
+    // Handle Android back button and bfcache restoration
     window.addEventListener('pageshow', (event) => {
-      // Only enable if page was restored from cache (not initial load)
       if (event.persisted) {
-        enableFiltering();
+        // Page was restored from back/forward cache
+        // Force complete reinitialization
+        isNavigating = false; // Reset navigation flag
+        isReapplyingFilter = false; // Reset filter flag
+        isFiltering = false; // Reset filtering flag
+        
+        // Clear any pending timeouts
+        if (reapplyTimeout) {
+          clearTimeout(reapplyTimeout);
+          reapplyTimeout = null;
+        }
+        if (pageEventTimeout) {
+          clearTimeout(pageEventTimeout);
+          pageEventTimeout = null;
+        }
+        
+        // Force refresh of all element references
+        refreshElements();
+        
+        // Re-enable after a delay to let page fully restore
+        setTimeout(() => {
+          isNavigating = false;
+          // Reinitialize search bar (only if on recipe list page)
+          if (window.location.pathname === '/rezepte') {
+            // Force complete reinitialization by resetting element references first
+            searchInput = null;
+            categoryFilter = null;
+            recipeCards = null;
+            recipeCountElement = null;
+            initializeSearchBar();
+          }
+        }, 300); // Longer delay for Android
       }
+    });
+    
+    // Also handle popstate (Android back button often triggers this)
+    window.addEventListener('popstate', () => {
+      // Reset all flags when navigating back
+      isNavigating = false;
+      isReapplyingFilter = false;
+      isFiltering = false;
+      
+      if (reapplyTimeout) {
+        clearTimeout(reapplyTimeout);
+        reapplyTimeout = null;
+      }
+      if (pageEventTimeout) {
+        clearTimeout(pageEventTimeout);
+        pageEventTimeout = null;
+      }
+      
+      // Force refresh and reinitialize
+      setTimeout(() => {
+        // Reset element references first
+        searchInput = null;
+        categoryFilter = null;
+        recipeCards = null;
+        recipeCountElement = null;
+        refreshElements();
+        if (window.location.pathname === '/rezepte') {
+          initializeSearchBar();
+        }
+      }, 100);
     });
   }
   
@@ -602,14 +664,28 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     isReapplyingFilter = false;
   }
 
+  // Guard to prevent multiple initializations
+  let isInitializing = false;
+  
   // Initialize everything when DOM is ready
   function initializeSearchBar() {
+    // Prevent multiple simultaneous initializations
+    if (isInitializing) {
+      return;
+    }
+    
+    isInitializing = true;
     try {
       addStyles();
       setupEventListeners();
       applyInitialFilter();
     } catch (error) {
       console.error('Error initializing search bar:', error);
+    } finally {
+      // Reset flag after a delay to allow reinitialization if needed
+      setTimeout(() => {
+        isInitializing = false;
+      }, 500);
     }
   }
   
@@ -670,9 +746,7 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     
     // Re-apply filter when page is shown (including when restored from back/forward cache)
     // This handles the case when user navigates back to the recipe list
-    window.addEventListener('pageshow', (event) => {
-      debouncedReapply();
-    });
+    // Note: This is handled separately in the navigation guards above to avoid conflicts
     
     // Also listen for Astro navigation events if using client-side routing
     document.addEventListener('astro:after-swap', () => {
