@@ -322,9 +322,38 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         }
       }
       
+      // Clean up on all navigation types (Astro, browser, Android back button)
       document.addEventListener('astro:before-swap', cleanupOnNavigation);
       window.addEventListener('pagehide', cleanupOnNavigation);
       window.addEventListener('beforeunload', cleanupOnNavigation);
+      
+      // Handle Android back button and bfcache restoration
+      window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+          // Page restored from cache - clear all touch data and reset state
+          touchData.clear();
+          if (cleanupInterval) {
+            clearInterval(cleanupInterval);
+            cleanupInterval = null;
+          }
+          // Restart cleanup interval if on recipe list page
+          if (window.location.pathname === '/rezepte' && !cleanupInterval) {
+            cleanupInterval = setInterval(cleanupStaleTouchData, 5000);
+          }
+        }
+      });
+      
+      // Also handle popstate (Android back button)
+      window.addEventListener('popstate', () => {
+        // Only clear if we're leaving the recipe list page
+        if (window.location.pathname !== '/rezepte') {
+          touchData.clear();
+          if (cleanupInterval) {
+            clearInterval(cleanupInterval);
+            cleanupInterval = null;
+          }
+        }
+      });
       
       // Periodically clean up stale entries (every 5 seconds)
       // Only start if not already running
