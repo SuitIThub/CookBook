@@ -503,21 +503,26 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     }, 100); // Small delay to batch multiple rapid events
   }
   
-  // Re-apply filter when page is shown (including when restored from back/forward cache)
-  // This handles the case when user navigates back to the recipe list
-  window.addEventListener('pageshow', (event) => {
-    debouncedReapply();
-  });
-  
-  // Also listen for Astro navigation events if using client-side routing
-  document.addEventListener('astro:after-swap', () => {
-    debouncedReapply();
-  });
-  
-  // Also check on focus in case page was in background (but debounced)
-  window.addEventListener('focus', () => {
-    debouncedReapply();
-  });
+  // Guard to prevent duplicate event listeners
+  if (!(window as any).searchBarListenersAdded) {
+    (window as any).searchBarListenersAdded = true;
+    
+    // Re-apply filter when page is shown (including when restored from back/forward cache)
+    // This handles the case when user navigates back to the recipe list
+    window.addEventListener('pageshow', (event) => {
+      debouncedReapply();
+    });
+    
+    // Also listen for Astro navigation events if using client-side routing
+    document.addEventListener('astro:after-swap', () => {
+      debouncedReapply();
+    });
+    
+    // Also check on focus in case page was in background (but debounced)
+    window.addEventListener('focus', () => {
+      debouncedReapply();
+    });
+  }
   
   // Expose filter functions globally so they can be called from page level
   (window as any).reapplyRecipeFilter = reapplyFilterOnReturn;
