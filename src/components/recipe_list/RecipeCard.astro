@@ -313,14 +313,18 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       // Store interval ID for cleanup
       let cleanupInterval: ReturnType<typeof setInterval> | null = null;
       
-      // Clean up touch data on navigation
-      document.addEventListener('astro:before-swap', () => {
+      // Clean up touch data on navigation (both Astro and browser navigation)
+      function cleanupOnNavigation() {
         touchData.clear();
         if (cleanupInterval) {
           clearInterval(cleanupInterval);
           cleanupInterval = null;
         }
-      });
+      }
+      
+      document.addEventListener('astro:before-swap', cleanupOnNavigation);
+      window.addEventListener('pagehide', cleanupOnNavigation);
+      window.addEventListener('beforeunload', cleanupOnNavigation);
       
       // Periodically clean up stale entries (every 5 seconds)
       // Only start if not already running
@@ -330,7 +334,15 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       
       // Handle card clicks via delegation
       (window as any).recipeCardClickHandler = (e: Event) => {
-        const target = e.target as HTMLElement;
+        try {
+          // Early exit if not on recipe list page (check once, cache result)
+          const isRecipeListPage = window.location.pathname === '/rezepte';
+          if (!isRecipeListPage) {
+            return;
+          }
+          
+          const target = e.target as HTMLElement;
+          if (!target) return;
         
         // Only handle clicks that are actually on or inside a recipe card
         // Use a more specific check to avoid false matches
@@ -384,10 +396,19 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         if (recipeLink && recipeId) {
           window.location.href = recipeLink.href;
         }
+        } catch (error) {
+          // Silently fail to avoid blocking other handlers
+          console.error('Error in recipeCardClickHandler:', error);
+        }
       };
       
       // Handle touch events via delegation
       (window as any).recipeCardTouchStartHandler = (e: TouchEvent) => {
+        // Only handle on recipe list page
+        if (window.location.pathname !== '/rezepte') {
+          return;
+        }
+        
         const target = e.target as HTMLElement;
         // Only handle touches on actual recipe cards
         const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
@@ -419,6 +440,11 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       };
       
       (window as any).recipeCardTouchMoveHandler = (e: TouchEvent) => {
+        // Only handle on recipe list page
+        if (window.location.pathname !== '/rezepte') {
+          return;
+        }
+        
         const target = e.target as HTMLElement;
         const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
         if (!card) return; // Not a recipe card, ignore
@@ -442,6 +468,11 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       };
       
       (window as any).recipeCardTouchEndHandler = (e: TouchEvent) => {
+        // Only handle on recipe list page
+        if (window.location.pathname !== '/rezepte') {
+          return;
+        }
+        
         const target = e.target as HTMLElement;
         const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
         if (!card) return; // Not a recipe card, let other handlers process it
@@ -530,6 +561,11 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       
       // Prevent link clicks in selection mode (also use bubbling phase)
       document.addEventListener('click', (e: Event) => {
+        // Only handle on recipe list page
+        if (window.location.pathname !== '/rezepte') {
+          return;
+        }
+        
         const target = e.target as HTMLElement;
         const link = target.closest('[data-recipe-link]') as HTMLAnchorElement;
         if (!link) return;
@@ -545,6 +581,11 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
     // Handle menu positioning via delegation (only add once)
     if (!(window as any).recipeMenuHandler) {
       (window as any).recipeMenuHandler = (e: Event) => {
+        // Only handle on recipe list page
+        if (window.location.pathname !== '/rezepte') {
+          return;
+        }
+        
         const target = e.target as HTMLElement;
         const btn = target.closest('.recipe-menu-btn') as HTMLElement;
         if (!btn) return; // Not a menu button, let other handlers process it
@@ -604,6 +645,11 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
     // Handle menu actions via delegation (only add once)
     if (!(window as any).recipeMenuActionHandler) {
       (window as any).recipeMenuActionHandler = async (e: Event) => {
+        // Only handle on recipe list page
+        if (window.location.pathname !== '/rezepte') {
+          return;
+        }
+        
         const target = e.target as HTMLElement;
         const menu = document.querySelector('.recipe-menu') as HTMLElement;
         if (!menu || !menu.contains(target)) return;
