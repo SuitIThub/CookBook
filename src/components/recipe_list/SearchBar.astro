@@ -114,11 +114,19 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
   // Guard to prevent filter from running too frequently
   let isFiltering = false;
   let lastFilterTime = 0;
-  const MIN_FILTER_INTERVAL = 50; // Minimum milliseconds between filter runs
+  const MIN_FILTER_INTERVAL = 100; // Increased to 100ms minimum between filter runs
   let isUpdatingInputs = false; // Flag to prevent event cascades when programmatically updating inputs
+  let filterStartTime = 0;
+  const MAX_FILTER_TIME = 100; // Maximum time filter should take (ms) - if exceeded, abort
+  let isNavigating = false; // Flag to disable filtering during navigation
   
   // Function to filter recipes
   function filterRecipes() {
+    // Don't filter during navigation
+    if (isNavigating) {
+      return;
+    }
+    
     // Prevent running too frequently
     const now = Date.now();
     if (isFiltering || (now - lastFilterTime < MIN_FILTER_INTERVAL)) {
@@ -163,6 +171,7 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
   
   // Separate function for the actual filtering logic
   function performFiltering() {
+    filterStartTime = Date.now();
     
     // Parse search terms, handling quoted phrases and special tag search
     function parseSearchTerms(input: string): { regular: string[]; tagOnly: string[] } {
@@ -232,7 +241,19 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     const selectedCategory = categoryFilter.value.toLowerCase();
     let visibleCount = 0;
 
+    // Check timeout before starting
+    if (Date.now() - filterStartTime > MAX_FILTER_TIME) {
+      console.warn('Filter timeout check failed before start');
+      return;
+    }
+    
     recipeCards.forEach((card) => {
+      // Check if we're taking too long (abort if so)
+      if (Date.now() - filterStartTime > MAX_FILTER_TIME) {
+        console.warn('Filter taking too long, aborting');
+        return;
+      }
+      
       // Store original tag structure if not already stored
       if (!card.hasAttribute('data-original-tags')) {
         const tagsContainer = card.querySelector('.flex.flex-wrap.gap-1\\.5');
@@ -476,8 +497,47 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
   let isReapplyingFilter = false;
   let reapplyTimeout: ReturnType<typeof setTimeout> | null = null;
   
+  // Disable filtering during navigation (only register once)
+  if (!(window as any).searchBarNavigationGuardsAdded) {
+    (window as any).searchBarNavigationGuardsAdded = true;
+    
+    function disableFiltering() {
+      isNavigating = true;
+      if (reapplyTimeout) {
+        clearTimeout(reapplyTimeout);
+        reapplyTimeout = null;
+      }
+      isReapplyingFilter = false;
+    }
+    
+    function enableFiltering() {
+      // Re-enable after a short delay to let page settle
+      setTimeout(() => {
+        isNavigating = false;
+      }, 200); // Increased delay
+    }
+    
+    // Handle both Astro navigation and browser navigation
+    document.addEventListener('astro:before-swap', disableFiltering);
+    window.addEventListener('pagehide', disableFiltering);
+    window.addEventListener('beforeunload', disableFiltering);
+    
+    document.addEventListener('astro:after-swap', enableFiltering);
+    window.addEventListener('pageshow', (event) => {
+      // Only enable if page was restored from cache (not initial load)
+      if (event.persisted) {
+        enableFiltering();
+      }
+    });
+  }
+  
   // Function to re-apply filter when returning to page
   function reapplyFilterOnReturn(retryCount = 0) {
+    // Don't reapply during navigation
+    if (isNavigating) {
+      return;
+    }
+    
     // Prevent multiple simultaneous calls
     if (isReapplyingFilter && retryCount === 0) {
       return;
@@ -508,12 +568,12 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
       return;
     }
     
-    // If elements aren't ready yet, retry a few times
+    // If elements aren't ready yet, retry a few times (reduced from 10 to 5)
     if (!searchInput || !categoryFilter || !recipeCards || recipeCards.length === 0) {
-      if (retryCount < 10) {
+      if (retryCount < 5) {
         reapplyTimeout = setTimeout(() => {
           reapplyFilterOnReturn(retryCount + 1);
-        }, 50);
+        }, 100); // Increased delay
       } else {
         // Max retries reached, give up
         isReapplyingFilter = false;
@@ -564,9 +624,18 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
   // Debounce function for page events to prevent multiple simultaneous calls
   let pageEventTimeout: ReturnType<typeof setTimeout> | null = null;
   let isReapplyingPage = false;
+  let lastReapplyTime = 0;
+  const MIN_REAPPLY_INTERVAL = 500; // Minimum 500ms between reapplies
+  
   function debouncedReapply() {
     // Prevent multiple simultaneous calls
     if (isReapplyingPage) {
+      return;
+    }
+    
+    // Throttle reapplies to prevent too frequent calls
+    const now = Date.now();
+    if (now - lastReapplyTime < MIN_REAPPLY_INTERVAL) {
       return;
     }
     
@@ -577,11 +646,14 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
       // Only reapply if we're on the recipe list page
       if (window.location.pathname === '/rezepte') {
         isReapplyingPage = true;
+        lastReapplyTime = Date.now();
         try {
           refreshElements();
           // Only call reapplyFilterOnReturn, which handles everything
           // Don't call applyInitialFilter separately to avoid double filtering
           reapplyFilterOnReturn();
+        } catch (error) {
+          console.error('Error in debouncedReapply:', error);
         } finally {
           isReapplyingPage = false;
           pageEventTimeout = null;
@@ -589,7 +661,7 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
       } else {
         pageEventTimeout = null;
       }
-    }, 100); // Small delay to batch multiple rapid events
+    }, 200); // Increased delay to batch multiple rapid events
   }
   
   // Guard to prevent duplicate event listeners
