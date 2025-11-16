@@ -299,8 +299,11 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       // Handle card clicks via delegation
       (window as any).recipeCardClickHandler = (e: Event) => {
         const target = e.target as HTMLElement;
-        const card = target.closest('.recipe-card') as HTMLElement;
-        if (!card) return;
+        
+        // Only handle clicks that are actually on or inside a recipe card
+        // Use a more specific check to avoid false matches
+        const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
+        if (!card) return; // Not a recipe card, let other handlers process it
         
         // Check if this click was already handled by touch event
         const data = touchData.get(card);
@@ -313,12 +316,16 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         const recipeLink = card.querySelector('[data-recipe-link]') as HTMLAnchorElement;
         const recipeId = card.getAttribute('data-recipe-id');
         
-        // Don't handle clicks on interactive elements
+        // Don't handle clicks on interactive elements - let them work normally
         if (target.closest('.recipe-menu-btn') || 
             target.closest('.recipe-menu') ||
             target.closest('.selection-indicator') ||
-            target.closest('[data-recipe-link]')) {
-          return;
+            target.closest('[data-recipe-link]') ||
+            target.closest('a') || // Don't interfere with any links
+            target.closest('button') || // Don't interfere with any buttons
+            target.closest('input') || // Don't interfere with inputs
+            target.closest('select')) { // Don't interfere with selects
+          return; // Let the element handle its own click
         }
         
         // If in selection mode, handle selection
@@ -342,8 +349,17 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       // Handle touch events via delegation
       (window as any).recipeCardTouchStartHandler = (e: TouchEvent) => {
         const target = e.target as HTMLElement;
-        const card = target.closest('.recipe-card') as HTMLElement;
-        if (!card) return;
+        // Only handle touches on actual recipe cards
+        const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
+        if (!card) return; // Not a recipe card, let other handlers process it
+        
+        // Don't handle touches on interactive elements
+        if (target.closest('a') || 
+            target.closest('button') || 
+            target.closest('input') || 
+            target.closest('select')) {
+          return; // Let the element handle its own touch
+        }
         
         const touch = e.touches[0];
         touchData.set(card, {
@@ -356,8 +372,8 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       
       (window as any).recipeCardTouchMoveHandler = (e: TouchEvent) => {
         const target = e.target as HTMLElement;
-        const card = target.closest('.recipe-card') as HTMLElement;
-        if (!card) return;
+        const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
+        if (!card) return; // Not a recipe card, ignore
         
         const data = touchData.get(card);
         if (!data || !e.touches[0]) return;
@@ -373,8 +389,17 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       
       (window as any).recipeCardTouchEndHandler = (e: TouchEvent) => {
         const target = e.target as HTMLElement;
-        const card = target.closest('.recipe-card') as HTMLElement;
-        if (!card) return;
+        const card = target.closest('.recipe-card[data-recipe-id]') as HTMLElement;
+        if (!card) return; // Not a recipe card, let other handlers process it
+        
+        // Don't handle touches on interactive elements
+        if (target.closest('a') || 
+            target.closest('button') || 
+            target.closest('input') || 
+            target.closest('select')) {
+          touchData.delete(card);
+          return; // Let the element handle its own touch
+        }
         
         const data = touchData.get(card);
         if (!data) return;
@@ -437,23 +462,24 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       };
       
       // Add delegated event listeners (only once)
-      document.addEventListener('click', (window as any).recipeCardClickHandler, true);
+      // Use capture: false (bubbling phase) to avoid blocking other handlers
+      document.addEventListener('click', (window as any).recipeCardClickHandler, false);
       document.addEventListener('touchstart', (window as any).recipeCardTouchStartHandler, { passive: true });
       document.addEventListener('touchmove', (window as any).recipeCardTouchMoveHandler, { passive: true });
       document.addEventListener('touchend', (window as any).recipeCardTouchEndHandler, { passive: false });
       
-      // Prevent link clicks in selection mode
+      // Prevent link clicks in selection mode (also use bubbling phase)
       document.addEventListener('click', (e: Event) => {
         const target = e.target as HTMLElement;
         const link = target.closest('[data-recipe-link]') as HTMLAnchorElement;
         if (!link) return;
         
-        const card = link.closest('.recipe-card') as HTMLElement;
+        const card = link.closest('.recipe-card[data-recipe-id]') as HTMLElement;
         if (card && card.classList.contains('selection-mode')) {
           e.preventDefault();
           e.stopPropagation();
         }
-      }, true);
+      }, false);
     }
 
     // Handle menu positioning via delegation (only add once)
@@ -461,8 +487,9 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
       (window as any).recipeMenuHandler = (e: Event) => {
         const target = e.target as HTMLElement;
         const btn = target.closest('.recipe-menu-btn') as HTMLElement;
-        if (!btn) return;
+        if (!btn) return; // Not a menu button, let other handlers process it
         
+        // Only stop propagation if we're actually handling the menu
         e.stopPropagation();
         
         const menu = document.querySelector('.recipe-menu') as HTMLElement;
@@ -510,7 +537,8 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         }
       };
       
-      document.addEventListener('click', (window as any).recipeMenuHandler, true);
+      // Use bubbling phase to avoid blocking other handlers
+      document.addEventListener('click', (window as any).recipeMenuHandler, false);
     }
 
     // Handle menu actions via delegation (only add once)
@@ -585,6 +613,7 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         }
       };
       
-      document.addEventListener('click', (window as any).recipeMenuActionHandler, true);
+      // Use bubbling phase to avoid blocking other handlers
+      document.addEventListener('click', (window as any).recipeMenuActionHandler, false);
     }
 </script> 
