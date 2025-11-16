@@ -44,28 +44,37 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
   
   // Function to get/refresh all element references
   function refreshElements() {
-    searchInput = document.getElementById('recipe-search') as HTMLInputElement;
-    categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
-    recipeCards = document.querySelectorAll('.recipe-card');
-    recipeCountElement = document.getElementById('recipe-count');
+    try {
+      searchInput = document.getElementById('recipe-search') as HTMLInputElement;
+      categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
+      recipeCards = document.querySelectorAll('.recipe-card');
+      recipeCountElement = document.getElementById('recipe-count');
+    } catch (error) {
+      console.error('Error refreshing elements:', error);
+    }
   }
   
-  // Initialize elements immediately
-  refreshElements();
+  // Don't initialize elements immediately - wait for DOM to be ready
+  // This prevents blocking on mobile devices
 
-  // Add styles for search highlights and tags
-  const style = document.createElement('style');
-  style.textContent = `
-    .search-highlight {
-      animation: fadeIn 0.3s ease-in-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    /* Tag styles are already defined in the RecipeCard component */
-  `;
-  document.head.appendChild(style);
+  // Add styles for search highlights and tags (deferred to avoid blocking)
+  function addStyles() {
+    if (document.getElementById('search-bar-styles')) return; // Already added
+    
+    const style = document.createElement('style');
+    style.id = 'search-bar-styles';
+    style.textContent = `
+      .search-highlight {
+        animation: fadeIn 0.3s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      /* Tag styles are already defined in the RecipeCard component */
+    `;
+    document.head.appendChild(style);
+  }
 
   // Function to decode HTML entities
   function decodeHtml(html: string): string {
@@ -392,23 +401,37 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     }
   }
 
-  // Add event listeners with URL updates (only if elements exist)
-  if (searchInput) {
-    searchInput.addEventListener('input', () => {
-      // Skip if we're programmatically updating the input
-      if (isUpdatingInputs) return;
-      debouncedFilter();
-    });
-  }
+  // Function to setup event listeners (called after DOM is ready)
+  function setupEventListeners() {
+    // Refresh elements first
+    refreshElements();
+    
+    // Add event listeners with URL updates (only if elements exist)
+    if (searchInput) {
+      // Remove existing listener if any (prevent duplicates)
+      const newInputHandler = () => {
+        // Skip if we're programmatically updating the input
+        if (isUpdatingInputs) return;
+        debouncedFilter();
+      };
+      searchInput.removeEventListener('input', (searchInput as any)._inputHandler);
+      (searchInput as any)._inputHandler = newInputHandler;
+      searchInput.addEventListener('input', newInputHandler);
+    }
 
-  if (categoryFilter) {
-    categoryFilter.addEventListener('change', () => {
-      // Skip if we're programmatically updating the input
-      if (isUpdatingInputs) return;
-      // Category changes don't need debouncing since they're discrete events
-      filterRecipes();
-      updateURL();
-    });
+    if (categoryFilter) {
+      // Remove existing listener if any (prevent duplicates)
+      const newChangeHandler = () => {
+        // Skip if we're programmatically updating the input
+        if (isUpdatingInputs) return;
+        // Category changes don't need debouncing since they're discrete events
+        filterRecipes();
+        updateURL();
+      };
+      categoryFilter.removeEventListener('change', (categoryFilter as any)._changeHandler);
+      (categoryFilter as any)._changeHandler = newChangeHandler;
+      categoryFilter.addEventListener('change', newChangeHandler);
+    }
   }
 
   // Function to apply initial filter based on URL parameters
@@ -519,11 +542,23 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     isReapplyingFilter = false;
   }
 
-  // Apply filter on initial load
+  // Initialize everything when DOM is ready
+  function initializeSearchBar() {
+    try {
+      addStyles();
+      setupEventListeners();
+      applyInitialFilter();
+    } catch (error) {
+      console.error('Error initializing search bar:', error);
+    }
+  }
+  
+  // Apply filter on initial load (wait for DOM)
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', applyInitialFilter);
+    document.addEventListener('DOMContentLoaded', initializeSearchBar);
   } else {
-    applyInitialFilter();
+    // DOM already ready, but use setTimeout to avoid blocking
+    setTimeout(initializeSearchBar, 0);
   }
 
   // Debounce function for page events to prevent multiple simultaneous calls
