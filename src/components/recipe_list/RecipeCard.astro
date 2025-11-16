@@ -355,6 +355,20 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
         }
       });
       
+      // Listen for PWA-specific pageshow event from Layout.astro
+      window.addEventListener('pwa-pageshow', () => {
+        // Clear all touch data when PWA page is restored from cache
+        touchData.clear();
+        if (cleanupInterval) {
+          clearInterval(cleanupInterval);
+          cleanupInterval = null;
+        }
+        // Restart cleanup interval if on recipe list page
+        if (window.location.pathname === '/rezepte' && !cleanupInterval) {
+          cleanupInterval = setInterval(cleanupStaleTouchData, 5000);
+        }
+      });
+      
       // Periodically clean up stale entries (every 5 seconds)
       // Only start if not already running
       if (!cleanupInterval) {
@@ -370,8 +384,22 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
             return;
           }
           
+          // Check if clicks are being blocked by an overlay
           const target = e.target as HTMLElement;
           if (!target) return;
+          
+          // Check if target is under an overlay
+          const rect = target.getBoundingClientRect();
+          const elementAtPoint = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          if (elementAtPoint && (
+            elementAtPoint.classList.contains('add-timer-overlay') ||
+            elementAtPoint.classList.contains('expired-timer-overlay') ||
+            elementAtPoint.classList.contains('timer-notification-overlay') ||
+            (elementAtPoint.closest('.modal') && !elementAtPoint.closest('.modal.hidden'))
+          )) {
+            // Click is being blocked by an overlay, don't handle it
+            return;
+          }
         
         // Only handle clicks that are actually on or inside a recipe card
         // Use a more specific check to avoid false matches
