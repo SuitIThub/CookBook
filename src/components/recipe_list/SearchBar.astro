@@ -102,23 +102,38 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     return result;
   }
 
+  // Guard to prevent filter from running too frequently
+  let isFiltering = false;
+  let lastFilterTime = 0;
+  const MIN_FILTER_INTERVAL = 50; // Minimum milliseconds between filter runs
+  
   // Function to filter recipes
   function filterRecipes() {
-    // Ensure elements are available
-    if (!searchInput || !categoryFilter || !recipeCards) {
-      refreshElements();
-      if (!searchInput || !categoryFilter || !recipeCards) {
-        return; // Still not available, skip filtering
-      }
+    // Prevent running too frequently
+    const now = Date.now();
+    if (isFiltering || (now - lastFilterTime < MIN_FILTER_INTERVAL)) {
+      return;
     }
     
-    // Make sure recipeCards is not empty
-    if (recipeCards.length === 0) {
-      refreshElements();
-      if (!recipeCards || recipeCards.length === 0) {
-        return; // No cards found, skip filtering
+    isFiltering = true;
+    lastFilterTime = now;
+    
+    try {
+      // Ensure elements are available
+      if (!searchInput || !categoryFilter || !recipeCards) {
+        refreshElements();
+        if (!searchInput || !categoryFilter || !recipeCards) {
+          return; // Still not available, skip filtering
+        }
       }
-    }
+      
+      // Make sure recipeCards is not empty
+      if (recipeCards.length === 0) {
+        refreshElements();
+        if (!recipeCards || recipeCards.length === 0) {
+          return; // No cards found, skip filtering
+        }
+      }
     
     // Parse search terms, handling quoted phrases and special tag search
     function parseSearchTerms(input: string): { regular: string[]; tagOnly: string[] } {
@@ -315,6 +330,10 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     if (recipeCountElement) {
       recipeCountElement.textContent = visibleCount.toString();
     }
+    } finally {
+      // Always reset the filtering flag
+      isFiltering = false;
+    }
   }
 
   // Update URL when search or category changes
@@ -396,8 +415,28 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     }
   }
 
+  // Guard to prevent multiple simultaneous retry loops
+  let isReapplyingFilter = false;
+  let reapplyTimeout: ReturnType<typeof setTimeout> | null = null;
+  
   // Function to re-apply filter when returning to page
   function reapplyFilterOnReturn(retryCount = 0) {
+    // Prevent multiple simultaneous calls
+    if (isReapplyingFilter && retryCount === 0) {
+      return;
+    }
+    
+    // Clear any pending timeout
+    if (reapplyTimeout) {
+      clearTimeout(reapplyTimeout);
+      reapplyTimeout = null;
+    }
+    
+    // Mark as reapplying
+    if (retryCount === 0) {
+      isReapplyingFilter = true;
+    }
+    
     // Refresh all element references
     refreshElements();
     
@@ -408,15 +447,19 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     
     // If no search params, no need to filter
     if (!searchParam && !categoryParam) {
+      isReapplyingFilter = false;
       return;
     }
     
     // If elements aren't ready yet, retry a few times
     if (!searchInput || !categoryFilter || !recipeCards || recipeCards.length === 0) {
       if (retryCount < 10) {
-        setTimeout(() => {
+        reapplyTimeout = setTimeout(() => {
           reapplyFilterOnReturn(retryCount + 1);
         }, 50);
+      } else {
+        // Max retries reached, give up
+        isReapplyingFilter = false;
       }
       return;
     }
@@ -431,6 +474,9 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     
     // Re-apply filter
     filterRecipes();
+    
+    // Mark as done
+    isReapplyingFilter = false;
   }
 
   // Apply filter on initial load
@@ -440,28 +486,37 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     applyInitialFilter();
   }
 
+  // Debounce function for page events to prevent multiple simultaneous calls
+  let pageEventTimeout: ReturnType<typeof setTimeout> | null = null;
+  function debouncedReapply() {
+    if (pageEventTimeout) {
+      clearTimeout(pageEventTimeout);
+    }
+    pageEventTimeout = setTimeout(() => {
+      // Only reapply if we're on the recipe list page
+      if (window.location.pathname === '/rezepte') {
+        refreshElements();
+        applyInitialFilter();
+        reapplyFilterOnReturn();
+      }
+      pageEventTimeout = null;
+    }, 100); // Small delay to batch multiple rapid events
+  }
+  
   // Re-apply filter when page is shown (including when restored from back/forward cache)
   // This handles the case when user navigates back to the recipe list
   window.addEventListener('pageshow', (event) => {
-    // Always check and reapply, not just when persisted
-    // This ensures filter is applied even if page wasn't from cache
-    // Refresh elements first, then reapply
-    refreshElements();
-    applyInitialFilter();
-    reapplyFilterOnReturn();
+    debouncedReapply();
   });
   
   // Also listen for Astro navigation events if using client-side routing
   document.addEventListener('astro:after-swap', () => {
-    reapplyFilterOnReturn();
+    debouncedReapply();
   });
   
-  // Also check on focus in case page was in background
+  // Also check on focus in case page was in background (but debounced)
   window.addEventListener('focus', () => {
-    // Only reapply if we're on the recipe list page
-    if (window.location.pathname === '/rezepte') {
-      reapplyFilterOnReturn();
-    }
+    debouncedReapply();
   });
   
   // Expose filter functions globally so they can be called from page level
