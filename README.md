@@ -1,4 +1,4 @@
-# 👨‍🍳 Kochbuch-App
+# Kochbuch-App
 
 [![Astro](https://img.shields.io/badge/Astro-4.0-FF5D01?style=flat-square&logo=astro&logoColor=white)](https://astro.build)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -9,26 +9,26 @@
 
 Eine moderne, digitale Kochbuch-Anwendung entwickelt mit Astro, TypeScript und Tailwind CSS. Perfekt für die Organisation Ihrer Lieblingsrezepte mit Timer-Funktionen, Einkaufslisten und responsivem Design.
 
-## ✨ Features
+## Features
 
-### ✅ **Bereits implementiert**
-- 🏠 **Rezeptübersicht** - Alle gespeicherten Rezepte auf einen Blick
-- 📖 **Detailansicht** - Strukturierte Anzeige mit Kopfbereich, Zutaten und Zubereitung
-- ⏱️ **Timer-Integration** - Klickbare Zeitangaben starten automatisch Timer
-- 💡 **Tooltip-System** - Zutatenverlinkungen mit Hover-Informationen
-- 🛒 **Einkaufsliste** - Verwaltung von Einkaufsartikeln
-- 📱 **Responsive Design** - Optimiert für Desktop und Mobile
-- 🎨 **Material Design** - Moderne, intuitive Benutzeroberfläche
+### **Bereits implementiert**
+- **Rezeptübersicht** - Alle gespeicherten Rezepte auf einen Blick
+- **Detailansicht** - Strukturierte Anzeige mit Kopfbereich, Zutaten und Zubereitung
+- **Timer-Integration** - Klickbare Zeitangaben starten automatisch Timer
+- **Tooltip-System** - Zutatenverlinkungen mit Hover-Informationen
+- **Einkaufsliste** - Verwaltung von Einkaufsartikeln
+- **Responsive Design** - Optimiert für Desktop und Mobile
+- **Material Design** - Moderne, intuitive Benutzeroberfläche
 
-### 🚧 **In Entwicklung**
-- ✏️ Bearbeitungsmodus für Rezepte
-- 🔄 Vollständige CRUD-Operationen
-- 💾 SQLite-Datenbankintegration
-- 🔍 Zutatenvervollständigung
-- 📤 Import-/Export-Funktionalität
-- 🔐 OAuth-Authentifizierung
+### **In Entwicklung**
+- Bearbeitungsmodus für Rezepte
+- Vollständige CRUD-Operationen
+- SQLite-Datenbankintegration
+- Zutatenvervollständigung
+- Import-/Export-Funktionalität
+- OAuth-Authentifizierung
 
-## 🛠 Technologie-Stack
+##  Technologie-Stack
 
 | Technologie | Version | Verwendung |
 |-------------|---------|------------|
@@ -38,7 +38,7 @@ Eine moderne, digitale Kochbuch-Anwendung entwickelt mit Astro, TypeScript und T
 | **SQLite** | 3.x | Datenbank |
 | **Node.js** | 18+ | Runtime |
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Voraussetzungen
 - Node.js 18.0 oder höher
@@ -69,35 +69,35 @@ Eine moderne, digitale Kochbuch-Anwendung entwickelt mit Astro, TypeScript und T
 
 5. **App öffnen**: [http://localhost:4321](http://localhost:4321)
 
-## 📁 Projektstruktur
+## Projektstruktur
 
 ```
 CookBook/
-├── 📂 src/
-│   ├── 📂 layouts/
+├── src/
+│   ├── layouts/
 │   │   └── Layout.astro           # Haupt-Layout mit Navigation
-│   ├── 📂 pages/
+│   ├── pages/
 │   │   ├── index.astro            # Rezeptübersicht (Startseite)
 │   │   ├── einkaufsliste.astro    # Einkaufslistenverwaltung
-│   │   ├── 📂 api/                # API Endpoints
+│   │   ├── api/                   # API Endpoints
 │   │   │   ├── recipes.ts         # Rezept-API
 │   │   │   ├── ingredients.ts     # Zutaten-API
 │   │   │   └── shopping-lists.ts  # Einkaufslisten-API
-│   │   └── 📂 rezept/
+│   │   └── rezept/
 │   │       ├── [id].astro         # Rezept-Detailansicht
 │   │       └── neu.astro          # Neues Rezept erstellen
-│   ├── 📂 lib/
+│   ├── lib/
 │   │   └── database.ts            # Datenbankoperationen
-│   └── 📂 types/
+│   └── types/
 │       └── recipe.ts              # TypeScript-Typdefinitionen
-├── 📂 scripts/
+├── scripts/
 │   └── init-db.js                 # Datenbank-Initialisierung
-├── 📂 public/
+├── public/
 │   └── favicon.svg                # App-Icon
-└── 📄 cookbook.db                 # SQLite-Datenbank
+└── cookbook.db                 # SQLite-Datenbank
 ```
 
-## 💾 Datenmodell
+## Datenmodell
 
 ### Recipe (Rezept)
 ```typescript
@@ -116,20 +116,20 @@ interface Recipe {
 ```
 
 ### Besonderheiten
-- **🏷️ Geschachtelte Gruppen**: Zutaten und Zubereitungsschritte in Kategorien
-- **📏 Mehrfache Mengenangaben**: Flexible Mengeneinheiten pro Zutat
-- **🔗 Zutatenverlinkung**: Verweise zwischen Zubereitungsschritten und Zutaten
-- **⏰ Timer-Integration**: Automatische Zeitangaben-Erkennung
+- **Geschachtelte Gruppen**: Zutaten und Zubereitungsschritte in Kategorien
+- **Mehrfache Mengenangaben**: Flexible Mengeneinheiten pro Zutat
+- **Zutatenverlinkung**: Verweise zwischen Zubereitungsschritten und Zutaten
+- **Timer-Integration**: Automatische Zeitangaben-Erkennung
 
-## 🎨 Design-Prinzipien
+## Design-Prinzipien
 
-- **🎯 Material Design**: Moderne, intuitive Benutzeroberfläche
-- **📱 Mobile First**: Responsive Design für alle Geräte
-- **♿ Accessibility**: Tastaturnavigation und Screenreader-Support
-- **⚡ Performance**: Schnelle Ladezeiten durch Static Site Generation
-- **🌐 Internationalisierung**: Vorbereitet für mehrsprachige Unterstützung
+- **Material Design**: Moderne, intuitive Benutzeroberfläche
+- **Mobile First**: Responsive Design für alle Geräte
+- **Accessibility**: Tastaturnavigation und Screenreader-Support
+- **Performance**: Schnelle Ladezeiten durch Static Site Generation
+- **Internationalisierung**: Vorbereitet für mehrsprachige Unterstützung
 
-## 🧞 Verfügbare Commands
+## Verfügbare Commands
 
 | Command | Beschreibung |
 |---------|--------------|
@@ -140,7 +140,7 @@ interface Recipe {
 | `npm run init-db` | Datenbank initialisieren |
 | `npm run astro ...` | Astro CLI Commands ausführen |
 
-## 🔧 Entwicklung
+## Entwicklung
 
 ### Neue Seite hinzufügen
 ```bash
@@ -167,13 +167,13 @@ export interface NeuerTyp {
 }
 ```
 
-## 📸 Screenshots
+## Screenshots
 
 | Desktop | Mobile |
 |---------|--------|
 | ![Desktop View](docs/screenshot-desktop.png) | ![Mobile View](docs/screenshot-mobile.png) |
 
-## 🤝 Beitragen
+## Beitragen
 
 Contributions sind willkommen! Bitte beachten Sie:
 
@@ -183,17 +183,16 @@ Contributions sind willkommen! Bitte beachten Sie:
 4. **Push** zum Branch (`git push origin feature/AmazingFeature`)
 5. **Pull Request** öffnen
 
-## 📄 Lizenz
+## Lizenz
 
 Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details.
 
-## 📞 Support
+## Support
 
-- 📧 **Email**: [ihr-email@example.com](mailto:ihr-email@example.com)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/cookbook/issues)
-- 💬 **Diskussionen**: [GitHub Discussions](https://github.com/yourusername/cookbook/discussions)
+- **Email**: [suit.it.pub@gmail.com](mailto:suit.it.pub@gmail.com)
+- **Issues**: [GitHub Issues](https://github.com/SuitIThub/CookBook/issues)
 
-## 🙏 Danksagungen
+## Danksagungen
 
 - [Astro](https://astro.build) - Für das fantastische Frontend-Framework
 - [Tailwind CSS](https://tailwindcss.com) - Für das utility-first CSS Framework
@@ -203,11 +202,9 @@ Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details
 
 <div align="center">
 
-**🚧 Status**: In aktiver Entwicklung  
-**📦 Version**: 0.1.0  
-**📅 Letzte Aktualisierung**: 2024
-
-Gemacht mit ❤️ für Kochbegeisterte
+**Status**: In aktiver Entwicklung  
+**Version**: 0.1.0  
+**Letzte Aktualisierung**: 2024
 
 [⬆ Nach oben](#-kochbuch-app)
 
