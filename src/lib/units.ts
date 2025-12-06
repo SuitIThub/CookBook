@@ -171,9 +171,7 @@ export const BASE_UNITS: Record<string, UnitDefinition> = {
     name: 'Tasse',
     category: 'volume',
     displayName: 'Tasse',
-    isBaseUnit: false,
-    baseUnit: 'ml',
-    conversionFactor: 250, // 1 Tasse = 250 ml
+    isBaseUnit: true,
     aliases: ['Tasse', 'Tassen', 'tasse', 'tassen']
   },
   'Becher': {
@@ -181,8 +179,8 @@ export const BASE_UNITS: Record<string, UnitDefinition> = {
     category: 'volume',
     displayName: 'Becher',
     isBaseUnit: false,
-    baseUnit: 'ml',
-    conversionFactor: 200, // 1 Becher = 200 ml (approximate)
+    baseUnit: 'Tasse',
+    conversionFactor: 1.5, // 1 Becher = 1.5 Tassen
     aliases: ['Becher', 'becher']
   },
   'Glas': {
@@ -190,8 +188,8 @@ export const BASE_UNITS: Record<string, UnitDefinition> = {
     category: 'volume',
     displayName: 'Glas',
     isBaseUnit: false,
-    baseUnit: 'ml',
-    conversionFactor: 200, // 1 Glas = 200 ml (approximate)
+    baseUnit: 'Tasse',
+    conversionFactor: 1.5, // 1 Glas = 1.5 Tassen
     aliases: ['Glas', 'Gläser', 'glas', 'gläser']
   },
   'l': {
