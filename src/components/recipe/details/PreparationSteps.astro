@@ -9,16 +9,70 @@ const { recipe } = Astro.props;
 
 // Safety check: ensure preparationGroups exists and handle empty arrays
 const preparationGroups = recipe?.preparationGroups || [];
-const hasAnySteps = preparationGroups.some(group => 
-  group?.steps && group.steps.length > 0 && group.steps.some(step => 'text' in step && step.text.trim())
-);
 
-// Helper function to get all ingredients from the recipe
+// Recursive function to check if there are any steps (including nested groups)
+function hasAnyStepsRecursive(groups: any[]): boolean {
+  return groups.some(group => {
+    if (!group?.steps || group.steps.length === 0) return false;
+    return group.steps.some((item: any) => {
+      if ('text' in item && item.text.trim()) {
+        return true; // It's a step
+      } else if ('steps' in item) {
+        return hasAnyStepsRecursive([item]); // It's a nested group - recursively check
+      }
+      return false;
+    });
+  });
+}
+const hasAnySteps = hasAnyStepsRecursive(preparationGroups);
+
+// Pre-calculate global step indices for all steps (shared across all rendering)
+// This ensures consistent indexing and fixes Bug 2 where each step was recalculating from 0
+const stepIndexMap = new Map<any, number>();
+const globalStepCounter = { value: 0 };
+
+// Helper to recursively map all steps to their global indices
+function mapStepIndicesToGlobalIndex(groups: any[]) {
+  groups.forEach(group => {
+    if (group?.steps) {
+      group.steps.forEach((item: any) => {
+        if ('text' in item) {
+          stepIndexMap.set(item, globalStepCounter.value);
+          globalStepCounter.value++;
+        } else if ('steps' in item) {
+          // Nested group - recursively map its steps
+          mapStepIndicesToGlobalIndex([item]);
+        }
+      });
+    }
+  });
+}
+mapStepIndicesToGlobalIndex(preparationGroups);
+
+// Helper function to get all ingredients from the recipe (recursively)
 function getAllIngredients(recipe: Recipe) {
   const ingredientGroups = recipe?.ingredientGroups || [];
-  return ingredientGroups.flatMap(group => 
-    (group?.ingredients || []).filter(item => 'id' in item && 'name' in item)
-  );
+  const allIngredients: any[] = [];
+  
+  // Recursive function to traverse nested groups
+  function collectIngredients(groups: any[]) {
+    groups.forEach(group => {
+      if (group?.ingredients) {
+        group.ingredients.forEach((item: any) => {
+          if ('id' in item && 'name' in item) {
+            // It's an ingredient
+            allIngredients.push(item);
+          } else if ('ingredients' in item) {
+            // It's a nested group - recursively collect ingredients
+            collectIngredients([item]);
+          }
+        });
+      }
+    });
+  }
+  
+  collectIngredients(ingredientGroups);
+  return allIngredients;
 }
 
 // Helper function to convert Celsius to gas mark
@@ -59,45 +113,124 @@ function processText(text: string): string {
   );
 }
 
+// Helper function to recursively count all steps (including nested groups)
+function countAllStepsRecursive(groups: any[]): number {
+  let count = 0;
+  groups.forEach(group => {
+    if (group?.steps) {
+      group.steps.forEach((item: any) => {
+        if ('text' in item) {
+          count++;
+        } else if ('steps' in item) {
+          // It's a nested group
+          count += countAllStepsRecursive([item]);
+        }
+      });
+    }
+  });
+  return count;
+}
+
+// Helper function to recursively get all steps in order
+function getAllStepsRecursive(groups: any[]): any[] {
+  const allSteps: any[] = [];
+  groups.forEach(group => {
+    if (group?.steps) {
+      group.steps.forEach((item: any) => {
+        if ('text' in item) {
+          allSteps.push(item);
+        } else if ('steps' in item) {
+          // It's a nested group - recursively get steps
+          allSteps.push(...getAllStepsRecursive([item]));
+        }
+      });
+    }
+  });
+  return allSteps;
+}
+
 // Helper function to track used ingredients across steps
 function getUsedIngredients(preparationGroups: any[], currentStepIndex: number) {
   const usedIngredients = new Set<string>();
-  let stepCounter = 0;
+  const allSteps = getAllStepsRecursive(preparationGroups);
   
-  for (const group of preparationGroups) {
-    for (const step of group.steps) {
-      if ('text' in step && stepCounter < currentStepIndex) {
-        if (step.linkedIngredients) {
-          step.linkedIngredients.forEach((link: any) => {
-            usedIngredients.add(link.ingredientId);
-          });
-        }
-      }
-      stepCounter++;
+  for (let i = 0; i < Math.min(currentStepIndex, allSteps.length); i++) {
+    const step = allSteps[i];
+    if (step.linkedIngredients) {
+      step.linkedIngredients.forEach((link: any) => {
+        usedIngredients.add(link.ingredientId);
+      });
     }
   }
   
   return usedIngredients;
 }
 
-// Helper function to calculate the global step index
-function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: number, targetStepIndex: number) {
-  let globalIndex = 0;
-  
-  for (let groupIndex = 0; groupIndex < preparationGroups.length; groupIndex++) {
-    const group = preparationGroups[groupIndex];
-    
-    if (groupIndex < targetGroupIndex) {
-      // Add all steps from previous groups
-      globalIndex += group.steps.filter((step: any) => 'text' in step).length;
-    } else if (groupIndex === targetGroupIndex) {
-      // Add steps from current group up to target step
-      globalIndex += targetStepIndex;
-      break;
+// Helper function to calculate the global step index (recursively)
+// Returns the global step index if found, or -1 if not found
+// The currentIndex parameter is mutated to track the current position
+function calculateGlobalStepIndexRecursive(preparationGroups: any[], targetGroup: any, targetItem: any, currentIndex: { value: number } = { value: 0 }): number {
+  for (const group of preparationGroups) {
+    if (group === targetGroup) {
+      // We're in the target group - count steps until we find the target item
+      if (group.steps) {
+        for (const item of group.steps) {
+          if (item === targetItem) {
+            // Found the target item
+            if ('text' in item) {
+              return currentIndex.value;
+            }
+            // If it's a nested group, the target is the group itself
+            // Return current index (before counting steps in the nested group)
+            if ('steps' in item) {
+              return currentIndex.value;
+            }
+            // Unknown item type, return current index
+            return currentIndex.value;
+          }
+          // Count steps as we iterate (matching getAllStepsRecursive order)
+          if ('text' in item) {
+            currentIndex.value++;
+          } else if ('steps' in item) {
+            // Nested group - check if target is inside it
+            const indexBeforeNested = currentIndex.value;
+            // Create a separate counter for searching (to avoid mutating currentIndex if not found)
+            const searchIndex = { value: indexBeforeNested };
+            // Search for target in the nested group (pass the nested group's steps, not the group itself)
+            const nestedIndex = calculateGlobalStepIndexRecursive([item], item, targetItem, searchIndex);
+            if (nestedIndex !== -1) {
+              // Found target in nested group - update main counter and return
+              currentIndex.value = nestedIndex;
+              return nestedIndex;
+            }
+            // Target not in nested group - count all steps in nested group
+            // Pass the nested group as both the groups array and targetGroup to count all steps
+            const countIndex = { value: indexBeforeNested };
+            calculateGlobalStepIndexRecursive([item], item, null, countIndex);
+            // Update main counter with the count from nested group
+            currentIndex.value = countIndex.value;
+            // Continue to next item (currentIndex now points after nested group)
+          }
+        }
+      }
+      // Target not found in this group
+      return -1;
+    } else {
+      // Count all steps in this group (recursively) - target is in a different group
+      if (group.steps) {
+        group.steps.forEach((item: any) => {
+          if ('text' in item) {
+            currentIndex.value++;
+          } else if ('steps' in item) {
+            // Recursively count all steps in nested group (target is null, so just count)
+            calculateGlobalStepIndexRecursive([item], item, null, currentIndex);
+          }
+        });
+      }
     }
   }
-  
-  return globalIndex;
+  // Target not found
+  return -1;
 }
 ---
 
@@ -117,106 +250,263 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
     ) : (
       <div class="space-y-4">
         {/* First show ungrouped steps */}
-        {preparationGroups.filter(group => group && !group.title).map((group, groupIndex) => {
-        const ungroupedGroupIndex = recipe.preparationGroups.findIndex(g => g === group);
-        
-        return (
-          <ol class="space-y-4">
-            {group.steps.map((step, index) => {
-              if (!('text' in step)) return null;
-              const preparationStep = step as PreparationStep;
+        {preparationGroups.filter(group => group && !group.title).map((group, ungroupedGroupIndex) => {
+            let stepCounter = { value: 0 };
+            
+            // Helper function to render a step
+            const renderStep = (step: PreparationStep, stepIndex: number, isNested: boolean = false) => {
               const allIngredients = getAllIngredients(recipe);
-              const globalStepIndex = calculateGlobalStepIndex(recipe.preparationGroups, ungroupedGroupIndex, index);
+              // Use pre-calculated index from map
+              const globalStepIndex = stepIndexMap.get(step) ?? 0;
               const usedIngredients = getUsedIngredients(recipe.preparationGroups, globalStepIndex);
-              const stepId = `ungrouped-${index}`;
-              
-              // Process text for both temperatures and timers
-              let processedText = processText(preparationStep.text);
-              processedText = processedText.replace(
-                /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
-                `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
-              );
-              
-              return (
-                <li class="flex space-x-4" id={`step-${stepId}`}>
-                  <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    {index + 1}
-                  </div>
-                  <div class="flex-1">
-                    <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={processedText}></p>
-                    
-                    {/* Linked Ingredients Tags */}
-                    {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
-                      <div class="flex flex-wrap gap-2 mt-2">
-                        {preparationStep.linkedIngredients.map((link) => {
-                          if (link.isIntermediate) {
-                            // Find intermediate ingredient from previous steps
-                            const allSteps = recipe.preparationGroups.flatMap(g => g.steps.filter(s => 'text' in s));
-                            let intermediateIngredient = null;
-                            for (const s of allSteps) {
-                              if (s.intermediateIngredients) {
-                                intermediateIngredient = s.intermediateIngredients.find(int => int.id === link.ingredientId);
-                                if (intermediateIngredient) break;
-                              }
+            // Use global step index to ensure unique IDs across all ungrouped groups
+            const stepId = `ungrouped-${ungroupedGroupIndex}-${globalStepIndex}`;
+            
+            // Process text for both temperatures and timers
+            let processedText = processText(step.text);
+            processedText = processedText.replace(
+              /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+              `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${step.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
+            );
+            
+            return (
+              <li class="flex space-x-4" id={`step-${stepId}`}>
+                <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                  {stepIndex + 1}
+                </div>
+                <div class="flex-1">
+                  <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={processedText}></p>
+                  
+                  {/* Linked Ingredients Tags */}
+                  {step.linkedIngredients && step.linkedIngredients.length > 0 && (
+                    <div class="flex flex-wrap gap-2 mt-2">
+                      {step.linkedIngredients.map((link) => {
+                        if (link.isIntermediate) {
+                          // Find intermediate ingredient from previous steps
+                          const allSteps = getAllStepsRecursive(recipe.preparationGroups);
+                          let intermediateIngredient = null;
+                          for (const s of allSteps) {
+                            if (s.intermediateIngredients) {
+                              intermediateIngredient = s.intermediateIngredients.find((int: any) => int.id === link.ingredientId);
+                              if (intermediateIngredient) break;
                             }
-                            if (!intermediateIngredient) return null;
-                            
-                            return (
-                              <button type="button" 
-                                      class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors tooltip-trigger"
-                                      data-tooltip={intermediateIngredient.description}>
-                                {intermediateIngredient.name}
-                              </button>
+                          }
+                          if (!intermediateIngredient) return null;
+                          
+                          return (
+                            <button type="button" 
+                                    class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors tooltip-trigger"
+                                    data-tooltip={intermediateIngredient.description}>
+                              {intermediateIngredient.name}
+                            </button>
+                          );
+                        } else {
+                          // Regular ingredient
+                          const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
+                          if (!ingredient || !('name' in ingredient)) return null;
+                          const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                          const wasUsedBefore = usedIngredients.has(link.ingredientId);
+                          let quantityElement = null;
+                          if (quantity.amount >= 1 && quantity.unit !== '') {
+                            quantityElement = (
+                              <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
+                                (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
+                              </span>
                             );
-                          } else {
-                            // Regular ingredient
-                            const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
-                            if (!ingredient || !('name' in ingredient)) return null;
-                            const quantity = ingredient.quantities[link.selectedQuantityIndex];
-                            const wasUsedBefore = usedIngredients.has(link.ingredientId);
-                            let quantityElement = null;
-                            if (quantity.amount >= 1 && quantity.unit !== '') {
-                              quantityElement = (
-                                <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
-                                  (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
-                                </span>
-                              );
-                            } else if (quantity.amount === 0 && quantity.unit !== '') {
-                              quantityElement = <span> ({quantity.unit})</span>;
-                            } else if (quantity.amount >= 1 && quantity.unit === '') {
-                              quantityElement = (
-                                <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
-                                  (<span class="amount-value">{quantity.amount}</span>)
-                                </span>
-                              );
-                            }
-                            
-                            return (
-                              <button type="button" 
-                                      class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors tooltip-trigger ${
-                                        wasUsedBefore 
-                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800' 
-                                          : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800'
-                                      }`}
-                                      data-tooltip={ingredient.description}>
-                                {ingredient.name}{quantityElement}
-                              </button>
+                          } else if (quantity.amount === 0 && quantity.unit !== '') {
+                            quantityElement = <span> ({quantity.unit})</span>;
+                          } else if (quantity.amount >= 1 && quantity.unit === '') {
+                            quantityElement = (
+                              <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
+                                (<span class="amount-value">{quantity.amount}</span>)
+                              </span>
                             );
                           }
-                        })}
-                      </div>
+                          
+                          return (
+                            <button type="button" 
+                                    class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors tooltip-trigger ${
+                                      wasUsedBefore 
+                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800' 
+                                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800'
+                                    }`}
+                                    data-tooltip={ingredient.description}>
+                              {ingredient.name}{quantityElement}
+                            </button>
+                          );
+                        }
+                      })}
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          };
+          
+          // Helper function to render items recursively
+          const renderItems = (items: any[], isNested: boolean = false, localStepIndex: { value: number } = { value: 0 }) => {
+            return items.map((item) => {
+              // Check if it's a step
+              if ('text' in item) {
+                const step = item as PreparationStep;
+                const currentIndex = localStepIndex.value;
+                localStepIndex.value++;
+                return renderStep(step, currentIndex, isNested);
+              }
+              // Check if it's a nested group
+              else if ('steps' in item) {
+                const nestedGroup = item as any;
+                // Create a new counter for the nested group so numbering restarts at 1
+                const nestedStepCounter = { value: 0 };
+                return (
+                  <li class="py-2">
+                    {nestedGroup.title && (
+                      <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2 text-sm ml-12">
+                        {nestedGroup.title}
+                      </h4>
                     )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        );
-      })}
+                    <ol class="space-y-4 ml-12">
+                      {renderItems(nestedGroup.steps || [], true, nestedStepCounter)}
+                    </ol>
+                  </li>
+                );
+              }
+              return null;
+            });
+          };
+          
+          return (
+            <ol class="space-y-4">
+              {renderItems(group.steps || [], false, stepCounter)}
+            </ol>
+          );
+        })}
       
       {/* Then show grouped steps */}
       {preparationGroups.filter(group => group && group.title).map((group) => {
-        const groupedGroupIndex = preparationGroups.findIndex(g => g === group);
+          const groupedGroupIndex = preparationGroups.findIndex(g => g === group);
+          let stepCounter = { value: 0 };
+          
+          // Helper function to render a step
+          const renderStep = (step: PreparationStep, stepIndex: number, groupTitle: string | null, isNested: boolean = false) => {
+            const allIngredients = getAllIngredients(recipe);
+            // Use pre-calculated index from map
+            const globalStepIndex = stepIndexMap.get(step) ?? 0;
+            const usedIngredients = getUsedIngredients(recipe.preparationGroups, globalStepIndex);
+          const stepId = `${groupTitle?.toLowerCase().replace(/\s+/g, '-') || 'group'}-${stepIndex}`;
+          
+          // Process text for both temperatures and timers
+          let processedText = processText(step.text);
+          processedText = processedText.replace(
+            /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
+            `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${step.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
+          );
+          
+          return (
+            <li class="flex space-x-4" id={`step-${stepId}`}>
+              <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                {stepIndex + 1}
+              </div>
+              <div class="flex-1">
+                <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={processedText}></p>
+                
+                {/* Linked Ingredients Tags */}
+                {step.linkedIngredients && step.linkedIngredients.length > 0 && (
+                  <div class="flex flex-wrap gap-2 mt-2">
+                    {step.linkedIngredients.map((link) => {
+                      if (link.isIntermediate) {
+                        // Find intermediate ingredient from previous steps
+                        const allSteps = getAllStepsRecursive(recipe.preparationGroups);
+                        let intermediateIngredient = null;
+                        for (const s of allSteps) {
+                          if (s.intermediateIngredients) {
+                            intermediateIngredient = s.intermediateIngredients.find((int: any) => int.id === link.ingredientId);
+                            if (intermediateIngredient) break;
+                          }
+                        }
+                        if (!intermediateIngredient) return null;
+                        
+                        return (
+                          <button type="button" 
+                                  class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors tooltip-trigger"
+                                  data-tooltip={intermediateIngredient.description}>
+                            {intermediateIngredient.name}
+                          </button>
+                        );
+                      } else {
+                        // Regular ingredient
+                        const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
+                        if (!ingredient || !('name' in ingredient)) return null;
+                        const quantity = ingredient.quantities[link.selectedQuantityIndex];
+                        const wasUsedBefore = usedIngredients.has(link.ingredientId);
+                        let quantityElement = null;
+                        if (quantity.amount >= 1 && quantity.unit !== '') {
+                          quantityElement = (
+                            <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
+                              (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
+                            </span>
+                          );
+                        } else if (quantity.amount === 0 && quantity.unit !== '') {
+                          quantityElement = <span> ({quantity.unit})</span>;
+                        } else if (quantity.amount >= 1 && quantity.unit === '') {
+                          quantityElement = (
+                            <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
+                              (<span class="amount-value">{quantity.amount}</span>)
+                            </span>
+                          );
+                        }
+                        
+                        return (
+                          <button type="button" 
+                                  class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors tooltip-trigger ${
+                                    wasUsedBefore 
+                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800' 
+                                      : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800'
+                                  }`}
+                                  data-tooltip={ingredient.description}>
+                            {ingredient.name}{quantityElement}
+                          </button>
+                        );
+                      }
+                    })}
+                  </div>
+                )}
+              </div>
+            </li>
+          );
+        };
+        
+        // Helper function to render items recursively
+        const renderItems = (items: any[], parentTitle: string | null, isNested: boolean = false, localStepIndex: { value: number } = { value: 0 }) => {
+          return items.map((item) => {
+            // Check if it's a step
+            if ('text' in item) {
+              const step = item as PreparationStep;
+              const currentIndex = localStepIndex.value;
+              localStepIndex.value++;
+              return renderStep(step, currentIndex, parentTitle, isNested);
+            }
+            // Check if it's a nested group
+            else if ('steps' in item) {
+              const nestedGroup = item as any;
+              // Create a new counter for the nested group so numbering restarts at 1
+              const nestedStepCounter = { value: 0 };
+              return (
+                <li class="py-2">
+                  {nestedGroup.title && (
+                    <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2 text-sm ml-12">
+                      {nestedGroup.title}
+                    </h4>
+                  )}
+                  <ol class="space-y-4 ml-12">
+                    {renderItems(nestedGroup.steps || [], nestedGroup.title, true, nestedStepCounter)}
+                  </ol>
+                </li>
+              );
+            }
+            return null;
+          });
+        };
         
         return (
           <div>
@@ -224,94 +514,7 @@ function calculateGlobalStepIndex(preparationGroups: any[], targetGroupIndex: nu
               {group.title}
             </h3>
             <ol class="space-y-4">
-              {(group.steps || []).map((step, index) => {
-                if (!('text' in step)) return null;
-                const preparationStep = step as PreparationStep;
-                const allIngredients = getAllIngredients(recipe);
-                const globalStepIndex = calculateGlobalStepIndex(recipe.preparationGroups, groupedGroupIndex, index);
-                const usedIngredients = getUsedIngredients(recipe.preparationGroups, globalStepIndex);
-                const stepId = `${group.title?.toLowerCase().replace(/\s+/g, '-') || 'group'}-${index}`;
-                
-                // Process text for both temperatures and timers
-                let processedText = processText(preparationStep.text);
-                processedText = processedText.replace(
-                  /(\d+(?:[,\.]\d+)?(?:[-–]\d+(?:[,\.]\d+)?)?\s*(?:Minuten?|Min\.?|Stunden?|Std\.?))/gi,
-                  `<button class="timer-trigger text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium" data-time="$1" data-recipe-name="${recipe.title}" data-step-description="${preparationStep.text.replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}" data-step-id="${stepId}">$1</button>`
-                );
-                
-                return (
-                  <li class="flex space-x-4" id={`step-${stepId}`}>
-                    <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                      {index + 1}
-                    </div>
-                    <div class="flex-1">
-                      <p class="text-gray-900 dark:text-white leading-relaxed mb-2" set:html={processedText}></p>
-                      
-                      {/* Linked Ingredients Tags */}
-                      {preparationStep.linkedIngredients && preparationStep.linkedIngredients.length > 0 && (
-                        <div class="flex flex-wrap gap-2 mt-2">
-                          {preparationStep.linkedIngredients.map((link) => {
-                            if (link.isIntermediate) {
-                              // Find intermediate ingredient from previous steps
-                              const allSteps = recipe.preparationGroups.flatMap(g => g.steps.filter(s => 'text' in s));
-                              let intermediateIngredient = null;
-                              for (const s of allSteps) {
-                                if (s.intermediateIngredients) {
-                                  intermediateIngredient = s.intermediateIngredients.find(int => int.id === link.ingredientId);
-                                  if (intermediateIngredient) break;
-                                }
-                              }
-                              if (!intermediateIngredient) return null;
-                              
-                              return (
-                                <button type="button" 
-                                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors tooltip-trigger"
-                                        data-tooltip={intermediateIngredient.description}>
-                                  {intermediateIngredient.name}
-                                </button>
-                              );
-                            } else {
-                              // Regular ingredient
-                              const ingredient = allIngredients.find(ing => ing.id === link.ingredientId);
-                              if (!ingredient || !('name' in ingredient)) return null;
-                              const quantity = ingredient.quantities[link.selectedQuantityIndex];
-                              const wasUsedBefore = usedIngredients.has(link.ingredientId);
-                              let quantityElement = null;
-                              if (quantity.amount >= 1 && quantity.unit !== '') {
-                                quantityElement = (
-                                  <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit={quantity.unit}>
-                                    (<span class="amount-value">{quantity.amount}</span> {quantity.unit})
-                                  </span>
-                                );
-                              } else if (quantity.amount === 0 && quantity.unit !== '') {
-                                quantityElement = <span> ({quantity.unit})</span>;
-                              } else if (quantity.amount >= 1 && quantity.unit === '') {
-                                quantityElement = (
-                                  <span class="ingredient-amount" data-original-amount={quantity.amount} data-unit="">
-                                    (<span class="amount-value">{quantity.amount}</span>)
-                                  </span>
-                                );
-                              }
-                              
-                              return (
-                                <button type="button" 
-                                        class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors tooltip-trigger ${
-                                          wasUsedBefore 
-                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800' 
-                                            : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800'
-                                        }`}
-                                        data-tooltip={ingredient.description}>
-                                  {ingredient.name}{quantityElement}
-                                </button>
-                              );
-                            }
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
+              {renderItems(group.steps || [], group.title ?? null, false, stepCounter)}
             </ol>
           </div>
         );

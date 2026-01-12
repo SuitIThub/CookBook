@@ -128,69 +128,178 @@ const { recipe } = Astro.props;
           </div>
           
           <div class="ingredients-list space-y-3">
-            {group.ingredients.map((ingredient) => (
-              'name' in ingredient ? (
-                <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={(ingredient as Ingredient).id}>
-                  <div class="space-y-3">
-                    <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
-                      <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
-                        </svg>
-                      </div>
-                      <div class="flex-1 relative">
-                        <input 
-                          type="text" 
-                          value={(ingredient as Ingredient).name}
-                          placeholder="Zutatename"
-                          class="ingredient-name-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                        />
-                        <div class="ingredient-suggestions absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-20 max-h-32 overflow-y-auto">
+            {group.ingredients.map((item) => {
+              // Check if it's an ingredient (has 'name' property)
+              if ('name' in item) {
+                const ingredient = item as Ingredient;
+                return (
+                  <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={ingredient.id}>
+                    <div class="space-y-3">
+                      <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
+                        <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
+                          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                          </svg>
+                        </div>
+                        <div class="flex-1 relative">
+                          <input 
+                            type="text" 
+                            value={ingredient.name}
+                            placeholder="Zutatename"
+                            class="ingredient-name-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                          />
+                          <div class="ingredient-suggestions absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-20 max-h-32 overflow-y-auto">
+                          </div>
+                        </div>
+                        <div class="flex space-x-2 sm:space-x-3">
+                          <input 
+                            type="number" 
+                            value={ingredient.quantities[0]?.amount || ''}
+                            placeholder="Menge"
+                            step="0.1"
+                            class="w-20 sm:w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                          />
+                          <select class="ingredient-unit-select w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
+                            <option value={ingredient.quantities[0]?.unit || ''} selected>
+                              {ingredient.quantities[0]?.unit || 'Einheit'}
+                            </option>
+                          </select>
+                          <button 
+                            type="button" 
+                            class="remove-ingredient-btn px-2 py-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                          </button>
                         </div>
                       </div>
-                      <div class="flex space-x-2 sm:space-x-3">
+                      <div>
                         <input 
-                          type="number" 
-                          value={(ingredient as Ingredient).quantities[0]?.amount || ''}
-                          placeholder="Menge"
-                          step="0.1"
-                          class="w-20 sm:w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                          type="text" 
+                          value={ingredient.description || ''}
+                          placeholder="Beschreibung (optional)"
+                          class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
                         />
-                        <select class="ingredient-unit-select w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
-                          <option value={(ingredient as Ingredient).quantities[0]?.unit || ''} selected>
-                            {(ingredient as Ingredient).quantities[0]?.unit || 'Einheit'}
-                          </option>
-                        </select>
-                        <button 
-                          type="button" 
-                          class="remove-ingredient-btn px-2 py-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
-                        >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                          </svg>
-                        </button>
                       </div>
                     </div>
-                    <div>
+                  </div>
+                );
+              }
+              // Check if it's a nested group (has 'ingredients' property)
+              else if ('ingredients' in item) {
+                const nestedGroup = item as any;
+                return (
+                  <div class="nested-ingredient-group-edit border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700/30 transition-colors duration-200 ml-4" data-group-id={nestedGroup.id}>
+                    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
                       <input 
                         type="text" 
-                        value={(ingredient as Ingredient).description || ''}
-                        placeholder="Beschreibung (optional)"
-                        class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
+                        value={nestedGroup.title || ''}
+                        placeholder="Untergruppenname (optional)"
+                        class="group-title-input flex-1 px-3 py-2 text-sm font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-orange-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                       />
+                      <button 
+                        type="button" 
+                        class="remove-group-btn px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
                     </div>
+                    
+                    <div class="ingredients-list space-y-3 ml-2">
+                      {(nestedGroup.ingredients || []).map((nestedItem: any) => {
+                        if ('name' in nestedItem) {
+                          const nestedIngredient = nestedItem as Ingredient;
+                          return (
+                            <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={nestedIngredient.id}>
+                              <div class="space-y-3">
+                                <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
+                                  <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                                    </svg>
+                                  </div>
+                                  <div class="flex-1 relative">
+                                    <input 
+                                      type="text" 
+                                      value={nestedIngredient.name}
+                                      placeholder="Zutatename"
+                                      class="ingredient-name-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                                    />
+                                    <div class="ingredient-suggestions absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg mt-1 hidden z-20 max-h-32 overflow-y-auto">
+                                    </div>
+                                  </div>
+                                  <div class="flex space-x-2 sm:space-x-3">
+                                    <input 
+                                      type="number" 
+                                      value={nestedIngredient.quantities[0]?.amount || ''}
+                                      placeholder="Menge"
+                                      step="0.1"
+                                      class="w-20 sm:w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                                    />
+                                    <select class="ingredient-unit-select w-20 sm:w-24 px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs sm:text-sm">
+                                      <option value={nestedIngredient.quantities[0]?.unit || ''} selected>
+                                        {nestedIngredient.quantities[0]?.unit || 'Einheit'}
+                                      </option>
+                                    </select>
+                                    <button 
+                                      type="button" 
+                                      class="remove-ingredient-btn px-2 py-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                                    >
+                                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                                <div>
+                                  <input 
+                                    type="text" 
+                                    value={nestedIngredient.description || ''}
+                                    placeholder="Beschreibung (optional)"
+                                    class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        } else if ('ingredients' in nestedItem) {
+                          // Deeper nesting - render recursively (though unlikely)
+                          return null; // For now, we'll handle only one level of nesting in edit mode
+                        }
+                        return null;
+                      })}
+                    </div>
+                    
+                    <button 
+                      type="button" 
+                      class="add-ingredient-to-group-btn mt-3 px-3 py-2 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors w-full sm:w-auto"
+                    >
+                      + Zutat zu dieser Untergruppe hinzufügen
+                    </button>
                   </div>
-                </div>
-              ) : null
-            ))}
+                );
+              }
+              return null;
+            })}
           </div>
           
-          <button 
-            type="button" 
-            class="add-ingredient-to-group-btn mt-3 px-3 py-2 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors w-full sm:w-auto"
-          >
-            + Zutat zu dieser Gruppe hinzufügen
-          </button>
+          <div class="flex space-x-2 mt-3">
+            <button 
+              type="button" 
+              class="add-nested-group-btn px-3 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+            >
+              + Untergruppe hinzufügen
+            </button>
+            <button 
+              type="button" 
+              class="add-ingredient-to-group-btn px-3 py-2 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
+            >
+              + Zutat zu dieser Gruppe hinzufügen
+            </button>
+          </div>
         </div>
       ) : null
     )}
@@ -198,8 +307,15 @@ const { recipe } = Astro.props;
 </div> 
 
 <script>
+// Declare window properties
+declare global {
+  interface Window {
+    updateIngredientLinker?: () => void;
+  }
+}
+
 // Load and populate unit dropdowns
-let availableUnits = [];
+let availableUnits: Array<{ name: string }> = [];
 
 async function loadUnits() {
   try {
@@ -218,12 +334,13 @@ async function loadUnits() {
 function populateUnitDropdowns() {
   const unitSelects = document.querySelectorAll('.ingredient-unit-select');
   unitSelects.forEach(select => {
-    const currentValue = select.querySelector('option[selected]')?.value || '';
-    populateUnitDropdown(select, currentValue);
+    const selectElement = select as HTMLSelectElement;
+    const currentValue = selectElement.querySelector('option[selected]')?.getAttribute('value') || '';
+    populateUnitDropdown(selectElement, currentValue);
   });
 }
 
-function populateUnitDropdown(selectElement, selectedValue = '') {
+function populateUnitDropdown(selectElement: HTMLSelectElement, selectedValue = '') {
   // Store the original selected value before clearing
   const originalValue = selectedValue || selectElement.value || '';
   
@@ -287,8 +404,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   let touchCurrentX = 0;
   let touchCurrentY = 0;
   let isDragging = false;
-  let dragPreview = null;
-  let touchTarget = null;
+  let dragPreview: HTMLElement | null = null;
+  let touchTarget: HTMLElement | null = null;
   
   // Track text selection in input fields
   let isMouseDownOnInput = false;
@@ -327,16 +444,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Add listeners to ingredient containers
     ingredientContainers.forEach(container => {
-      container.addEventListener('dragover', handleDragOver);
-      container.addEventListener('drop', handleDrop);
-      container.addEventListener('dragenter', handleDragEnter);
-      container.addEventListener('dragleave', handleDragLeave);
+      container.addEventListener('dragover', handleDragOver as EventListener);
+      container.addEventListener('drop', handleDrop as EventListener);
+      container.addEventListener('dragenter', handleDragEnter as EventListener);
+      container.addEventListener('dragleave', handleDragLeave as EventListener);
     });
     
     // Also add listeners to the ingredient group containers for better cross-group support
     ingredientGroups.forEach(group => {
-      group.addEventListener('dragover', handleDragOverGroup);
-      group.addEventListener('drop', handleDropGroup);
+      group.addEventListener('dragover', handleDragOverGroup as EventListener);
+      group.addEventListener('drop', handleDropGroup as EventListener);
     });
     
     updateIngredientEventListeners();
@@ -349,8 +466,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         item.setAttribute('data-drag-initialized', 'true');
         
         // Add mouse events to the whole item
-        item.addEventListener('dragstart', handleDragStart);
-        item.addEventListener('dragend', handleDragEnd);
+        item.addEventListener('dragstart', handleDragStart as EventListener);
+        item.addEventListener('dragend', handleDragEnd as EventListener);
         
         // Prevent drag when clicking on input fields
         const inputFields = item.querySelectorAll('input, textarea, select');
@@ -413,7 +530,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (isTouchDevice) {
           const dragHandle = item.querySelector('.drag-handle');
           if (dragHandle) {
-            dragHandle.addEventListener('touchstart', handleTouchStart, { passive: false });
+            dragHandle.addEventListener('touchstart', handleTouchStart as EventListener, { passive: false });
           }
         }
       }
@@ -421,10 +538,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Touch event handlers
-  function handleTouchStart(e) {
+  function handleTouchStart(e: TouchEvent) {
     e.preventDefault(); // Prevent default touch behavior
     const touch = e.touches[0];
-    const ingredientItem = e.currentTarget.closest('.ingredient-edit-item');
+    const ingredientItem = (e.currentTarget as HTMLElement)?.closest('.ingredient-edit-item') as HTMLElement;
     
     if (!ingredientItem) return;
     
@@ -447,15 +564,20 @@ document.addEventListener('DOMContentLoaded', async function() {
           const deltaY = Math.abs(currentTouch.clientY - touchStartY);
           
           // Start drag if moved more than 10px
-          if (deltaX > 10 || deltaY > 10) {
-            startTouchDrag(ingredientItem, currentTouch);
+          if ((deltaX > 10 || deltaY > 10) && currentTouch) {
+            // Create a mock Touch object for startTouchDrag
+            const mockTouch = {
+              clientX: currentTouch.clientX,
+              clientY: currentTouch.clientY
+            } as Touch;
+            startTouchDrag(ingredientItem, mockTouch);
           }
         }
       }
     }, 150);
   }
   
-  function handleTouchMove(e) {
+  function handleTouchMove(e: TouchEvent) {
     if (!touchTarget) return;
     
     const touch = e.touches[0];
@@ -491,12 +613,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Find element under touch point
     const elementBelow = document.elementFromPoint(touchCurrentX, touchCurrentY);
-    const ingredientsList = elementBelow?.closest('.ingredients-list');
+    const ingredientsList = elementBelow?.closest('.ingredients-list') as HTMLElement;
     
-    if (ingredientsList) {
+    if (ingredientsList && placeholder) {
       // Simulate drag over for positioning placeholder
       const afterElement = getTouchDragAfterElement(ingredientsList, touchCurrentY);
-      ingredientsList.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+      ingredientsList.querySelectorAll('.ingredient-placeholder').forEach((p: Element) => p.remove());
       
       if (afterElement == null) {
         ingredientsList.appendChild(placeholder);
@@ -507,7 +629,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       ingredientsList.classList.add('drag-over');
       
       // Remove drag-over from other containers
-      document.querySelectorAll('.ingredients-list').forEach(container => {
+      document.querySelectorAll('.ingredients-list').forEach((container: Element) => {
         if (container !== ingredientsList) {
           container.classList.remove('drag-over');
         }
@@ -515,7 +637,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   }
   
-  function handleTouchEnd(e) {
+  function handleTouchEnd(e: TouchEvent) {
     // Remove global listeners
     document.removeEventListener('touchmove', handleTouchMove);
     document.removeEventListener('touchend', handleTouchEnd);
@@ -534,7 +656,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const elementBelow = document.elementFromPoint(touchCurrentX, touchCurrentY);
     const targetContainer = elementBelow?.closest('.ingredients-list');
     
-    if (targetContainer && placeholder && placeholder.parentNode === targetContainer) {
+    if (targetContainer && placeholder && placeholder.parentNode === targetContainer && draggedElement) {
       // Perform drop
       const targetGroup = targetContainer.closest('.ingredient-group-edit');
       const targetIndex = Array.from(targetContainer.children).indexOf(placeholder);
@@ -554,7 +676,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       }
     } else {
       // Drop failed, restore element
-      if (draggedData.sourceGroup) {
+      if (draggedData.sourceGroup && draggedElement) {
         const sourceContainer = draggedData.sourceGroup.querySelector('.ingredients-list');
         if (sourceContainer) {
           sourceContainer.appendChild(draggedElement);
@@ -565,14 +687,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     endTouchDrag();
   }
   
-  function startTouchDrag(element, touch) {
+  function startTouchDrag(element: HTMLElement, touch: Touch) {
     isDragging = true;
     draggedElement = element;
+    
+    if (!draggedElement) return;
     
     const parent = draggedElement.parentNode;
     draggedData = {
       ingredientId: draggedElement.dataset.ingredientId,
-      sourceGroup: draggedElement.closest('.ingredient-group-edit'),
+      sourceGroup: draggedElement.closest('.ingredient-group-edit') as HTMLElement,
       sourceIndex: parent ? Array.from(parent.children).indexOf(draggedElement) : -1
     };
 
@@ -582,7 +706,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     placeholder.innerHTML = '<div class="text-center text-orange-600 dark:text-orange-400 font-medium">Hier ablegen</div>';
 
     // Create drag preview
-    dragPreview = draggedElement.cloneNode(true);
+    dragPreview = draggedElement.cloneNode(true) as HTMLElement;
     dragPreview.style.position = 'fixed';
     dragPreview.style.pointerEvents = 'none';
     dragPreview.style.zIndex = '1000';
@@ -623,8 +747,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   
   function getTouchDragAfterElement(container: Element, y: number) {
-    const draggableElements = [...container.querySelectorAll('.ingredient-edit-item:not(.dragging)')].filter(el => el !== draggedElement);
-    return draggableElements.reduce((closest, child) => {
+    const draggableElements = [...container.querySelectorAll('.ingredient-edit-item:not(.dragging)')].filter((el: Element) => el !== draggedElement) as HTMLElement[];
+    return draggableElements.reduce((closest: { offset: number; element: Element | null }, child: Element) => {
       const box = child.getBoundingClientRect();
       const offset = y - box.top - box.height / 2;
       if (offset < 0 && offset > closest.offset) {
@@ -632,21 +756,21 @@ document.addEventListener('DOMContentLoaded', async function() {
       } else {
         return closest;
       }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }, { offset: Number.NEGATIVE_INFINITY, element: null as Element | null }).element;
   }
 
   // Helper function to get current touch point
-  function getCurrentTouch() {
+  function getCurrentTouch(): { clientX: number; clientY: number } | null {
     return document.querySelector(':active') ? null : { clientX: touchCurrentX, clientY: touchCurrentY };
   }
   
   // Auto-scroll functionality
-  let autoScrollInterval = null;
+  let autoScrollInterval: ReturnType<typeof setInterval> | null = null;
   const SCROLL_ZONE = 150; // pixels from edge to trigger scroll (increased from 80)
   const SCROLL_SPEED_BASE = 8; // base pixels per interval (increased from 5)
   const SCROLL_ACCELERATION = 2; // acceleration factor based on proximity
   
-  function handleAutoScroll(touchY) {
+  function handleAutoScroll(touchY: number) {
     const viewportHeight = window.innerHeight;
     
     stopAutoScroll(); // Clear any existing interval
@@ -708,7 +832,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
   
   // Visual feedback for scroll zones
-  function updateScrollZoneIndicators(touchY) {
+  function updateScrollZoneIndicators(touchY: number) {
     const viewportHeight = window.innerHeight;
     
     // Remove existing indicators
@@ -750,7 +874,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   // Original drag handlers (for mouse/desktop)
-  function handleDragStart(e) {
+  function handleDragStart(e: DragEvent) {
     const target = e.target as HTMLElement;
     
     // Check if drag is starting from drag handle - always allow
@@ -813,11 +937,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
     
     // Allow drag - proceed with drag operation
-    draggedElement = e.currentTarget;
+    draggedElement = e.currentTarget as HTMLElement;
+    if (!draggedElement) return;
+    
     const parent = draggedElement.parentNode;
     draggedData = {
       ingredientId: draggedElement.dataset.ingredientId,
-      sourceGroup: draggedElement.closest('.ingredient-group-edit'),
+      sourceGroup: draggedElement.closest('.ingredient-group-edit') as HTMLElement,
       sourceIndex: parent ? Array.from(parent.children).indexOf(draggedElement) : -1
     };
 
@@ -832,7 +958,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   }
 
-  function handleDragEnd(e) {
+  function handleDragEnd(e: DragEvent) {
     if (draggedElement) {
       draggedElement.style.opacity = '1';
     }
@@ -845,32 +971,37 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
   }
 
-  function handleDragEnter(e) {
+  function handleDragEnter(e: DragEvent) {
     e.preventDefault();
-    e.currentTarget.classList.add('drag-over');
+    const target = e.currentTarget as HTMLElement;
+    if (target) {
+      target.classList.add('drag-over');
+    }
   }
 
-  function handleDragLeave(e) {
+  function handleDragLeave(e: DragEvent) {
     e.preventDefault();
-    const container = e.currentTarget;
+    const container = e.currentTarget as HTMLElement;
     // Use setTimeout to ensure this runs after any potential dragenter events
     setTimeout(() => {
-      if (!container.contains(e.relatedTarget)) {
+      if (!container.contains(e.relatedTarget as Node)) {
         container.classList.remove('drag-over');
         // Only remove placeholders from this specific container
-        container.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+        container.querySelectorAll('.ingredient-placeholder').forEach((p: Element) => p.remove());
       }
     }, 10);
   }
 
-  function handleDragOver(e) {
+  function handleDragOver(e: DragEvent) {
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     if (!draggedElement || !placeholder) return;
 
-    const container = e.currentTarget;
+    const container = e.currentTarget as HTMLElement;
+    if (!container) return;
+    
     const afterElement = getDragAfterElement(container, e.clientY);
-    container.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+    container.querySelectorAll('.ingredient-placeholder').forEach((p: Element) => p.remove());
     
     if (afterElement == null) {
       container.appendChild(placeholder);
@@ -879,11 +1010,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   }
 
-  function handleDrop(e) {
+  function handleDrop(e: DragEvent) {
     e.preventDefault();
     if (!draggedElement || !draggedData || !placeholder) return;
 
-    const targetContainer = e.currentTarget;
+    const targetContainer = e.currentTarget as HTMLElement;
+    if (!targetContainer) return;
+    
     const targetGroup = targetContainer.closest('.ingredient-group-edit');
     const targetIndex = Array.from(targetContainer.children).indexOf(placeholder);
     
@@ -906,16 +1039,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   }
 
-  function handleDragOverGroup(e) {
+  function handleDragOverGroup(e: DragEvent) {
     e.preventDefault();
     if (!draggedElement || !placeholder) return;
     
     // Find the ingredients-list within this group
-    const ingredientsContainer = e.currentTarget.querySelector('.ingredients-list');
+    const ingredientsContainer = (e.currentTarget as HTMLElement).querySelector('.ingredients-list') as HTMLElement;
     if (ingredientsContainer) {
       // Forward the event to the ingredients container
       const afterElement = getDragAfterElement(ingredientsContainer, e.clientY);
-      ingredientsContainer.querySelectorAll('.ingredient-placeholder').forEach(p => p.remove());
+      ingredientsContainer.querySelectorAll('.ingredient-placeholder').forEach((p: Element) => p.remove());
       
       if (afterElement == null) {
         ingredientsContainer.appendChild(placeholder);
@@ -927,25 +1060,39 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
   }
 
-  function handleDropGroup(e) {
+  function handleDropGroup(e: DragEvent) {
     e.preventDefault();
     if (!draggedElement || !draggedData || !placeholder) return;
     
     // Find the ingredients-list within this group
-    const ingredientsContainer = e.currentTarget.querySelector('.ingredients-list');
+    const ingredientsContainer = (e.currentTarget as HTMLElement).querySelector('.ingredients-list') as HTMLElement;
     if (ingredientsContainer && ingredientsContainer.contains(placeholder)) {
-      // Forward to the regular drop handler
-      const fakeEvent = { 
-        preventDefault: () => {}, 
-        currentTarget: ingredientsContainer 
-      };
-      handleDrop(fakeEvent);
+      // Forward to the regular drop handler by calling the logic directly
+      const targetIndex = Array.from(ingredientsContainer.children).indexOf(placeholder);
+      
+      draggedElement.remove();
+      
+      if (targetIndex >= ingredientsContainer.children.length - 1) {
+        ingredientsContainer.appendChild(draggedElement);
+      } else {
+        const nextElement = ingredientsContainer.children[targetIndex + 1];
+        ingredientsContainer.insertBefore(draggedElement, nextElement);
+      }
+      
+      placeholder.remove();
+      ingredientsContainer.classList.remove('drag-over');
+      draggedElement.style.opacity = '1';
+
+      // Update ingredient linker if available
+      if (window.updateIngredientLinker) {
+        window.updateIngredientLinker();
+      }
     }
   }
 
-  function getDragAfterElement(container: any, y: number) {
-    const draggableElements = [...container.querySelectorAll('.ingredient-edit-item:not(.dragging)')];
-    return draggableElements.reduce((closest, child) => {
+  function getDragAfterElement(container: Element, y: number) {
+    const draggableElements = [...container.querySelectorAll('.ingredient-edit-item:not(.dragging)')] as HTMLElement[];
+    return draggableElements.reduce((closest: { offset: number; element: Element | null }, child: Element) => {
       const box = child.getBoundingClientRect();
       const offset = y - box.top - box.height / 2;
       if (offset < 0 && offset > closest.offset) {
@@ -953,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       } else {
         return closest;
       }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }, { offset: Number.NEGATIVE_INFINITY, element: null as Element | null }).element;
   }
 
   const style = document.createElement('style');
@@ -1034,7 +1181,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (mutation.type === 'childList') {
         mutation.addedNodes.forEach(function(node) {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            const element = node;
+            const element = node as Element;
             if (element.classList && element.classList.contains('ingredient-edit-item')) {
               updateIngredientEventListeners();
             } else if (element.classList && element.classList.contains('ingredient-group-edit')) {
