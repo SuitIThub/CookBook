@@ -20,8 +20,11 @@ declare global {
         <button id="import-file-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-l-lg border-r border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
           Datei
         </button>
-        <button id="import-url-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
+        <button id="import-url-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 border-r border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
           URL
+        </button>
+        <button id="import-text-tab" class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-orange-50 dark:focus:bg-orange-900/50 transition-colors">
+          Text
         </button>
       </div>
     </div>
@@ -116,6 +119,26 @@ declare global {
       </div>
     </div>
     
+    <!-- Text Import Content -->
+    <div id="import-text-content" class="hidden">
+      <div class="space-y-4">
+        <div>
+          <label for="recipe-text" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Rezept-JSON eingeben
+          </label>
+          <textarea 
+            id="recipe-text" 
+            rows="12"
+            placeholder='{"title": "Rezeptname", "ingredientGroups": [...], ...}' 
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-white font-mono text-sm"
+          ></textarea>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Fügen Sie hier direkt den JSON-Code für ein oder mehrere Rezepte ein
+          </p>
+        </div>
+      </div>
+    </div>
+    
     <div class="mt-6 flex justify-end space-x-3">
       <button id="cancel-import" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Abbrechen</button>
       <button id="confirm-import" class="px-4 py-2 text-sm font-medium text-white bg-orange-500 border border-transparent rounded-md hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>Importieren</button>
@@ -133,16 +156,21 @@ declare global {
   // Tab elements
   const importFileTab = document.getElementById('import-file-tab');
   const importUrlTab = document.getElementById('import-url-tab');
+  const importTextTab = document.getElementById('import-text-tab');
   const importFileContent = document.getElementById('import-file-content');
   const importUrlContent = document.getElementById('import-url-content');
+  const importTextContent = document.getElementById('import-text-content');
   
   // URL elements
   const recipeUrl = document.getElementById('recipe-url') as HTMLInputElement;
   const urlPreview = document.getElementById('url-preview');
   const detectedSite = document.getElementById('detected-site');
   
+  // Text elements
+  const recipeText = document.getElementById('recipe-text') as HTMLTextAreaElement;
+  
   let selectedFile: File | null = null;
-  let currentImportType: 'file' | 'url' = 'file';
+  let currentImportType: 'file' | 'url' | 'text' = 'file';
   let supportedSites: any[] = [];
 
   // Load supported sites
@@ -163,6 +191,7 @@ declare global {
   // Tab switching
   importFileTab?.addEventListener('click', () => setImportType('file'));
   importUrlTab?.addEventListener('click', () => setImportType('url'));
+  importTextTab?.addEventListener('click', () => setImportType('text'));
 
   // File upload
   fileUpload?.addEventListener('change', (e) => {
@@ -188,39 +217,52 @@ declare global {
     }
   });
 
+  // Text input
+  recipeText?.addEventListener('input', () => {
+    updateImportButton();
+  });
+
   confirmImport?.addEventListener('click', async () => {
     if (currentImportType === 'file') {
       await handleFileImport();
-    } else {
+    } else if (currentImportType === 'url') {
       await handleUrlImport();
+    } else {
+      await handleTextImport();
     }
   });
 
-  function setImportType(type: 'file' | 'url') {
+  function setImportType(type: 'file' | 'url' | 'text') {
     currentImportType = type;
+    
+    // Reset all tabs
+    [importFileTab, importUrlTab, importTextTab].forEach(tab => {
+      if (tab) {
+        tab.classList.add('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
+        tab.classList.remove('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
+      }
+    });
+    
+    // Hide all content
+    importFileContent?.classList.add('hidden');
+    importUrlContent?.classList.add('hidden');
+    importTextContent?.classList.add('hidden');
     
     if (type === 'file') {
       // Activate file tab
       importFileTab?.classList.add('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
       importFileTab?.classList.remove('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      
-      // Deactivate URL tab
-      importUrlTab?.classList.add('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      importUrlTab?.classList.remove('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
-      
       importFileContent?.classList.remove('hidden');
-      importUrlContent?.classList.add('hidden');
-    } else {
+    } else if (type === 'url') {
       // Activate URL tab
       importUrlTab?.classList.add('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
       importUrlTab?.classList.remove('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      
-      // Deactivate file tab
-      importFileTab?.classList.add('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
-      importFileTab?.classList.remove('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
-      
       importUrlContent?.classList.remove('hidden');
-      importFileContent?.classList.add('hidden');
+    } else {
+      // Activate text tab
+      importTextTab?.classList.add('text-gray-900', 'dark:text-white', 'bg-white', 'dark:bg-gray-800');
+      importTextTab?.classList.remove('text-gray-500', 'dark:text-gray-400', 'bg-gray-50', 'dark:bg-gray-700');
+      importTextContent?.classList.remove('hidden');
     }
     
     updateImportButton();
@@ -473,6 +515,104 @@ declare global {
     resetImportModal();
   }
 
+  async function handleTextImport() {
+    const text = recipeText?.value.trim();
+    if (!text) return;
+
+    // Show loading state
+    if (confirmImport) {
+      (confirmImport as HTMLButtonElement).disabled = true;
+      (confirmImport as HTMLButtonElement).textContent = 'Importiere...';
+    }
+
+    try {
+      // Validate JSON first - this will throw SyntaxError if invalid
+      JSON.parse(text);
+
+      const response = await fetch('/api/recipes/import/text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text })
+      });
+
+      // Parse response JSON - this might also throw SyntaxError
+      let result;
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        // Response is not valid JSON
+        if (window.showError) {
+          window.showError(`Ungültige Server-Antwort: Die Antwort konnte nicht als JSON gelesen werden.`);
+        } else {
+          alert(`Ungültige Server-Antwort: Die Antwort konnte nicht als JSON gelesen werden.`);
+        }
+        return;
+      }
+
+      if (response.ok) {
+        const imageInfo = result.totalImages ? ` (mit ${result.totalImages} Bild(ern))` : '';
+        
+        // Hide import modal
+        importModal?.classList.add('hidden');
+        
+        if (result.imported === 1 && result.recipeId) {
+          // Single recipe imported - redirect to recipe page
+          if (window.showSuccess) {
+            await window.showSuccess(`Erfolgreich Rezept importiert${imageInfo}!`);
+          }
+          window.location.href = `/rezept/${result.recipeId}`;
+        } else {
+          // Multiple recipes imported - stay on recipe list
+          if (window.showSuccess) {
+            await window.showSuccess(`Erfolgreich ${result.imported} Rezept(e) importiert${imageInfo}!`);
+          }
+          window.location.reload();
+        }
+      } else {
+        // Server returned an error response
+        if (window.showError) {
+          window.showError(`Import fehlgeschlagen: ${result.error || 'Unbekannter Fehler'}`);
+        } else {
+          alert(`Import fehlgeschlagen: ${result.error || 'Unbekannter Fehler'}`);
+        }
+      }
+    } catch (error) {
+      // Handle different types of errors
+      if (error instanceof SyntaxError) {
+        // This is a JSON parse error from user input (line 530)
+        if (window.showError) {
+          window.showError(`Ungültiges JSON-Format: ${error.message}`);
+        } else {
+          alert(`Ungültiges JSON-Format: ${error.message}`);
+        }
+      } else if (error instanceof TypeError && error.message.includes('fetch')) {
+        // Network error
+        if (window.showError) {
+          window.showError(`Netzwerkfehler: ${error.message}`);
+        } else {
+          alert(`Netzwerkfehler: ${error.message}`);
+        }
+      } else {
+        // Other errors (shouldn't happen, but handle gracefully)
+        if (window.showError) {
+          window.showError(`Import fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+        } else {
+          alert(`Import fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    } finally {
+      // Reset loading state
+      if (confirmImport) {
+        (confirmImport as HTMLButtonElement).disabled = false;
+        (confirmImport as HTMLButtonElement).textContent = 'Importieren';
+      }
+
+      resetImportModal();
+    }
+  }
+
   function resetImportModal() {
     // Reset file upload
     selectedFile = null;
@@ -485,6 +625,11 @@ declare global {
       recipeUrl.value = '';
     }
     hideUrlPreview();
+    
+    // Reset text input
+    if (recipeText) {
+      recipeText.value = '';
+    }
     
     // Reset import button
     updateImportButton();
@@ -503,8 +648,10 @@ declare global {
     const button = confirmImport as HTMLButtonElement;
     if (currentImportType === 'file') {
       button.disabled = !selectedFile;
-    } else {
+    } else if (currentImportType === 'url') {
       button.disabled = !recipeUrl?.value.trim();
+    } else {
+      button.disabled = !recipeText?.value.trim();
     }
   }
 

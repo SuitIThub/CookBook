@@ -1,5 +1,5 @@
 ---
-import type { Recipe, Ingredient } from '../../../types/recipe';
+import type { Recipe, Ingredient, IngredientGroup } from '../../../types/recipe';
 import { formatQuantity } from '../../../lib/units';
 
 interface Props {
@@ -18,11 +18,24 @@ function formatQuantityForDisplay(amount: number, unit: string): { amount: numbe
   return { amount: formatted.amount, unit: formatted.unit };
 }
 
+// Recursive function to check if there are any ingredients (including nested)
+function hasAnyIngredientsRecursive(groups: IngredientGroup[]): boolean {
+  return groups.some(group => {
+    if (!group?.ingredients || group.ingredients.length === 0) return false;
+    return group.ingredients.some(item => {
+      if ('name' in item) {
+        return true; // It's an ingredient
+      } else if ('ingredients' in item) {
+        return hasAnyIngredientsRecursive([item as IngredientGroup]); // It's a nested group
+      }
+      return false;
+    });
+  });
+}
+
 // Safety check: ensure ingredientGroups exists and handle empty arrays
 const ingredientGroups = recipe?.ingredientGroups || [];
-const hasAnyIngredients = ingredientGroups.some(group => 
-  group?.ingredients && group.ingredients.length > 0
-);
+const hasAnyIngredients = hasAnyIngredientsRecursive(ingredientGroups);
 ---
 
 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors duration-200">
@@ -43,59 +56,22 @@ const hasAnyIngredients = ingredientGroups.some(group =>
         {/* First show ungrouped ingredients */}
         {ingredientGroups.filter(group => group && !group.title).map((group) => (
           <ul class="space-y-2">
-            {(group.ingredients || []).map((ingredient) => (
-              'name' in ingredient ? (
-                <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                  <div class="flex-1">
-                    <span class="font-medium text-gray-900 dark:text-white">{(ingredient as Ingredient).name}</span>
-                    {(ingredient as Ingredient).description && (
-                      <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                        {(ingredient as Ingredient).description}
-                      </div>
-                    )}
-                  </div>
-                  <div class="flex space-x-2">
-                    {((ingredient as Ingredient).quantities || []).map((qty, index) => {
-                      // Only show quantity if amount > 0 or unit is not empty
-                      if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
-                        const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
-                        return (
-                          <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
-                                data-original-amount={qty.amount} 
-                                data-unit={qty.unit}>
-                            <span class="amount-value">{formatted.amount}</span> {formatted.unit}
-                          </span>
-                        );
-                      }
-                      return null;
-                    })}
-                  </div>
-                </li>
-              ) : null
-            ))}
-          </ul>
-        ))}
-        
-        {/* Then show grouped ingredients */}
-        {ingredientGroups.filter(group => group && group.title).map((group) => (
-          <div>
-            <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2 border-b border-gray-200 dark:border-gray-600 pb-1">
-              {group.title}
-            </h3>
-            <ul class="space-y-2">
-              {(group.ingredients || []).map((ingredient) => (
-                'name' in ingredient ? (
+            {(group.ingredients || []).map((item) => {
+              // Check if it's an ingredient (has 'name' property)
+              if ('name' in item) {
+                const ingredient = item as Ingredient;
+                return (
                   <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                     <div class="flex-1">
-                      <span class="font-medium text-gray-900 dark:text-white">{(ingredient as Ingredient).name}</span>
-                      {(ingredient as Ingredient).description && (
+                      <span class="font-medium text-gray-900 dark:text-white">{ingredient.name}</span>
+                      {ingredient.description && (
                         <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                          {(ingredient as Ingredient).description}
+                          {ingredient.description}
                         </div>
                       )}
                     </div>
                     <div class="flex space-x-2">
-                      {((ingredient as Ingredient).quantities || []).map((qty, index) => {
+                      {(ingredient.quantities || []).map((qty, index) => {
                         // Only show quantity if amount > 0 or unit is not empty
                         if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
                           const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
@@ -111,8 +87,199 @@ const hasAnyIngredients = ingredientGroups.some(group =>
                       })}
                     </div>
                   </li>
-                ) : null
-              ))}
+                );
+              }
+              // Check if it's a nested group (has 'ingredients' property)
+              else if ('ingredients' in item) {
+                const nestedGroup = item as IngredientGroup;
+                return (
+                  <li class="py-2">
+                    {nestedGroup.title && (
+                      <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2 text-sm">
+                        {nestedGroup.title}
+                      </h4>
+                    )}
+                    <ul class="space-y-2 ml-4">
+                      {(nestedGroup.ingredients || []).map((nestedItem) => {
+                        if ('name' in nestedItem) {
+                          const nestedIngredient = nestedItem as Ingredient;
+                          return (
+                            <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                              <div class="flex-1">
+                                <span class="font-medium text-gray-900 dark:text-white">{nestedIngredient.name}</span>
+                                {nestedIngredient.description && (
+                                  <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                                    {nestedIngredient.description}
+                                  </div>
+                                )}
+                              </div>
+                              <div class="flex space-x-2">
+                                {(nestedIngredient.quantities || []).map((qty) => {
+                                  if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                                    const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
+                                    return (
+                                      <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
+                                            data-original-amount={qty.amount} 
+                                            data-unit={qty.unit}>
+                                        <span class="amount-value">{formatted.amount}</span> {formatted.unit}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })}
+                              </div>
+                            </li>
+                          );
+                        }
+                        return null;
+                      })}
+                    </ul>
+                  </li>
+                );
+              }
+              return null;
+            })}
+          </ul>
+        ))}
+        
+        {/* Then show grouped ingredients */}
+        {ingredientGroups.filter(group => group && group.title).map((group) => (
+          <div>
+            <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-2 border-b border-gray-200 dark:border-gray-600 pb-1">
+              {group.title}
+            </h3>
+            <ul class="space-y-2">
+              {(group.ingredients || []).map((item) => {
+                // Check if it's an ingredient (has 'name' property)
+                if ('name' in item) {
+                  const ingredient = item as Ingredient;
+                  return (
+                    <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                      <div class="flex-1">
+                        <span class="font-medium text-gray-900 dark:text-white">{ingredient.name}</span>
+                        {ingredient.description && (
+                          <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                            {ingredient.description}
+                          </div>
+                        )}
+                      </div>
+                      <div class="flex space-x-2">
+                        {(ingredient.quantities || []).map((qty, index) => {
+                          // Only show quantity if amount > 0 or unit is not empty
+                          if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                            const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
+                            return (
+                              <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
+                                    data-original-amount={qty.amount} 
+                                    data-unit={qty.unit}>
+                                <span class="amount-value">{formatted.amount}</span> {formatted.unit}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                    </li>
+                  );
+                }
+                // Check if it's a nested group (has 'ingredients' property)
+                else if ('ingredients' in item) {
+                  const nestedGroup = item as IngredientGroup;
+                  return (
+                    <li class="py-2">
+                      {nestedGroup.title && (
+                        <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2 text-sm">
+                          {nestedGroup.title}
+                        </h4>
+                      )}
+                      <ul class="space-y-2 ml-4">
+                        {(nestedGroup.ingredients || []).map((nestedItem) => {
+                          // Recursively handle nested ingredients and groups
+                          if ('name' in nestedItem) {
+                            const nestedIngredient = nestedItem as Ingredient;
+                            return (
+                              <li class="flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                <div class="flex-1">
+                                  <span class="font-medium text-gray-900 dark:text-white">{nestedIngredient.name}</span>
+                                  {nestedIngredient.description && (
+                                    <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                                      {nestedIngredient.description}
+                                    </div>
+                                  )}
+                                </div>
+                                <div class="flex space-x-2">
+                                  {(nestedIngredient.quantities || []).map((qty) => {
+                                    if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                                      const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
+                                      return (
+                                        <span class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" 
+                                              data-original-amount={qty.amount} 
+                                              data-unit={qty.unit}>
+                                          <span class="amount-value">{formatted.amount}</span> {formatted.unit}
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })}
+                                </div>
+                              </li>
+                            );
+                          } else if ('ingredients' in nestedItem) {
+                            // Handle deeper nesting (though unlikely, but possible)
+                            const deeperGroup = nestedItem as IngredientGroup;
+                            return (
+                              <li class="py-2">
+                                {deeperGroup.title && (
+                                  <h5 class="font-medium text-gray-600 dark:text-gray-400 mb-1 text-xs">
+                                    {deeperGroup.title}
+                                  </h5>
+                                )}
+                                <ul class="space-y-1 ml-4">
+                                  {(deeperGroup.ingredients || []).map((deepItem) => {
+                                    if ('name' in deepItem) {
+                                      const deepIngredient = deepItem as Ingredient;
+                                      return (
+                                        <li class="flex justify-between items-center py-1 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                          <div class="flex-1">
+                                            <span class="text-sm font-medium text-gray-900 dark:text-white">{deepIngredient.name}</span>
+                                            {deepIngredient.description && (
+                                              <div class="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                                {deepIngredient.description}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div class="flex space-x-2">
+                                            {(deepIngredient.quantities || []).map((qty) => {
+                                              if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+                                                const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
+                                                return (
+                                                  <span class="ingredient-amount text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded" 
+                                                        data-original-amount={qty.amount} 
+                                                        data-unit={qty.unit}>
+                                                    <span class="amount-value">{formatted.amount}</span> {formatted.unit}
+                                                  </span>
+                                                );
+                                              }
+                                              return null;
+                                            })}
+                                          </div>
+                                        </li>
+                                      );
+                                    }
+                                    return null;
+                                  })}
+                                </ul>
+                              </li>
+                            );
+                          }
+                          return null;
+                        })}
+                      </ul>
+                    </li>
+                  );
+                }
+                return null;
+              })}
             </ul>
           </div>
         ))}

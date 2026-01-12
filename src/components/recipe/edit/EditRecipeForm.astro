@@ -933,8 +933,14 @@ const { recipe } = Astro.props;
 
     if (target.classList.contains('add-ingredient-to-group-btn')) {
       e.preventDefault();
-      const groupElement = target.closest('.ingredient-group-edit');
+      const groupElement = target.closest('.ingredient-group-edit, .nested-ingredient-group-edit');
       addIngredientToGroup(groupElement);
+    }
+    
+    if (target.classList.contains('add-nested-group-btn')) {
+      e.preventDefault();
+      const groupElement = target.closest('.ingredient-group-edit, .nested-ingredient-group-edit');
+      addNestedGroup(groupElement);
     }
     
     if (target.classList.contains('remove-ingredient-btn')) {
@@ -944,14 +950,20 @@ const { recipe } = Astro.props;
     
     if (target.classList.contains('remove-group-btn')) {
       e.preventDefault();
-      const groupElement = target.closest('.ingredient-group-edit');
+      const groupElement = target.closest('.ingredient-group-edit, .nested-ingredient-group-edit');
       removeIngredientGroup(groupElement);
     }
     
     if (target.classList.contains('add-step-to-group-btn')) {
       e.preventDefault();
-      const groupElement = target.closest('.preparation-group-edit');
+      const groupElement = target.closest('.preparation-group-edit, .nested-preparation-group-edit');
       addStepToGroup(groupElement);
+    }
+    
+    if (target.classList.contains('add-nested-prep-group-btn')) {
+      e.preventDefault();
+      const groupElement = target.closest('.preparation-group-edit, .nested-preparation-group-edit');
+      addNestedPrepGroup(groupElement);
     }
     
     if (target.classList.contains('remove-step-btn')) {
@@ -961,7 +973,7 @@ const { recipe } = Astro.props;
     
     if (target.classList.contains('remove-prep-group-btn')) {
       e.preventDefault();
-      const groupElement = target.closest('.preparation-group-edit');
+      const groupElement = target.closest('.preparation-group-edit, .nested-preparation-group-edit');
       removePreparationGroup(groupElement);
     }
   }
@@ -1080,37 +1092,90 @@ const { recipe } = Astro.props;
     }
   }
 
-  function createIngredientGroupElement(id, title) {
+  function createIngredientGroupElement(id, title, isNested = false) {
+    const containerClass = isNested 
+      ? 'nested-ingredient-group-edit border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700/30 transition-colors duration-200 ml-4'
+      : 'ingredient-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200';
+    
     return `
-      <div class="ingredient-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-group-id="${id}">
+      <div class="${containerClass}" data-group-id="${id}">
         <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
           <input 
             type="text" 
             value="${title}"
-            placeholder="Gruppenname"
-            class="group-title-input flex-1 px-3 py-2 text-base sm:text-lg font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-orange-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            placeholder="${isNested ? 'Untergruppenname (optional)' : 'Gruppenname'}"
+            class="group-title-input flex-1 px-3 py-2 ${isNested ? 'text-sm' : 'text-base sm:text-lg'} font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-orange-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
           />
+          <div class="flex space-x-2">
+            ${!isNested ? `
+            <button 
+              type="button" 
+              class="add-nested-group-btn px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+              title="Untergruppe hinzufügen"
+            >
+              + Untergruppe
+            </button>
+            ` : ''}
+            <button 
+              type="button" 
+              class="remove-group-btn ${isNested ? '' : 'ml-0 sm:ml-3'} px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors self-end"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div class="ingredients-list space-y-3 ${isNested ? 'ml-2' : ''}">
+        </div>
+        
+        <div class="flex space-x-2 mt-3">
+          ${!isNested ? `
           <button 
             type="button" 
-            class="remove-group-btn ml-0 sm:ml-3 px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors self-end"
+            class="add-nested-group-btn px-3 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
+            + Untergruppe hinzufügen
+          </button>
+          ` : ''}
+          <button 
+            type="button" 
+            class="add-ingredient-to-group-btn px-3 py-2 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors w-full sm:w-auto"
+          >
+            + Zutat ${isNested ? 'zu dieser Untergruppe' : 'zu dieser Gruppe'} hinzufügen
           </button>
         </div>
-        
-        <div class="ingredients-list space-y-3">
-        </div>
-        
-        <button 
-          type="button" 
-          class="add-ingredient-to-group-btn mt-3 px-3 py-2 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors w-full sm:w-auto"
-        >
-          + Zutat zu dieser Gruppe hinzufügen
-        </button>
       </div>
     `;
+  }
+
+  function addNestedGroup(parentGroupElement) {
+    if (!parentGroupElement) return;
+    
+    const ingredientsList = parentGroupElement.querySelector('.ingredients-list');
+    if (!ingredientsList) return;
+    
+    const nestedGroupId = generateId();
+    const nestedGroupHtml = createIngredientGroupElement(nestedGroupId, '', true);
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = nestedGroupHtml;
+    const nestedGroupElement = tempDiv.firstElementChild;
+    
+    ingredientsList.appendChild(nestedGroupElement);
+    
+    // Focus on the nested group title input
+    const titleInput = nestedGroupElement.querySelector('.group-title-input');
+    if (titleInput) {
+      titleInput.focus();
+    }
+    
+    // Update ingredient linker
+    updateIngredientLinker();
+    
+    // Trigger draft save
+    handleDraftChange();
   }
 
   function removeIngredient(button) {
@@ -1270,43 +1335,98 @@ const { recipe } = Astro.props;
     }
   }
 
-  function createPreparationGroupElement(id, title) {
+  function createPreparationGroupElement(id, title, isNested = false) {
+    const containerClass = isNested 
+      ? 'nested-preparation-group-edit border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700/30 transition-colors duration-200 ml-4'
+      : 'preparation-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200';
+    
     return `
-      <div class="preparation-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-group-id="${id}">
-        <div class="flex justify-between items-center mb-3">
+      <div class="${containerClass}" data-group-id="${id}">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
           <input 
             type="text" 
             value="${title}"
-            placeholder="Gruppenname"
-            class="group-title-input flex-1 px-3 py-2 text-lg font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-green-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            placeholder="${isNested ? 'Untergruppenname (optional)' : 'Gruppenname'}"
+            class="group-title-input flex-1 px-3 py-2 ${isNested ? 'text-sm' : 'text-lg'} font-medium border-b border-gray-300 dark:border-gray-600 focus:outline-none focus:border-green-500 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
           />
+          <div class="flex space-x-2">
+            ${!isNested ? `
+            <button 
+              type="button" 
+              class="add-nested-prep-group-btn px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+              title="Untergruppe hinzufügen"
+            >
+              + Untergruppe
+            </button>
+            ` : ''}
+            <button 
+              type="button" 
+              class="remove-prep-group-btn ${isNested ? '' : 'ml-0 sm:ml-3'} px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors self-end"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div class="steps-list space-y-4 min-h-[60px] relative ${isNested ? 'ml-2' : ''}">
+        </div>
+        
+        <div class="flex space-x-2 mt-3">
+          ${!isNested ? `
           <button 
             type="button" 
-            class="remove-prep-group-btn ml-3 px-2 py-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+            class="add-nested-prep-group-btn px-3 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
+            + Untergruppe hinzufügen
+          </button>
+          ` : ''}
+          <button 
+            type="button" 
+            class="add-step-to-group-btn px-3 py-2 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
+          >
+            + Schritt ${isNested ? 'zu dieser Untergruppe' : 'zu dieser Gruppe'} hinzufügen
           </button>
         </div>
-        
-        <div class="steps-list space-y-4 min-h-[60px] relative">
-        </div>
-        
-        <button 
-          type="button" 
-          class="add-step-to-group-btn mt-3 px-3 py-1 text-sm bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded transition-colors"
-        >
-          + Schritt zu dieser Gruppe hinzufügen
-        </button>
       </div>
     `;
+  }
+
+  function addNestedPrepGroup(parentGroupElement) {
+    if (!parentGroupElement) return;
+    
+    const stepsList = parentGroupElement.querySelector('.steps-list');
+    if (!stepsList) return;
+    
+    const nestedGroupId = generateId();
+    const nestedGroupHtml = createPreparationGroupElement(nestedGroupId, '', true);
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = nestedGroupHtml;
+    const nestedGroupElement = tempDiv.firstElementChild;
+    
+    stepsList.appendChild(nestedGroupElement);
+    
+    // Focus on the nested group title input
+    const titleInput = nestedGroupElement.querySelector('.group-title-input');
+    if (titleInput) {
+      titleInput.focus();
+    }
+    
+    // Trigger draft save
+    handleDraftChange();
   }
 
   function removePreparationStep(button) {
     const stepElement = button.closest('.step-edit-item');
     if (stepElement) {
-      const groupElement = stepElement.closest('.preparation-group-edit');
+      // Find the immediate parent group (could be nested or top-level)
+      // Check for nested group first, then fall back to top-level group
+      let groupElement = stepElement.closest('.nested-preparation-group-edit');
+      if (!groupElement) {
+        groupElement = stepElement.closest('.preparation-group-edit');
+      }
       stepElement.remove();
       if (groupElement) {
         updateStepNumbers(groupElement);
@@ -1325,11 +1445,35 @@ const { recipe } = Astro.props;
   }
 
   function updateStepNumbers(groupElement) {
-    const steps = groupElement.querySelectorAll('.step-edit-item');
-    steps.forEach((step, index) => {
-      const numberElement = step.querySelector('.bg-orange-500');
-      if (numberElement) {
-        numberElement.textContent = index + 1;
+    // Find the steps-list container first, then get its step children
+    // Steps are nested inside .steps-list, not direct children of the group
+    const stepsList = groupElement.querySelector('.steps-list');
+    if (stepsList) {
+      // Get only actual step elements, filtering out nested groups
+      const directSteps = Array.from(stepsList.children)
+        .filter(child => child.classList.contains('step-edit-item'));
+      
+      directSteps.forEach((step, index) => {
+        const numberElement = step.querySelector('.bg-green-500');
+        if (numberElement) {
+          numberElement.textContent = index + 1;
+        }
+      });
+    }
+    
+    // Also update step numbers in any nested groups within this group
+    const nestedGroups = groupElement.querySelectorAll('.nested-preparation-group-edit');
+    nestedGroups.forEach(nestedGroup => {
+      const nestedStepsList = nestedGroup.querySelector('.steps-list');
+      if (nestedStepsList) {
+        const nestedSteps = Array.from(nestedStepsList.children)
+          .filter(child => child.classList.contains('step-edit-item'));
+        nestedSteps.forEach((step, index) => {
+          const numberElement = step.querySelector('.bg-green-500');
+          if (numberElement) {
+            numberElement.textContent = index + 1;
+          }
+        });
       }
     });
   }
@@ -1362,69 +1506,98 @@ const { recipe } = Astro.props;
   function collectPreparationGroupsForLinker() {
     const preparationGroups = [];
     
-    // Collect all preparation group elements from the DOM
-    const groupElements = document.querySelectorAll('.preparation-group-edit');
+    // Helper function to collect items from a group element (recursively)
+    function collectItemsFromPrepGroup(groupElement) {
+      const items = [];
+      const stepsList = groupElement.querySelector('.steps-list');
+      if (!stepsList) return items;
+      
+      // Get direct children (steps and nested groups)
+      Array.from(stepsList.children).forEach((child) => {
+        // Check if it's a step
+        if (child.classList.contains('step-edit-item')) {
+          const textArea = child.querySelector('.step-text-input');
+          const stepId = child.dataset.stepId;
+          const stepText = textArea?.value.trim();
+          
+          // Only add steps with text or existing IDs
+          if (stepText || stepId) {
+            // Get existing linked ingredients from the linker's memory
+            let linkedIngredients = [];
+            if (window.ingredientLinker && stepId) {
+              linkedIngredients = window.ingredientLinker.linkedIngredients.get(stepId) || [];
+            }
+            
+            // Collect intermediate ingredients from this step
+            let intermediateIngredients = [];
+            if (window.intermediateIngredientManager && stepId) {
+              const intermediateItems = child.querySelectorAll('.intermediate-ingredient-item');
+              intermediateItems.forEach((item) => {
+                const nameInput = item.querySelector('.intermediate-name-input');
+                const descriptionInput = item.querySelector('.intermediate-description-input');
+                const intermediateId = item.dataset.intermediateId;
+
+                const name = nameInput?.value.trim();
+                if (name && intermediateId) {
+                  intermediateIngredients.push({
+                    id: intermediateId,
+                    name: name,
+                    description: descriptionInput?.value.trim() || undefined
+                  });
+                }
+              });
+            }
+            
+            items.push({
+              id: stepId || generateId(),
+              text: stepText || '',
+              linkedIngredients: linkedIngredients,
+              intermediateIngredients: intermediateIngredients
+            });
+          }
+        }
+        // Check if it's a nested group
+        else if (child.classList.contains('nested-preparation-group-edit')) {
+          const nestedTitleInput = child.querySelector('.group-title-input');
+          const nestedGroupTitle = nestedTitleInput?.value.trim() || null;
+          const nestedGroupId = child.dataset.groupId || generateId();
+          
+          // Recursively collect items from nested group
+          const nestedItems = collectItemsFromPrepGroup(child);
+          
+          // Only add nested group if it has items or a title
+          if (nestedItems.length > 0 || nestedGroupTitle) {
+            items.push({
+              id: nestedGroupId,
+              title: nestedGroupTitle,
+              steps: nestedItems
+            });
+          }
+        }
+      });
+      
+      return items;
+    }
     
-    groupElements.forEach((groupElement) => {
+    // Collect all top-level preparation group elements from the DOM
+    const topLevelGroups = document.querySelectorAll('.preparation-group-edit:not(.nested-preparation-group-edit)');
+    
+    topLevelGroups.forEach((groupElement) => {
       const titleInput = groupElement.querySelector('.group-title-input');
       const isDefaultGroup = groupElement.classList.contains('default-group');
       
       // Get group title (null for default group)
       const groupTitle = isDefaultGroup ? null : (titleInput?.value.trim() || null);
       
-      // Collect steps from this group
-      const steps = [];
-      const stepElements = groupElement.querySelectorAll('.step-edit-item');
+      // Recursively collect all items (steps and nested groups)
+      const items = collectItemsFromPrepGroup(groupElement);
       
-      stepElements.forEach((stepElement, index) => {
-        const textArea = stepElement.querySelector('.step-text-input');
-        const stepId = stepElement.dataset.stepId;
-        
-        const stepText = textArea?.value.trim();
-        
-        // Only add steps with text or existing IDs
-        if (stepText || stepId) {
-          // Get existing linked ingredients from the linker's memory
-          let linkedIngredients = [];
-          if (window.ingredientLinker && stepId) {
-            linkedIngredients = window.ingredientLinker.linkedIngredients.get(stepId) || [];
-          }
-          
-          // Collect intermediate ingredients from this step
-          let intermediateIngredients = [];
-          if (window.intermediateIngredientManager && stepId) {
-            const intermediateItems = stepElement.querySelectorAll('.intermediate-ingredient-item');
-            intermediateItems.forEach((item) => {
-              const nameInput = item.querySelector('.intermediate-name-input');
-              const descriptionInput = item.querySelector('.intermediate-description-input');
-              const intermediateId = item.dataset.intermediateId;
-
-              const name = nameInput?.value.trim();
-              if (name && intermediateId) {
-                intermediateIngredients.push({
-                  id: intermediateId,
-                  name: name,
-                  description: descriptionInput?.value.trim() || undefined
-                });
-              }
-            });
-          }
-          
-          steps.push({
-            id: stepId || generateId(),
-            text: stepText || '',
-            linkedIngredients: linkedIngredients,
-            intermediateIngredients: intermediateIngredients
-          });
-        }
-      });
-      
-      // Add group if it has steps or a title
-      if (steps.length > 0 || (groupTitle && groupTitle.length > 0)) {
+      // Add group if it has items or a title
+      if (items.length > 0 || (groupTitle && groupTitle.length > 0)) {
         preparationGroups.push({
           id: groupElement.dataset.groupId || generateId(),
           title: groupTitle,
-          steps: steps
+          steps: items
         });
       }
     });
@@ -1584,52 +1757,82 @@ const { recipe } = Astro.props;
   function collectIngredientGroups() {
     const ingredientGroups = [];
     
-    // Collect all ingredient group elements from the DOM
-    const groupElements = document.querySelectorAll('.ingredient-group-edit');
+    // Helper function to collect items from a group element (recursively)
+    function collectItemsFromGroup(groupElement) {
+      const items = [];
+      const ingredientsList = groupElement.querySelector('.ingredients-list');
+      if (!ingredientsList) return items;
+      
+      // Get direct children (ingredients and nested groups)
+      Array.from(ingredientsList.children).forEach((child) => {
+        // Check if it's an ingredient
+        if (child.classList.contains('ingredient-edit-item')) {
+          const nameInput = child.querySelector('.ingredient-name-input');
+          const descriptionInput = child.querySelector('.ingredient-description-input');
+          const amountInput = child.querySelector('input[type="number"]');
+          const unitSelect = child.querySelector('.ingredient-unit-select');
+          const ingredientId = child.dataset.ingredientId;
+          
+          const name = nameInput?.value.trim();
+          const description = descriptionInput?.value.trim();
+          const amount = parseFloat(amountInput?.value) || 0;
+          const unit = unitSelect?.value || '';
+          
+          // Only add ingredients with a name
+          if (name) {
+            items.push({
+              id: ingredientId || generateId(),
+              name: name,
+              description: description || undefined,
+              quantities: [{
+                amount: amount,
+                unit: unit
+              }]
+            });
+          }
+        }
+        // Check if it's a nested group
+        else if (child.classList.contains('nested-ingredient-group-edit')) {
+          const nestedTitleInput = child.querySelector('.group-title-input');
+          const nestedGroupTitle = nestedTitleInput?.value.trim() || null;
+          const nestedGroupId = child.dataset.groupId || generateId();
+          
+          // Recursively collect items from nested group
+          const nestedItems = collectItemsFromGroup(child);
+          
+          // Only add nested group if it has items or a title
+          if (nestedItems.length > 0 || nestedGroupTitle) {
+            items.push({
+              id: nestedGroupId,
+              title: nestedGroupTitle,
+              ingredients: nestedItems
+            });
+          }
+        }
+      });
+      
+      return items;
+    }
     
-    groupElements.forEach((groupElement) => {
+    // Collect all top-level ingredient group elements from the DOM
+    const topLevelGroups = document.querySelectorAll('.ingredient-group-edit:not(.nested-ingredient-group-edit)');
+    
+    topLevelGroups.forEach((groupElement) => {
       const titleInput = groupElement.querySelector('.group-title-input');
       const isDefaultGroup = groupElement.classList.contains('default-group');
       
       // Get group title (null for default group)
       const groupTitle = isDefaultGroup ? null : (titleInput?.value.trim() || null);
       
-      // Collect ingredients from this group
-      const ingredients = [];
-      const ingredientElements = groupElement.querySelectorAll('.ingredient-edit-item');
+      // Recursively collect all items (ingredients and nested groups)
+      const items = collectItemsFromGroup(groupElement);
       
-      ingredientElements.forEach((ingredientElement) => {
-        const nameInput = ingredientElement.querySelector('input[type="text"]');
-        const descriptionInput = ingredientElement.querySelector('.ingredient-description-input');
-        const amountInput = ingredientElement.querySelector('input[type="number"]');
-        const unitSelect = ingredientElement.querySelector('select');
-        const ingredientId = ingredientElement.dataset.ingredientId;
-        
-        const name = nameInput?.value.trim();
-        const description = descriptionInput?.value.trim();
-        const amount = parseFloat(amountInput?.value) || 0;
-        const unit = unitSelect?.value || '';
-        
-        // Only add ingredients with a name
-        if (name) {
-          ingredients.push({
-            id: ingredientId || generateId(),
-            name: name,
-            description: description || undefined,
-            quantities: [{
-              amount: amount,
-              unit: unit
-            }]
-          });
-        }
-      });
-      
-      // Only add groups that have ingredients or a title
-      if (ingredients.length > 0 || (groupTitle && groupTitle.length > 0)) {
+      // Only add groups that have items or a title
+      if (items.length > 0 || (groupTitle && groupTitle.length > 0)) {
         ingredientGroups.push({
           id: groupElement.dataset.groupId || generateId(),
           title: groupTitle,
-          ingredients: ingredients
+          ingredients: items
         });
       }
     });
