@@ -7,26 +7,142 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Development Status](https://img.shields.io/badge/Status-In_Development-orange?style=flat-square)](https://github.com/yourusername/cookbook)
 
-Eine moderne, digitale Kochbuch-Anwendung entwickelt mit Astro, TypeScript und Tailwind CSS. Perfekt für die Organisation Ihrer Lieblingsrezepte mit Timer-Funktionen, Einkaufslisten und responsivem Design.
+Eine moderne, digitale Kochbuch-Anwendung entwickelt mit Astro, TypeScript und Tailwind CSS. Perfekt für die Organisation Ihrer Lieblingsrezepte mit erweiterten Timer-Funktionen, intelligenten Einkaufslisten und einem einzigartigen Kochmodus.
 
-## Features
+## Was macht diese App besonders?
 
-### **Bereits implementiert**
-- **Rezeptübersicht** - Alle gespeicherten Rezepte auf einen Blick
-- **Detailansicht** - Strukturierte Anzeige mit Kopfbereich, Zutaten und Zubereitung
-- **Timer-Integration** - Klickbare Zeitangaben starten automatisch Timer
-- **Tooltip-System** - Zutatenverlinkungen mit Hover-Informationen
-- **Einkaufsliste** - Verwaltung von Einkaufsartikeln
-- **Responsive Design** - Optimiert für Desktop und Mobile
-- **Material Design** - Moderne, intuitive Benutzeroberfläche
+Diese Kochbuch-App hebt sich durch mehrere innovative Features von anderen Rezept-Apps ab:
 
-### **In Entwicklung**
-- Bearbeitungsmodus für Rezepte
-- Vollständige CRUD-Operationen
-- SQLite-Datenbankintegration
-- Zutatenvervollständigung
-- Import-/Export-Funktionalität
-- OAuth-Authentifizierung
+### **Intelligenter Rezept-Import**
+- **Multi-Site-Extraktor-System**: Automatischer Import von Rezepten direkt von beliebten deutschen Rezeptseiten (Chefkoch, Lecker, Gaumenfreundin) sowie generischer JSON-LD-Unterstützung
+- **Text-basierter Import**: Manuelles Einfügen von Rezepttexten mit automatischer Strukturierung
+- **Intelligente Erkennung**: Automatische Extraktion von Zutaten, Zubereitungsschritten, Zeiten, Schwierigkeitsgraden und Nährwerten
+
+### **Kochmodus (Cooking Mode)**
+- **Slide-basierte Navigation**: Vollbildmodus mit Wischgesten für optimale Nutzung während des Kochens
+- **Ein-Schritt-pro-Slide**: Jeder Zubereitungsschritt auf einer eigenen Seite für maximale Übersichtlichkeit
+- **Wake Lock API**: Verhindert automatisches Abschalten des Bildschirms während des Kochens
+- **Temperatur-Erkennung**: Automatische Erkennung und Anzeige von Temperaturen (inkl. Gasstufen-Umrechnung)
+
+### **Multi-Timer-System**
+- **Mehrere Timer gleichzeitig**: Mehrere Timer parallel laufen lassen
+- **Global & Lokal**: Timer können global (serverseitig) oder lokal (Browser) gespeichert werden
+- **Geräteübergreifende Synchronisation**: Timer werden über alle Geräte und Browser-Tabs synchronisiert
+- **Automatische Timer-Erkennung**: Klickbare Zeitangaben in Rezepten starten automatisch Timer
+- **Android-Integration**: Vollständige API für Android-Apps zur Timer-Integration
+
+### **Erweiterte Zutatenverlinkung**
+- **Intelligente Verlinkung**: Zutaten in Zubereitungsschritten werden automatisch mit der Zutatenliste verlinkt
+- **Zwischenprodukte**: Unterstützung für Zwischenprodukte (z.B. "Marinade", "Teig"), die während der Zubereitung entstehen
+- **Visuelle Indikatoren**: Farbcodierte Tags zeigen, ob Zutaten bereits verwendet wurden
+- **Tooltips**: Hover-Informationen mit Mengenangaben und Beschreibungen
+
+### **Intelligente Einkaufslisten**
+- **Automatische Gruppierung**: Zutaten werden automatisch nach Namen und Einheit gruppiert
+- **Manuelle Gruppierung**: Flexible manuelle Gruppierung von Artikeln
+- **Merge-Vorschläge**: KI-ähnliche Vorschläge zum Zusammenführen ähnlicher Artikel
+- **Rezept-Integration**: Ganze Rezepte mit anpassbaren Portionen zur Einkaufsliste hinzufügen
+- **Echtzeit-Updates**: Server-Sent Events (SSE) für Live-Updates bei mehreren Nutzern
+- **Rezept-Tracking**: Nachverfolgung, welche Artikel zu welchem Rezept gehören
+
+### **Draft-System mit Auto-Save**
+- **Automatisches Speichern**: Entwürfe werden automatisch während der Bearbeitung gespeichert
+- **Konflikt-Erkennung**: Warnung bei gleichzeitiger Bearbeitung von mehreren Geräten
+- **Wiederherstellung**: Automatische Wiederherstellung von Entwürfen beim erneuten Öffnen
+
+### **Nährwertanalyse**
+- **Visuelle Bewertung**: Farbcodierte Symbole für Kalorien, Kohlenhydrate, Eiweiß und Fett
+- **Pro Portion**: Alle Werte werden pro Portion angezeigt
+
+### **Erweiterte Bildverwaltung**
+- **Mehrfachbilder**: Unterstützung für mehrere Bilder pro Rezept
+- **Lightbox-Galerie**: Vollbildansicht mit Navigation
+- **Embedded Export**: Export mit Base64-kodierten Bildern (.rcb Format)
+
+## Vollständige Feature-Liste
+
+### Rezeptverwaltung
+-  Vollständige CRUD-Operationen (Erstellen, Lesen, Aktualisieren, Löschen)
+-  Hierarchische Zutaten- und Zubereitungsgruppen (geschachtelte Gruppen)
+-  Mehrere Mengenangaben pro Zutat (z.B. "500g oder 0,5kg")
+-  Flexible Zeitangaben (Vorbereitung, Kochzeit, Backzeit, Ruhezeit, etc.)
+-  Kategorien und Tags
+-  Mehrfachbilder pro Rezept
+-  Quell-URL-Tracking (Nachverfolgung, von welcher Website importiert)
+
+### Import & Export
+-  **URL-Import**: Direkter Import von Rezeptseiten (Chefkoch, Lecker, Gaumenfreundin, JSON-LD)
+-  **Text-Import**: Manuelles Einfügen von Rezepttexten
+-  **Datei-Import**: JSON und .rcb (mit eingebetteten Bildern)
+-  **Export**: JSON (ohne Bilder) oder .rcb (mit Base64-Bildern)
+-  **Bulk-Operationen**: Mehrere Rezepte gleichzeitig importieren/exportieren
+
+### Bearbeitungsmodus
+-  Vollständiger WYSIWYG-Editor für alle Rezeptfelder
+-  Drag & Drop für Zutaten- und Zubereitungsgruppen
+-  Automatische Zutatenvervollständigung
+-  Automatische Zutatenverlinkung in Zubereitungsschritten
+-  Zwischenprodukte erstellen und verlinken
+-  Einheiten-Umrechnung beim Speichern
+-  Draft-Auto-Save mit Konflikt-Erkennung
+
+### Timer-System
+-  Mehrere Timer gleichzeitig
+-  Global (serverseitig) und lokal (Browser) Timer
+-  Geräteübergreifende Synchronisation
+-  Automatische Timer-Erkennung in Rezepttexten
+-  Pause/Resume-Funktionalität
+-  Vor-/Zurückspulen (1, 5, 10 Minuten)
+-  Alarm bei Ablauf
+-  Android-API für Companion-Apps
+
+### Einkaufslisten
+-  Mehrere Einkaufslisten
+-  Rezepte mit anpassbaren Portionen hinzufügen
+-  Automatische Gruppierung nach Name und Einheit
+-  Manuelle Gruppierung von Artikeln
+-  Merge-Vorschläge für ähnliche Artikel
+-  Echtzeit-Updates (SSE)
+-  Rezept-Tracking (welche Artikel zu welchem Rezept)
+-  Checkbox-System zum Abhaken
+
+### Kochmodus
+-  Vollbildmodus mit Slide-Navigation
+-  Ein Schritt pro Slide
+-  Wischgesten (Touch) und Tastatur-Navigation
+-  Zutatenübersicht als erster Slide
+-  Klickbare Timer in Schritten
+-  Temperatur-Erkennung und -Anzeige
+-  Wake Lock (Bildschirm bleibt an)
+-  Responsive für Portrait und Landscape
+
+### Zutaten & Einheiten
+-  Umfangreiches Einheiten-System (Gewicht, Volumen, Stück, natürliche Einheiten)
+-  Automatische Umrechnung zwischen Einheiten
+-  Einheiten-Kategorien für bessere Organisation
+-  Unterstützung für deutsche Einheiten (TL, EL, etc.)
+
+### Nährwerte
+-  Kalorien pro Portion
+-  Makronährstoffe (Kohlenhydrate, Eiweiß, Fett)
+-  Visuelle Bewertung mit Symbolen
+-  Automatische Extraktion beim Import
+
+### Benutzeroberfläche
+-  Material Design inspiriert
+-  Dark Mode Unterstützung
+-  Vollständig responsive (Mobile, Tablet, Desktop)
+-  Touch-optimiert
+-  Tastatur-Navigation
+-  Accessibility-Features
+
+### Technische Features
+-  SQLite-Datenbank
+-  RESTful API
+-  Server-Sent Events für Echtzeit-Updates
+-  TypeScript für Typsicherheit
+-  Astro für optimale Performance
+-  PWA-ready (Service Worker vorhanden)
 
 ##  Technologie-Stack
 
@@ -115,19 +231,44 @@ interface Recipe {
 }
 ```
 
-### Besonderheiten
-- **Geschachtelte Gruppen**: Zutaten und Zubereitungsschritte in Kategorien
-- **Mehrfache Mengenangaben**: Flexible Mengeneinheiten pro Zutat
-- **Zutatenverlinkung**: Verweise zwischen Zubereitungsschritten und Zutaten
-- **Timer-Integration**: Automatische Zeitangaben-Erkennung
+### Besonderheiten des Datenmodells
+- **Geschachtelte Gruppen**: Zutaten und Zubereitungsschritte können in verschachtelten Gruppen organisiert werden
+- **Mehrfache Mengenangaben**: Jede Zutat kann mehrere Mengenangaben haben (z.B. "500g oder 0,5kg")
+- **Zutatenverlinkung**: Zutaten in Zubereitungsschritten werden mit der Zutatenliste verlinkt
+- **Zwischenprodukte**: Unterstützung für Zutaten, die während der Zubereitung entstehen (z.B. "Marinade", "Teig")
+- **Flexible Zeitangaben**: Mehrere Zeitangaben pro Rezept (Vorbereitung, Kochzeit, Backzeit, Ruhezeit, etc.)
+- **Mehrfachbilder**: Unterstützung für mehrere Bilder pro Rezept
+- **Nährwerte**: Optionale Nährwertinformationen pro Portion
 
 ## Design-Prinzipien
 
-- **Material Design**: Moderne, intuitive Benutzeroberfläche
-- **Mobile First**: Responsive Design für alle Geräte
+- **Material Design**: Moderne, intuitive Benutzeroberfläche inspiriert von Material Design
+- **Mobile First**: Responsive Design für alle Geräte (Mobile, Tablet, Desktop)
 - **Accessibility**: Tastaturnavigation und Screenreader-Support
-- **Performance**: Schnelle Ladezeiten durch Static Site Generation
-- **Internationalisierung**: Vorbereitet für mehrsprachige Unterstützung
+- **Performance**: Schnelle Ladezeiten durch Astro's Static Site Generation
+- **Touch-optimiert**: Optimiert für Touch-Gesten und mobile Nutzung
+- **Dark Mode**: Vollständige Dark Mode Unterstützung
+
+## Vergleich mit anderen Kochbuch-Apps
+
+### Was diese App einzigartig macht:
+
+1. **Kochmodus**: Keine andere App bietet einen vollständigen Slide-basierten Kochmodus mit Wake Lock
+2. **Multi-Timer**: Die meisten Apps unterstützen nur einen Timer - diese App unterstützt mehrere gleichzeitig mit Synchronisation
+3. **Intelligenter Import**: Multi-Site-Extraktor-System statt einfacher Copy-Paste
+4. **Zwischenprodukte**: Einzigartige Unterstützung für Zutaten, die während der Zubereitung entstehen
+5. **Echtzeit-Einkaufslisten**: Server-Sent Events für Live-Updates bei mehreren Nutzern
+6. **Draft-System**: Automatisches Speichern mit Konflikt-Erkennung
+7. **Hierarchische Gruppen**: Geschachtelte Gruppen für komplexe Rezepte
+8. **Android-Integration**: Vollständige API-Dokumentation für Companion-Apps
+
+### Unterstützte Import-Quellen
+
+-  **Chefkoch.de** - Vollständiger Extractor mit allen Features
+-  **Lecker.de** - Vollständiger Extractor mit allen Features  
+-  **Gaumenfreundin.de** - Vollständiger Extractor mit allen Features
+-  **JSON-LD** - Generischer Fallback für alle Websites mit JSON-LD Schema
+-  **Text-Import** - Manuelles Einfügen von Rezepttexten
 
 ## Verfügbare Commands
 
@@ -137,7 +278,11 @@ interface Recipe {
 | `npm run dev` | Entwicklungsserver starten (localhost:4321) |
 | `npm run build` | Production Build erstellen |
 | `npm run preview` | Build lokal testen |
-| `npm run init-db` | Datenbank initialisieren |
+| `npm run start` | Production Server starten |
+| `npm run db:init` | Datenbank initialisieren |
+| `npm run db:migrate` | Datenbank-Migrationen ausführen |
+| `npm run db:unify-units` | Rezept-Einheiten vereinheitlichen |
+| `npm run db:extract-urls` | Quell-URLs aus Rezepten extrahieren |
 | `npm run astro ...` | Astro CLI Commands ausführen |
 
 ## Entwicklung
@@ -206,6 +351,13 @@ Dieses Projekt steht unter der MIT-Lizenz. Siehe [LICENSE](LICENSE) für Details
 **Version**: 0.1.0  
 **Letzte Aktualisierung**: 2024
 
-[⬆ Nach oben](#-kochbuch-app)
+## Weitere Dokumentation
+
+- [API-Dokumentation](API_DOCUMENTATION.md) - Vollständige REST API Referenz
+- [Rezept JSON-Format](RECIPE_JSON_FORMAT.md) - Import/Export Format Spezifikation
+- [Android Timer Integration](ANDROID_TIMER_INTEGRATION.md) - Guide für Android Companion Apps
+- [Pflichtenheft](Pflichtenheft_KochbuchApp.md) - Detaillierte Anforderungen und Spezifikationen
+
+[Nach oben](#kochbuch-app)
 
 </div>
