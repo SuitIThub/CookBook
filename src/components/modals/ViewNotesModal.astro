@@ -1,0 +1,28 @@
+---
+// View Notes Modal: displays product(s) and their notes for shopping list items.
+// Content is filled by the parent page via getElementById('view-notes-content').
+// Close via data-close="view-notes-modal" or Escape (handled by page).
+---
+
+<style>
+  #view-notes-content .note-content img {
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+</style>
+<div id="view-notes-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="modal-overlay absolute inset-0" data-close="view-notes-modal"></div>
+  <div class="modal-content modal-wide mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl relative max-h-[90vh] flex flex-col">
+    <div class="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+      <h2 class="modal-title text-lg font-medium text-gray-900 dark:text-white">Notizen</h2>
+      <button type="button" class="modal-close text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none" data-close="view-notes-modal" aria-label="Schließen">&times;</button>
+    </div>
+    <div id="view-notes-content" class="modal-body p-4 overflow-y-auto flex-1 space-y-4">
+      <!-- Filled by parent page JS: product name + note per item -->
+    </div>
+    <div class="modal-footer p-4 border-t border-gray-200 dark:border-gray-700">
+      <button type="button" class="btn btn-secondary modal-close" data-close="view-notes-modal">Schließen</button>
+    </div>
+  </div>
+</div>

@@ -97,6 +97,7 @@ export interface ShoppingListItem {
   recipeId?: string; // Optional: verknüpft Item mit Rezept
   recipeIngredientId?: string; // Optional: Original Ingredient ID aus dem Rezept
   manualGroupId?: string; // Optional: ID for manually grouped items
+  note?: string; // Optional: rich text note for this product (HTML from TinyMCE)
 }
 
 export interface ShoppingListRecipe {

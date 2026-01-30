@@ -1,0 +1,52 @@
+---
+// Add/Edit Note Modal: TinyMCE editor for shopping list item notes.
+// Parent page loads TinyMCE, opens/closes modal, and handles save.
+// IDs: add-note-modal, add-note-item-selector-wrap, add-note-item-select,
+// add-note-modal-title, note-editor-container, note-editor-textarea, add-note-save-btn.
+---
+
+<div id="add-note-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="modal-overlay absolute inset-0" data-close="add-note-modal"></div>
+  <div class="modal-content modal-wide mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl relative max-h-[90vh] md:h-[80vh] md:max-h-[80vh] flex flex-col">
+    <!-- Saving overlay: blocks interaction and shows progress -->
+    <div id="add-note-saving-overlay" class="hidden absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-lg bg-white/90 dark:bg-gray-800/90">
+      <p class="text-gray-700 dark:text-gray-200 font-medium">Wird gespeichert...</p>
+      <div class="w-full max-w-xs h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+        <div class="add-note-progress-bar h-full bg-orange-500 dark:bg-orange-400 rounded-full"></div>
+      </div>
+    </div>
+    <div class="modal-header flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+      <h2 id="add-note-modal-title" class="modal-title text-lg font-medium text-gray-900 dark:text-white">Notiz hinzufügen</h2>
+      <button type="button" class="modal-close text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none" data-close="add-note-modal" aria-label="Schließen">&times;</button>
+    </div>
+    <div class="modal-body p-4 overflow-y-auto flex-1 flex flex-col min-h-0 space-y-4">
+      <div id="add-note-item-selector-wrap" class="hidden flex-shrink-0">
+        <label for="add-note-item-select" class="form-label">Notiz für</label>
+        <select id="add-note-item-select" class="form-input w-full">
+          <!-- Options filled by parent page when opening for a group -->
+        </select>
+      </div>
+      <div class="flex-1 flex flex-col min-h-0">
+        <label class="form-label flex-shrink-0">Notiz (Formatierung und Bilder möglich)</label>
+        <div id="note-editor-container" class="flex-1 min-h-[120px] border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
+          <textarea id="note-editor-textarea" class="w-full h-full min-h-[120px] p-3 border-0 form-textarea resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Notiz eingeben..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer p-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+      <button type="button" class="btn btn-secondary modal-close" data-close="add-note-modal">Abbrechen</button>
+      <button type="button" id="add-note-save-btn" class="btn btn-success">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  @keyframes add-note-progress {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+  }
+  .add-note-progress-bar {
+    animation: add-note-progress 1.2s ease-in-out infinite;
+  }
+</style>

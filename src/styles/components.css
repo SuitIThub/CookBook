@@ -713,6 +713,12 @@ input[type="number"] {
   @apply max-w-2xl;
 }
 
+/* 80% viewport width for notes/gallery modals */
+.modal-content.modal-wide {
+  width: 80vw;
+  max-width: 80vw;
+}
+
 /* Additional modal sizes and components */
 .modal-lg .modal-content {
   @apply max-w-4xl;
