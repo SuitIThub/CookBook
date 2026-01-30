@@ -4,6 +4,9 @@ import Layout from '../../layouts/Layout.astro';
 import { db } from '../../lib/database';
 import type { ShoppingList } from '../../types/recipe';
 import GroupingSuggestionModal from '../../components/shopping_list/GroupingSuggestionModal.astro';
+import ViewNotesModal from '../../components/modals/ViewNotesModal.astro';
+import AddNoteModal from '../../components/modals/AddNoteModal.astro';
+import ImageGalleryModal from '../../components/modals/ImageGalleryModal.astro';
 
 const { id } = Astro.params;
 
@@ -347,6 +350,11 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
   <!-- Grouping Suggestion Modal -->
   <GroupingSuggestionModal />
 
+  <ViewNotesModal />
+  <AddNoteModal />
+  <ImageGalleryModal />
+
+  <script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
   <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList }}>
     // Variables are already defined via define:vars
     let availableUnits = [];
@@ -886,6 +894,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             .filter(({ numericAmount }) => numericAmount !== 0); // Filter out zero amounts
           
           const hasMultipleUnits = quantitiesByUnit.length > 1;
+          const groupHasNote = group.items.some(item => item.note && item.note.trim() !== '');
           
           // First unit display (only shown if amount > 0)
           const firstUnitDisplay = quantitiesByUnit.length > 0 ? `
@@ -896,6 +905,20 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
               ${quantitiesByUnit[0].amount} ${quantitiesByUnit[0].unit}
             </span>
           ` : '';
+          
+          // Info icon (when any item in group has a note) - opens view-notes modal
+          const noteInfoIcon = groupHasNote ? `
+            <button type="button" class="item-note-info w-5 h-5 flex-shrink-0 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors flex items-center justify-center rounded" data-item-ids="${itemIds}" title="Notizen anzeigen" aria-label="Notizen anzeigen">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </button>
+          ` : '';
+          
+          // Add-note "+" button (shown on hover desktop; long-press mobile)
+          const addNotePlusBtn = `
+            <button type="button" class="item-add-note-plus add-note-plus-btn w-6 h-6 flex-shrink-0 flex items-center justify-center rounded text-gray-500 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-lg leading-none md:opacity-0 md:group-hover:opacity-100" data-item-ids="${itemIds}" title="Notiz hinzufügen" aria-label="Notiz hinzufügen">+</button>
+          `;
           
           // Additional units display (boxes below, aligned with first unit)
           const additionalUnitsDisplay = hasMultipleUnits ? `
@@ -911,10 +934,11 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             </div>
           ` : '';
           
-          // Create details for individual items if there are multiple
+          // Create details for individual items if there are multiple (each can have add-note +)
           const itemDetails = hasMultipleItems ? group.items.map((item, index) => {
             const sourceLabel = item.recipeId ? '🍳 Rezept' : '✋ Manuell';
             const sourceClass = item.recipeId ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400';
+            const itemHasNote = item.note && item.note.trim() !== '';
             
             let quantityDisplay = '';
             if (item.quantity && item.quantity.amount !== 0) {
@@ -926,13 +950,28 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
               quantityDisplay = `<span class="text-gray-700 dark:text-gray-300 font-mono">${itemAmount} ${formatted.unit}</span>`;
             }
             
+            const detailNoteInfo = itemHasNote ? `
+              <button type="button" class="detail-item-note-info w-4 h-4 flex-shrink-0 text-blue-600 dark:text-blue-400 hover:text-blue-800 flex items-center justify-center rounded" data-item-ids="${item.id}" title="Notiz anzeigen" aria-label="Notiz anzeigen">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </button>
+            ` : '';
+            const detailAddNotePlus = `
+              <button type="button" class="detail-item-add-note add-note-plus-btn w-5 h-5 flex-shrink-0 flex items-center justify-center rounded text-gray-400 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100" data-item-ids="${item.id}" title="Notiz hinzufügen" aria-label="Notiz hinzufügen">+</button>
+            `;
+            
             return `
-              <div class="detail-item flex justify-between items-center py-1 px-2 text-sm transition-colors" data-item-id="${item.id}">
-                <div class="flex items-center space-x-2">
+              <div class="detail-item group flex justify-between items-center py-1 px-2 text-sm transition-colors" data-item-id="${item.id}">
+                <div class="flex items-center space-x-2 min-w-0">
                   <span class="${sourceClass} text-xs font-medium">${sourceLabel}</span>
-                  ${item.description ? `<span class="text-gray-500">• ${item.description}</span>` : ''}
+                  ${item.description ? `<span class="text-gray-500 truncate">• ${item.description}</span>` : ''}
                 </div>
-                ${quantityDisplay}
+                <div class="flex items-center gap-1 flex-shrink-0">
+                  ${quantityDisplay}
+                  ${detailNoteInfo}
+                  ${detailAddNotePlus}
+                </div>
               </div>
             `;
           }).join('') : '';
@@ -942,8 +981,8 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           
           return `
             <div class="shopping-item-group ${rowBgClass} ${isSelected ? 'ring-2 ring-blue-500' : ''} border-b border-gray-200 dark:border-gray-700 last:border-b-0" data-item-ids="${itemIds}" data-recipe-ids="${recipeIds}" data-group-id="${groupId}">
-              <div class="shopping-item p-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors ${hasMultipleItems ? 'cursor-pointer' : ''}" ${hasMultipleItems ? 'data-expandable="true"' : ''}>
-                <!-- Main Row: Selection Checkbox (in grouping mode), Item Checkbox, Title, Description, Actions, and First Unit -->
+              <div class="shopping-item group p-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors ${hasMultipleItems ? 'cursor-pointer' : ''}" ${hasMultipleItems ? 'data-expandable="true"' : ''}>
+                <!-- Main Row: Selection Checkbox (in grouping mode), Item Checkbox, Title, Description, Actions, Add Note +, Amount, Info -->
                 <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
                   ${isGroupingMode ? `
                     <input 
@@ -978,7 +1017,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                       ${group.descriptions.join(', ')}
                     </p>
                   ` : ''}
-                  <div class="flex items-center gap-2 flex-shrink-0 ml-auto">
+                  <div class="flex items-center gap-1.5 flex-shrink-0 ml-auto">
                     ${recipeIds ? `
                       <button class="recipe-highlight-btn w-5 h-5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors flex-shrink-0" 
                               data-recipe-ids="${recipeIds}" 
@@ -993,7 +1032,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                       </svg>
                     ` : ''}
+                    ${addNotePlusBtn}
                     ${firstUnitDisplay}
+                    ${noteInfoIcon}
                   </div>
                 </div>
                 ${additionalUnitsDisplay}
@@ -1015,6 +1056,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         attachExpandListeners();
         attachRecipeHighlightListeners();
         attachGroupSelectionListeners();
+        attachNoteListeners();
         
         // Restore highlights if any recipe was selected
         if (currentlyHighlightedRecipe) {
@@ -1245,6 +1287,290 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
            });
          });
        }
+       
+       // --- Note modals and TinyMCE ---
+       let noteTinyMCE = null;
+       let addNoteTargetItemIds = null; // single item id or comma-separated for multi
+       
+       function openViewNotesModal(itemIdsStr) {
+         const ids = itemIdsStr.split(',').map(s => s.trim()).filter(Boolean);
+         const items = ids.map(id => shoppingListData.items.find(item => item.id === id)).filter(Boolean);
+         const viewContent = document.getElementById('view-notes-content');
+         if (!viewContent) return;
+         viewContent.innerHTML = items.map(item => {
+           const productLabel = item.name + (item.description ? ` • ${item.description}` : '');
+           const noteHtml = item.note && item.note.trim() !== '' ? item.note : '<p class="text-muted text-sm italic">Keine Notiz</p>';
+           return `
+             <div class="border-b border-gray-200 dark:border-gray-700 pb-4 last:border-b-0 last:pb-0">
+               <div class="font-medium text-gray-900 dark:text-white mb-2">${escapeHtml(productLabel)}</div>
+               <div class="prose prose-sm dark:prose-invert max-w-none note-content text-gray-700 dark:text-gray-300">${noteHtml}</div>
+             </div>
+           `;
+         }).join('');
+         const modal = document.getElementById('view-notes-modal');
+         if (modal) modal.classList.remove('hidden');
+         document.body.style.overflow = 'hidden';
+       }
+       
+       function closeViewNotesModal() {
+         const modal = document.getElementById('view-notes-modal');
+         if (modal) modal.classList.add('hidden');
+         document.body.style.overflow = '';
+       }
+       
+       function openAddNoteModal(itemIdsStr) {
+         addNoteTargetItemIds = itemIdsStr;
+         const ids = itemIdsStr.split(',').map(s => s.trim()).filter(Boolean);
+         const items = ids.map(id => shoppingListData.items.find(item => item.id === id)).filter(Boolean);
+         if (items.length === 0) return;
+         
+         const selectorWrap = document.getElementById('add-note-item-selector-wrap');
+         const selector = document.getElementById('add-note-item-select');
+         const titleEl = document.getElementById('add-note-modal-title');
+         if (items.length === 1) {
+           if (selectorWrap) selectorWrap.classList.add('hidden');
+           if (titleEl) titleEl.textContent = 'Notiz hinzufügen';
+           openAddNoteEditor(items[0]);
+         } else {
+           if (selectorWrap) selectorWrap.classList.remove('hidden');
+           if (selector) {
+             selector.innerHTML = items.map(item => `
+               <option value="${escapeHtml(item.id)}">${escapeHtml(item.name + (item.description ? ' • ' + item.description : ''))}</option>
+             `).join('');
+             selector.value = items[0].id;
+             openAddNoteEditor(items[0]);
+             selector.onchange = () => {
+               const selected = shoppingListData.items.find(i => i.id === selector.value);
+               if (selected) openAddNoteEditor(selected);
+             };
+           }
+           if (titleEl) titleEl.textContent = 'Notiz hinzufügen';
+         }
+         
+         const modal = document.getElementById('add-note-modal');
+         if (modal) modal.classList.remove('hidden');
+         document.body.style.overflow = 'hidden';
+       }
+       
+       function openAddNoteEditor(item) {
+         const existingEditor = typeof tinymce !== 'undefined' && tinymce.get('note-editor-textarea');
+         if (existingEditor) {
+           existingEditor.setContent(item.note || '');
+           return;
+         }
+         const textarea = document.getElementById('note-editor-textarea');
+         if (textarea) textarea.value = item.note || '';
+         
+         if (typeof tinymce !== 'undefined') {
+           requestAnimationFrame(() => {
+             const container = document.getElementById('note-editor-container');
+             const editorHeight = container ? Math.max(120, Math.round(container.getBoundingClientRect().height)) : 280;
+             tinymce.init({
+             selector: '#note-editor-textarea',
+             plugins: 'lists link image code paste',
+             toolbar: 'undo redo | bold italic | bullist numlist | link image gallery | code',
+             menubar: false,
+             height: editorHeight,
+             resize: false,
+             paste_data_images: true,
+             images_upload_handler: (blobInfo) => {
+               return new Promise((resolve) => {
+                 const reader = new FileReader();
+                 reader.onload = () => resolve(reader.result);
+                 reader.readAsDataURL(blobInfo.blob());
+               });
+             },
+             content_style: 'body { font-family: inherit; font-size: 14px; } body img { max-width: 100%; height: auto; object-fit: contain; }',
+             setup: (editor) => {
+               noteTinyMCE = editor;
+               editor.on('init', () => {
+                 editor.setContent(item.note || '');
+               });
+               editor.ui.registry.addButton('gallery', {
+                 icon: 'gallery',
+                 tooltip: 'Bild aus Galerie (Rezepte / Notizen)',
+                 onAction: () => {
+                   window.__onGalleryImageSelect = (url) => {
+                     if (url) editor.insertContent('<img src="' + url.replace(/"/g, '&quot;') + '" alt="" />');
+                     window.__onGalleryImageSelect = null;
+                   };
+                   if (typeof window.openImageGalleryModal === 'function') window.openImageGalleryModal();
+                 }
+               });
+               editor.ui.registry.addIcon('gallery', '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>');
+             }
+           });
+           });
+         }
+       }
+       
+       function getCurrentAddNoteItem() {
+         const selector = document.getElementById('add-note-item-select');
+         const ids = addNoteTargetItemIds ? addNoteTargetItemIds.split(',').map(s => s.trim()) : [];
+         if (selector && ids.length > 1) {
+           const id = selector.value;
+           return shoppingListData.items.find(item => item.id === id);
+         }
+         if (ids.length === 1) return shoppingListData.items.find(item => item.id === ids[0]);
+         return null;
+       }
+       
+       function showAddNoteSaving(show) {
+         const overlay = document.getElementById('add-note-saving-overlay');
+         const saveBtn = document.getElementById('add-note-save-btn');
+         if (overlay) overlay.classList.toggle('hidden', !show);
+         if (saveBtn) saveBtn.disabled = show;
+         document.querySelectorAll('#add-note-modal .modal-close').forEach(btn => { btn.disabled = show; });
+         const ed = typeof tinymce !== 'undefined' ? tinymce.get('note-editor-textarea') : null;
+         if (ed) {
+           try {
+             ed.mode.set(show ? 'readonly' : 'design');
+           } catch (_) {}
+         }
+         const selector = document.getElementById('add-note-item-select');
+         if (selector) selector.disabled = show;
+       }
+       
+       async function saveAddNoteModal() {
+         const item = getCurrentAddNoteItem();
+         if (!item) {
+           alert('Kein Artikel ausgewählt. Bitte schließen Sie die Notiz und öffnen Sie sie erneut.');
+           return;
+         }
+         let content = '';
+         if (typeof tinymce !== 'undefined') {
+           const ed = tinymce.get('note-editor-textarea');
+           content = ed ? ed.getContent() : (document.getElementById('note-editor-textarea')?.value || '');
+         } else {
+           content = document.getElementById('note-editor-textarea')?.value || '';
+         }
+         const trimmed = (content || '').trim();
+         const updatedItems = shoppingListData.items.map(i =>
+           i.id === item.id ? { ...i, note: trimmed || undefined } : i
+         );
+         showAddNoteSaving(true);
+         try {
+           const response = await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+             method: 'PUT',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ items: updatedItems }),
+           });
+           if (response.ok) {
+             const updatedList = await response.json();
+             shoppingListData.items = updatedList.items;
+             renderShoppingItems();
+             closeAddNoteModal();
+           } else {
+             const err = await response.json().catch(() => ({}));
+             alert(err.error || 'Fehler beim Speichern der Notiz');
+           }
+         } catch (e) {
+           console.error('Save note error:', e);
+           alert('Fehler beim Speichern der Notiz');
+         } finally {
+           showAddNoteSaving(false);
+         }
+       }
+       
+       function closeAddNoteModal() {
+         if (typeof tinymce !== 'undefined' && noteTinyMCE) {
+           tinymce.get('note-editor-textarea')?.remove();
+           noteTinyMCE = null;
+         }
+         const modal = document.getElementById('add-note-modal');
+         if (modal) modal.classList.add('hidden');
+         document.body.style.overflow = '';
+         addNoteTargetItemIds = null;
+       }
+       
+       function escapeHtml(text) {
+         const div = document.createElement('div');
+         div.textContent = text;
+         return div.innerHTML;
+       }
+       
+       function attachNoteListeners() {
+         document.querySelectorAll('.item-note-info, .detail-item-note-info').forEach(btn => {
+           btn.addEventListener('click', (e) => {
+             e.stopPropagation();
+             const itemIds = btn.getAttribute('data-item-ids');
+             if (itemIds) openViewNotesModal(itemIds);
+           });
+         });
+         
+         document.querySelectorAll('.add-note-plus-btn').forEach(btn => {
+           btn.addEventListener('click', (e) => {
+             e.stopPropagation();
+             const itemIds = btn.getAttribute('data-item-ids');
+             if (itemIds) openAddNoteModal(itemIds);
+           });
+         });
+         
+         // Long-press on .shopping-item (main row) to open add-note
+         document.querySelectorAll('.shopping-item-group .shopping-item').forEach(row => {
+           let longPressTimer = null;
+           const handleStart = (e) => {
+             if (e.target.closest('.item-checkbox') || e.target.closest('.group-selection-checkbox') || e.target.closest('.add-note-plus-btn') || e.target.closest('.item-note-info') || e.target.closest('.recipe-highlight-btn')) return;
+             longPressTimer = setTimeout(() => {
+               longPressTimer = null;
+               const group = row.closest('.shopping-item-group');
+               const itemIds = group?.getAttribute('data-item-ids') || '';
+               if (itemIds) openAddNoteModal(itemIds);
+             }, 500);
+           };
+           const handleEnd = () => {
+             if (longPressTimer) clearTimeout(longPressTimer);
+             longPressTimer = null;
+           };
+           const handleMove = (e) => {
+             if (longPressTimer && e.touches && e.touches[0]) {
+               const t = e.touches[0];
+               if (Math.abs(t.clientX - (row._lpX||0)) > 15 || Math.abs(t.clientY - (row._lpY||0)) > 15) {
+                 clearTimeout(longPressTimer);
+                 longPressTimer = null;
+               }
+             }
+           };
+           row.addEventListener('touchstart', (e) => {
+             if (e.touches[0]) { row._lpX = e.touches[0].clientX; row._lpY = e.touches[0].clientY; }
+             handleStart(e);
+           }, { passive: true });
+           row.addEventListener('touchend', handleEnd, { passive: true });
+           row.addEventListener('touchmove', handleMove, { passive: true });
+           row.addEventListener('touchcancel', handleEnd, { passive: true });
+         });
+         
+       }
+       
+       // One-time: modal close (overlay/buttons), save button via delegation, and Escape
+       // Module scripts run after DOM is ready, so attach immediately (DOMContentLoaded has already fired)
+       document.addEventListener('click', (e) => {
+         const closeTarget = e.target.closest?.('[data-close]');
+         if (closeTarget) {
+           if (closeTarget.getAttribute('data-close') === 'view-notes-modal') {
+             closeViewNotesModal();
+             e.preventDefault();
+           } else if (closeTarget.getAttribute('data-close') === 'add-note-modal') {
+             closeAddNoteModal();
+             e.preventDefault();
+           }
+           return;
+         }
+         if (e.target.closest?.('#add-note-save-btn')) {
+           e.preventDefault();
+           saveAddNoteModal();
+         }
+       });
+       document.addEventListener('keydown', (e) => {
+         if (e.key !== 'Escape') return;
+         if (!document.getElementById('view-notes-modal')?.classList.contains('hidden')) {
+           closeViewNotesModal();
+           e.preventDefault();
+         } else if (!document.getElementById('add-note-modal')?.classList.contains('hidden')) {
+           closeAddNoteModal();
+           e.preventDefault();
+         }
+       });
        
        // Function to attach checkbox event listeners
        function attachCheckboxListeners() {

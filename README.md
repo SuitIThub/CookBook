@@ -157,7 +157,7 @@ Diese Kochbuch-App hebt sich durch mehrere innovative Features von anderen Rezep
 ## Installation & Setup
 
 ### Voraussetzungen
-- Node.js 18.0 oder höher
+- **Node.js 18–22 (LTS empfohlen)** – `better-sqlite3` nutzt vorgebaute Binaries nur für LTS; Node 23+ erfordert einen C++-Build (Visual Studio Build Tools).
 - npm oder yarn Package Manager
 
 ### Schnellstart
