@@ -733,12 +733,15 @@ if (!shoppingList) {
             if (recipeIngredientId && recipeIngredientId !== '') {
               item.recipeIngredientId = recipeIngredientId;
             }
-            
-            // Find the original item to preserve original quantity
-            const originalItem = shoppingListData.items.find(i => i.id === itemId);
             if (originalItem?.originalQuantity) {
               item.originalQuantity = originalItem.originalQuantity;
             }
+          }
+
+          // Preserve note and manualGroupId from original item (edit form has no fields for these)
+          if (originalItem) {
+            if (originalItem.note !== undefined) item.note = originalItem.note;
+            if (originalItem.manualGroupId !== undefined) item.manualGroupId = originalItem.manualGroupId;
           }
           
           return item;
