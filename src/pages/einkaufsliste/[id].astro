@@ -1365,6 +1365,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
            requestAnimationFrame(() => {
              const container = document.getElementById('note-editor-container');
              const editorHeight = container ? Math.max(120, Math.round(container.getBoundingClientRect().height)) : 280;
+             const isDark = document.documentElement.classList.contains('dark');
              tinymce.init({
              selector: '#note-editor-textarea',
              plugins: 'lists link image code paste',
@@ -1372,6 +1373,8 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
              menubar: false,
              height: editorHeight,
              resize: false,
+             skin: isDark ? 'oxide-dark' : 'oxide',
+             content_css: isDark ? 'dark' : 'default',
              paste_data_images: true,
              images_upload_handler: (blobInfo) => {
                return new Promise((resolve) => {
@@ -1380,7 +1383,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                  reader.readAsDataURL(blobInfo.blob());
                });
              },
-             content_style: 'body { font-family: inherit; font-size: 14px; } body img { max-width: 100%; height: auto; object-fit: contain; }',
+             content_style: isDark
+               ? 'body { font-family: inherit; font-size: 14px; background-color: #1f2937; color: #f3f4f6; } body img { max-width: 100%; height: auto; object-fit: contain; }'
+               : 'body { font-family: inherit; font-size: 14px; } body img { max-width: 100%; height: auto; object-fit: contain; }',
              setup: (editor) => {
                noteTinyMCE = editor;
                editor.on('init', () => {
