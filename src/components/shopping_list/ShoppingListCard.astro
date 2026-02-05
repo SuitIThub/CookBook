@@ -12,7 +12,7 @@ const totalItems = shoppingList.items.length;
 const completedItems = totalItems - uncheckedItems.length;
 ---
 
-<div class="shopping-list-card card hover:shadow-lg transition-all duration-200" data-list-id={shoppingList.id}>
+<div class="shopping-list-card card hover:shadow-lg transition-all duration-200" data-list-id={shoppingList.id} data-list-title={shoppingList.title}>
   <div class="card-content relative">
     <!-- Selection Checkbox -->
     <input 
@@ -85,6 +85,20 @@ const completedItems = totalItems - uncheckedItems.length;
 
 <script>
   document.addEventListener('DOMContentLoaded', () => {
+    // Highlight cards whose title contains today's date (DD.MM.YYYY) using client's local date
+    const now = new Date();
+    const todayStr = [
+      String(now.getDate()).padStart(2, '0'),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      now.getFullYear()
+    ].join('.');
+    document.querySelectorAll('.shopping-list-card[data-list-title]').forEach((card) => {
+      const title = (card as HTMLElement).dataset.listTitle || '';
+      if (title.includes(todayStr)) {
+        card.classList.add('shopping-list-today');
+      }
+    });
+
     const deleteButtons = document.querySelectorAll('.delete-list-btn');
     
     deleteButtons.forEach(button => {
@@ -183,4 +197,15 @@ const completedItems = totalItems - uncheckedItems.length;
       });
     });
   });
-</script> 
+</script>
+
+<style is:global>
+  .shopping-list-today {
+    border: 2px solid #f97316 !important; /* primary-500 */
+    background: linear-gradient(135deg, rgb(255 247 237 / 0.7) 0%, rgb(255 237 213 / 0.5) 100%) !important; /* primary-50/100 */
+  }
+  .dark .shopping-list-today {
+    background: linear-gradient(135deg, rgb(127 29 29 / 0.25) 0%, rgb(154 52 18 / 0.2) 100%) !important; /* primary-900/800 */
+    border-color: #fb923c !important; /* primary-400 */
+  }
+</style> 
