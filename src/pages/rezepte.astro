@@ -209,6 +209,35 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
         }
       });
     }
+
+    // Handle import from shared URL (PWA share target)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sharedImportUrl = params.get('importUrl');
+
+      if (sharedImportUrl && window.openImportModal) {
+        // Open the import modal
+        window.openImportModal();
+
+        // Give the modal a short moment to render, then switch to URL tab and prefill
+        setTimeout(() => {
+          const importUrlTab = document.getElementById('import-url-tab') as HTMLButtonElement | null;
+          const recipeUrlInput = document.getElementById('recipe-url') as HTMLInputElement | null;
+
+          if (importUrlTab) {
+            importUrlTab.click();
+          }
+
+          if (recipeUrlInput) {
+            recipeUrlInput.value = sharedImportUrl;
+            // Trigger input event so ImportModal logic updates preview and button state
+            recipeUrlInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }, 50);
+      }
+    } catch (e) {
+      console.error('Error handling shared import URL:', e);
+    }
   });
 
   // Cleanup on page show (Android back button)
