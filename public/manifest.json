@@ -3,6 +3,7 @@
   "short_name": "Kochbuch",
   "description": "Digitales Kochbuch für Rezepte und Einkaufslisten",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#111827",
   "theme_color": "#f97316",
