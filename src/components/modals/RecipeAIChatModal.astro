@@ -1,0 +1,666 @@
+---
+declare global {
+  interface Window {
+    openRecipeAIChatModal?: () => void;
+  }
+}
+
+export interface ReferencedRecipe {
+  id: string;
+  title: string;
+  imageUrl?: string;
+}
+
+interface Props {
+  /** Recipes used as context for this chat. First one is the primary (recipeId for API). */
+  referencedRecipes: ReferencedRecipe[];
+}
+
+const { referencedRecipes } = Astro.props;
+const recipeId = referencedRecipes[0]?.id ?? '';
+const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
+---
+
+<div
+  id="recipe-ai-chat-modal"
+  class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+  aria-modal="true"
+  aria-labelledby="recipe-ai-chat-title"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col border border-gray-200 dark:border-gray-700">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <h2 id="recipe-ai-chat-title" class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+          </svg>
+        </span>
+        <span id="recipe-ai-chat-title-text">KI-Chat: {recipeTitle}</span>
+      </h2>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          id="recipe-ai-chat-delete-btn"
+          class="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+          title="Chat-Verlauf löschen"
+        >
+          Chat löschen
+        </button>
+        <button
+          type="button"
+          id="recipe-ai-chat-close-btn"
+          class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          aria-label="Schließen"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="recipe-ai-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px] max-h-[40vh] bg-gray-50 dark:bg-gray-900/30">
+      <div id="recipe-ai-chat-placeholder" class="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
+        Stelle Fragen zum Rezept oder bitte die KI, eine Variante vorzuschlagen. Der Verlauf wird gespeichert, bis du „Chat löschen“ wählst.
+      </div>
+    </div>
+
+    <!-- Referenced recipe(s) – thin bar above input (populated by script) -->
+    <div class="px-4 py-2 border-t border-gray-200 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-800" id="recipe-ai-chat-referenced-wrap">
+      <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Referenzierte Rezepte</p>
+      <div class="flex gap-2 overflow-x-auto pb-1 flex-wrap items-center" id="recipe-ai-chat-referenced-list">
+        <!-- chips rendered by script -->
+      </div>
+    </div>
+
+    <!-- Input row: plus button + input + send -->
+    <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div class="flex gap-2 items-center">
+        <button
+          type="button"
+          id="recipe-ai-chat-add-ref-btn"
+          class="flex-shrink-0 p-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+          title="Weitere Rezepte im Chat referenzieren"
+          aria-label="Rezepte hinzufügen"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+        </button>
+        <input
+          type="text"
+          id="recipe-ai-chat-input"
+          placeholder="Nachricht eingeben…"
+          class="flex-1 min-w-0 px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          autocomplete="off"
+        />
+        <button
+          type="button"
+          id="recipe-ai-chat-send-btn"
+          class="flex-shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+          </svg>
+          Senden
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Picker modal: add recipes to chat context -->
+<div
+  id="recipe-ai-chat-picker-modal"
+  class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+  aria-modal="true"
+  aria-label="Rezepte zum Chat hinzufügen"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col border border-gray-200 dark:border-gray-700">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Rezepte referenzieren</h3>
+      <button type="button" id="recipe-ai-chat-picker-close" class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Schließen">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <p class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">Wähle Rezepte, die die KI zusätzlich berücksichtigen soll.</p>
+    <div class="flex-1 overflow-y-auto px-4 pb-2">
+      <div id="recipe-ai-chat-picker-list" class="space-y-1">
+        <!-- loaded by script -->
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+      <button type="button" id="recipe-ai-chat-picker-cancel" class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600">Abbrechen</button>
+      <button type="button" id="recipe-ai-chat-picker-add" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Markdown parser for AI chat (browser global window.marked) -->
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.0/marked.min.js" crossorigin="anonymous"></script>
+
+<script define:vars={{ recipeId, recipeTitle, initialReferencedRecipes: referencedRecipes }}>
+  (function () {
+    const modal = document.getElementById('recipe-ai-chat-modal');
+    const messagesContainer = document.getElementById('recipe-ai-chat-messages');
+    const placeholder = document.getElementById('recipe-ai-chat-placeholder');
+    const input = document.getElementById('recipe-ai-chat-input');
+    const sendBtn = document.getElementById('recipe-ai-chat-send-btn');
+    const closeBtn = document.getElementById('recipe-ai-chat-close-btn');
+    const deleteBtn = document.getElementById('recipe-ai-chat-delete-btn');
+    const addRefBtn = document.getElementById('recipe-ai-chat-add-ref-btn');
+    const referencedListEl = document.getElementById('recipe-ai-chat-referenced-list');
+    const referencedWrapEl = document.getElementById('recipe-ai-chat-referenced-wrap');
+    const chatTitleText = document.getElementById('recipe-ai-chat-title-text');
+    const pickerModal = document.getElementById('recipe-ai-chat-picker-modal');
+    const pickerList = document.getElementById('recipe-ai-chat-picker-list');
+    const pickerClose = document.getElementById('recipe-ai-chat-picker-close');
+    const pickerCancel = document.getElementById('recipe-ai-chat-picker-cancel');
+    const pickerAdd = document.getElementById('recipe-ai-chat-picker-add');
+
+    const RECIPE_VARIANT_KEYWORD = '[RECIPE_VARIANT]';
+    let messages = [];
+    let referencedRecipesList = Array.isArray(initialReferencedRecipes)
+      ? initialReferencedRecipes.map((r) => ({ id: r.id, title: r.title || '', imageUrl: r.imageUrl }))
+      : [];
+    let allRecipesForPicker = [];
+
+    function getPrimaryRecipeId() {
+      return referencedRecipesList.length > 0 ? referencedRecipesList[0].id : recipeId;
+    }
+
+    function updateChatTitle() {
+      if (!chatTitleText) return;
+      if (referencedRecipesList.length === 0) {
+        chatTitleText.textContent = 'KI-Chat: ' + (recipeTitle || 'Rezept');
+      } else if (referencedRecipesList.length === 1) {
+        chatTitleText.textContent = 'KI-Chat: ' + referencedRecipesList[0].title;
+      } else {
+        chatTitleText.textContent = 'KI-Chat: Mehrere Rezepte';
+      }
+    }
+
+    function renderReferencedBar() {
+      if (!referencedListEl) return;
+      referencedListEl.innerHTML = '';
+      referencedRecipesList.forEach((r) => {
+        const chip = document.createElement('div');
+        chip.className = 'flex items-center gap-1.5 min-w-0 flex-shrink-0 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 shadow-sm pr-1 py-1 pl-2 group';
+        const link = document.createElement('a');
+        link.href = '/rezept/' + r.id;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'flex items-center gap-2 min-w-0 flex-1 hover:opacity-80';
+        if (r.imageUrl) {
+          const img = document.createElement('img');
+          img.src = r.imageUrl;
+          img.alt = '';
+          img.className = 'w-8 h-8 rounded object-cover flex-shrink-0';
+          link.appendChild(img);
+        } else {
+          const span = document.createElement('span');
+          span.className = 'w-8 h-8 rounded bg-gray-200 dark:bg-gray-700 flex-shrink-0 flex items-center justify-center text-gray-400 dark:text-gray-500';
+          span.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>';
+          link.appendChild(span);
+        }
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'text-sm font-medium text-gray-900 dark:text-gray-100 truncate max-w-[120px]';
+        titleSpan.textContent = r.title;
+        link.appendChild(titleSpan);
+        chip.appendChild(link);
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'p-1 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20';
+        removeBtn.setAttribute('aria-label', 'Referenz entfernen');
+        removeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+        removeBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          referencedRecipesList = referencedRecipesList.filter((x) => x.id !== r.id);
+          renderReferencedBar();
+          updateChatTitle();
+        });
+        chip.appendChild(removeBtn);
+        referencedListEl.appendChild(chip);
+      });
+      if (referencedWrapEl) referencedWrapEl.classList.toggle('hidden', referencedRecipesList.length === 0);
+      updateChatTitle();
+    }
+
+    function openReferencePicker() {
+      if (!pickerModal || !pickerList) return;
+      pickerModal.classList.remove('hidden');
+      pickerModal.classList.add('flex');
+      pickerList.innerHTML = '<p class="text-center py-4 text-gray-500 dark:text-gray-400">Lade Rezepte…</p>';
+      fetch('/api/recipes')
+        .then((res) => res.ok ? res.json() : [])
+        .then((recipes) => {
+          allRecipesForPicker = recipes;
+          const refIds = new Set(referencedRecipesList.map((r) => r.id));
+          const toShow = recipes.filter((rec) => !refIds.has(rec.id));
+          if (toShow.length === 0) {
+            pickerList.innerHTML = '<p class="text-center py-4 text-gray-500 dark:text-gray-400">Alle Rezepte sind bereits referenziert.</p>';
+            return;
+          }
+          pickerList.innerHTML = toShow
+            .map(
+              (rec) => `
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+              <input type="checkbox" class="recipe-ai-picker-cb w-4 h-4 rounded border-gray-300 text-indigo-600" data-recipe-id="${rec.id}" data-recipe-title="${(rec.title || '').replace(/"/g, '&quot;')}" data-recipe-image="${(rec.images?.[0]?.url || rec.imageUrl || '').replace(/"/g, '&quot;')}" />
+              ${
+                rec.images?.[0]?.url || rec.imageUrl
+                  ? `<img src="${(rec.images?.[0]?.url || rec.imageUrl).replace(/"/g, '&quot;')}" alt="" class="w-8 h-8 rounded object-cover flex-shrink-0" />`
+                  : '<span class="w-8 h-8 rounded bg-gray-200 dark:bg-gray-700 flex-shrink-0 flex items-center justify-center text-gray-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg></span>'
+              }
+              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex-1">${(rec.title || '').replace(/</g, '&lt;')}</span>
+            </label>
+          `
+            )
+            .join('');
+          // checkboxes are in DOM; addSelectedFromPicker uses querySelectorAll
+        })
+        .catch(() => {
+          pickerList.innerHTML = '<p class="text-center py-4 text-red-500">Fehler beim Laden.</p>';
+        });
+    }
+
+    function closeReferencePicker() {
+      if (pickerModal) {
+        pickerModal.classList.add('hidden');
+        pickerModal.classList.remove('flex');
+      }
+    }
+
+    function addSelectedFromPicker() {
+      const toAdd = [];
+      const checked = pickerList.querySelectorAll('.recipe-ai-picker-cb:checked');
+      checked.forEach((cb) => {
+        const id = cb.getAttribute('data-recipe-id');
+        const title = cb.getAttribute('data-recipe-title') || '';
+        const image = cb.getAttribute('data-recipe-image') || '';
+        if (id && !referencedRecipesList.some((r) => r.id === id)) toAdd.push({ id, title, imageUrl: image || undefined });
+      });
+      referencedRecipesList = referencedRecipesList.concat(toAdd);
+      renderReferencedBar();
+      closeReferencePicker();
+    }
+
+    addRefBtn && addRefBtn.addEventListener('click', openReferencePicker);
+    pickerClose && pickerClose.addEventListener('click', closeReferencePicker);
+    pickerCancel && pickerCancel.addEventListener('click', closeReferencePicker);
+    pickerAdd && pickerAdd.addEventListener('click', addSelectedFromPicker);
+    pickerModal && pickerModal.addEventListener('click', (e) => { if (e.target === pickerModal) closeReferencePicker(); });
+
+    function regenerateMessage(messageIndex) {
+      if (!Array.isArray(messages) || messageIndex == null) return;
+      // Find the last user message before this assistant message
+      let userText = '';
+      for (let i = messageIndex - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m && m.role === 'user' && typeof m.content === 'string') {
+          userText = m.content;
+          break;
+        }
+      }
+      if (!userText) return;
+      if (input) {
+        input.value = userText;
+        sendMessage();
+      }
+    }
+
+    function getMarked() {
+      try {
+        // marked UMD attaches itself to window.marked
+        // @ts-ignore
+        return window.marked || null;
+      } catch {
+        return null;
+      }
+    }
+
+    function stripVariantKeyword(text) {
+      if (!text || typeof text !== 'string') return text || '';
+      let result = text;
+      // [RECIPE_VARIANT] on its own line
+      result = result.replace(/^\s*\[RECIPE_VARIANT\]\s*\n?/im, '');
+      // **RECIPE_VARIANT** on its own line
+      result = result.replace(/^\s*\*\*RECIPE_VARIANT\*\*\s*\n?/im, '');
+      return result.trim();
+    }
+
+    function appendVariantButtonIfNeeded(wrap, bubble, content, messageIndex) {
+      if (!content || !content.includes(RECIPE_VARIANT_KEYWORD)) return;
+      const displayContent = stripVariantKeyword(content);
+      const markedGlobal = getMarked();
+      if (markedGlobal && typeof markedGlobal.parse === 'function') {
+        bubble.innerHTML = markedGlobal.parse(displayContent, { breaks: true });
+        bubble.querySelectorAll('a').forEach((a) => {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener noreferrer');
+        });
+      } else {
+        bubble.textContent = displayContent;
+      }
+      wrap.setAttribute('data-message-index', String(messageIndex));
+      wrap.classList.add('flex-col', 'items-start');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mt-2 py-2 px-3 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 rounded-lg transition-colors flex items-center gap-1.5';
+      btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg> Variante aus diesem Vorschlag erstellen';
+      btn.addEventListener('click', () => createVariantFromMessage(messageIndex));
+      wrap.appendChild(btn);
+    }
+
+    function renderMessage(role, content, options) {
+      const useMarkdown = options?.markdown !== false;
+      const messageIndex = options?.messageIndex;
+      const isVariantMessage = role === 'assistant' && content && content.includes(RECIPE_VARIANT_KEYWORD);
+      const displayContent = isVariantMessage ? stripVariantKeyword(content) : (content || '');
+
+      const div = document.createElement('div');
+      div.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+      if (isVariantMessage && typeof messageIndex === 'number') {
+        div.setAttribute('data-message-index', String(messageIndex));
+      }
+      const bubble = document.createElement('div');
+      bubble.className = role === 'user'
+        ? 'max-w-[85%] px-4 py-2 rounded-2xl rounded-br-md bg-indigo-600 text-white text-sm ai-msg-bubble'
+        : 'max-w-[85%] px-4 py-2 rounded-2xl rounded-bl-md bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm ai-msg-bubble prose prose-sm dark:prose-invert max-w-none';
+      const markedGlobal = getMarked();
+      if (useMarkdown && displayContent && markedGlobal && typeof markedGlobal.parse === 'function') {
+        bubble.innerHTML = markedGlobal.parse(displayContent, { breaks: true });
+        bubble.querySelectorAll('a').forEach((a) => {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener noreferrer');
+        });
+      } else {
+        bubble.textContent = displayContent || '';
+      }
+      div.appendChild(bubble);
+      if (isVariantMessage && typeof messageIndex === 'number') {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mt-2 py-2 px-3 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 rounded-lg transition-colors flex items-center gap-1.5';
+        btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg> Variante aus diesem Vorschlag erstellen';
+        btn.addEventListener('click', () => createVariantFromMessage(messageIndex));
+        div.appendChild(btn);
+      }
+      if (role === 'assistant' && typeof messageIndex === 'number') {
+        const regenBtn = document.createElement('button');
+        regenBtn.type = 'button';
+        regenBtn.className = 'mt-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline self-start';
+        regenBtn.textContent = 'Antwort neu generieren';
+        regenBtn.addEventListener('click', () => regenerateMessage(messageIndex));
+        div.appendChild(regenBtn);
+      }
+      return div;
+    }
+
+    function renderMessages() {
+      if (!messagesContainer || !placeholder) return;
+      placeholder.classList.toggle('hidden', messages.length > 0);
+      const existing = messagesContainer.querySelectorAll('[data-ai-msg]');
+      existing.forEach((el) => el.remove());
+      messages.forEach((m, i) => {
+        const el = renderMessage(m.role, m.content, { messageIndex: i });
+        el.setAttribute('data-ai-msg', '');
+        messagesContainer.appendChild(el);
+      });
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    async function loadChat() {
+      try {
+        const primaryId = getPrimaryRecipeId();
+        const res = await fetch(`/api/ai/chat?recipeId=${encodeURIComponent(primaryId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        messages = data.messages || [];
+        renderMessages();
+      } catch (e) {
+        console.error('Load chat failed', e);
+      }
+    }
+
+    async function sendMessage() {
+      const text = (input && input.value) ? input.value.trim() : '';
+      if (!text || !sendBtn) return;
+
+      sendBtn.disabled = true;
+      const userEl = renderMessage('user', text);
+      userEl.setAttribute('data-ai-msg', '');
+      if (placeholder) placeholder.classList.add('hidden');
+      messagesContainer.appendChild(userEl);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      input.value = '';
+
+      const assistantWrap = document.createElement('div');
+      assistantWrap.className = 'flex justify-start';
+      assistantWrap.setAttribute('data-ai-msg', '');
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-[85%] px-4 py-2 rounded-2xl rounded-bl-md bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm ai-msg-bubble prose prose-sm dark:prose-invert max-w-none';
+      bubble.textContent = '';
+      assistantWrap.appendChild(bubble);
+      messagesContainer.appendChild(assistantWrap);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+      let accumulated = '';
+      let streamError = null;
+      let donePushed = false;
+
+      try {
+        const primaryId = getPrimaryRecipeId();
+        const recipeIds = referencedRecipesList.length > 0 ? referencedRecipesList.map((r) => r.id) : [recipeId];
+        const res = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipeId: primaryId, recipeIds, message: text })
+        });
+        if (!res.ok || !res.body) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Request failed');
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const data = JSON.parse(trimmed);
+              if (data.error) {
+                streamError = data.error;
+                break;
+              }
+              if (typeof data.delta === 'string') {
+                accumulated += data.delta;
+                bubble.textContent = accumulated;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+              }
+                if (data.done && typeof data.fullMessage === 'string' && !donePushed) {
+                accumulated = data.fullMessage;
+                  const markedGlobal = getMarked();
+                  if (markedGlobal && typeof markedGlobal.parse === 'function') {
+                    bubble.innerHTML = markedGlobal.parse(accumulated, { breaks: true });
+                    bubble.querySelectorAll('a').forEach((a) => {
+                      a.setAttribute('target', '_blank');
+                      a.setAttribute('rel', 'noopener noreferrer');
+                    });
+                  } else {
+                    bubble.textContent = accumulated;
+                  }
+                messages.push({ role: 'user', content: text });
+                messages.push({ role: 'assistant', content: accumulated });
+                donePushed = true;
+                appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
+              }
+            } catch (_e) { /* skip malformed line */ }
+          }
+          if (streamError) break;
+        }
+        for (const line of buffer.split('\n').map((l) => l.trim()).filter(Boolean)) {
+          try {
+            const data = JSON.parse(line);
+            if (data.error) { streamError = data.error; break; }
+            if (data.done && typeof data.fullMessage === 'string' && !donePushed) {
+              accumulated = data.fullMessage;
+              const markedGlobal = getMarked();
+              if (markedGlobal && typeof markedGlobal.parse === 'function') {
+                bubble.innerHTML = markedGlobal.parse(accumulated, { breaks: true });
+                bubble.querySelectorAll('a').forEach((a) => {
+                  a.setAttribute('target', '_blank');
+                  a.setAttribute('rel', 'noopener noreferrer');
+                });
+              } else {
+                bubble.textContent = accumulated;
+              }
+              messages.push({ role: 'user', content: text });
+              messages.push({ role: 'assistant', content: accumulated });
+              donePushed = true;
+              appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
+            }
+          } catch (_e) {}
+        }
+        if (streamError) {
+          bubble.textContent = 'Fehler: ' + streamError;
+          messages.push({ role: 'user', content: text });
+          messages.push({ role: 'assistant', content: 'Fehler: ' + streamError });
+        } else if (!donePushed) {
+          if (accumulated) {
+            const markedGlobal = getMarked();
+            if (markedGlobal && typeof markedGlobal.parse === 'function') {
+              bubble.innerHTML = markedGlobal.parse(accumulated, { breaks: true });
+              bubble.querySelectorAll('a').forEach((a) => {
+                a.setAttribute('target', '_blank');
+                a.setAttribute('rel', 'noopener noreferrer');
+              });
+            } else {
+              bubble.textContent = accumulated;
+            }
+            messages.push({ role: 'user', content: text });
+            messages.push({ role: 'assistant', content: accumulated });
+            appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
+          } else {
+            bubble.textContent = 'Keine Antwort erhalten.';
+            messages.push({ role: 'user', content: text });
+            messages.push({ role: 'assistant', content: 'Keine Antwort erhalten.' });
+          }
+        }
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      } catch (e) {
+        bubble.textContent = e instanceof Error ? e.message : 'Netzwerkfehler. Bitte erneut versuchen.';
+        messages.push({ role: 'user', content: text });
+        messages.push({ role: 'assistant', content: bubble.textContent });
+        renderMessages();
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    async function deleteChat() {
+      if (!confirm('Chat-Verlauf wirklich löschen? Dies kann nicht rückgängig gemacht werden.')) return;
+      try {
+        await fetch(`/api/ai/chat?recipeId=${encodeURIComponent(getPrimaryRecipeId())}`, { method: 'DELETE' });
+        messages = [];
+        renderMessages();
+        if (placeholder) placeholder.classList.remove('hidden');
+      } catch (e) {
+        console.error('Delete chat failed', e);
+      }
+    }
+
+    async function createVariantFromMessage(messageIndex) {
+      const content = messages[messageIndex]?.content;
+      if (!content) return;
+      const variantMessage = stripVariantKeyword(content);
+      if (!variantMessage.trim()) return;
+
+      const btn = document.querySelector(`[data-message-index="${messageIndex}"] button`);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Wird vorbereitet…';
+      }
+      try {
+        const primaryId = getPrimaryRecipeId();
+        const recipeIds = referencedRecipesList.length > 0 ? referencedRecipesList.map((r) => r.id) : [primaryId];
+        const res = await fetch('/api/ai/propose-variant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipeId: primaryId, recipeIds, variantMessage, preview: true })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Variante konnte nicht vorbereitet werden.');
+          return;
+        }
+        if (data.preview === true && data.token && data.parentRecipeId) {
+          window.location.href = `/rezept/${data.parentRecipeId}/variante-neu?draft=${encodeURIComponent(data.token)}`;
+          return;
+        }
+        if (window.showSuccess) {
+          window.showSuccess('Variante wurde erstellt.');
+        } else {
+          alert('Variante wurde erstellt.');
+        }
+        if (data.id) window.location.href = `/rezept/${data.id}`;
+      } catch (e) {
+        console.error('Create variant failed', e);
+        alert('Fehler beim Erstellen der Variante.');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg> Variante aus diesem Vorschlag erstellen';
+        }
+      }
+    }
+
+    function openModal() {
+      if (!modal) return;
+      referencedRecipesList = Array.isArray(initialReferencedRecipes)
+        ? initialReferencedRecipes.map((r) => ({ id: r.id, title: r.title || '', imageUrl: r.imageUrl }))
+        : [];
+      renderReferencedBar();
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      loadChat();
+      setTimeout(() => input && input.focus(), 100);
+    }
+
+    function closeModal() {
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.dispatchEvent(new CustomEvent('recipe-ai-chat-closed'));
+    }
+
+    closeBtn && closeBtn.addEventListener('click', closeModal);
+    deleteBtn && deleteBtn.addEventListener('click', deleteChat);
+    sendBtn && sendBtn.addEventListener('click', sendMessage);
+
+    input && input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    modal && modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeModal();
+    });
+
+    window.openRecipeAIChatModal = openModal;
+  })();
+</script>

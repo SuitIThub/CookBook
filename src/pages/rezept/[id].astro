@@ -14,6 +14,7 @@ import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro
 import EditFormActions from '../../components/recipe/edit/EditFormActions.astro';
 import ShoppingListModal from '../../components/modals/ShoppingListModal.astro';
 import VariantModal from '../../components/modals/VariantModal.astro';
+import RecipeAIChatModal from '../../components/modals/RecipeAIChatModal.astro';
 
 const { id } = Astro.params;
 
@@ -171,6 +172,27 @@ try {
 
   <ShoppingListModal />
   <VariantModal />
+  <RecipeAIChatModal
+    referencedRecipes={[
+      {
+        id: recipe.id,
+        title: recipe.title,
+        imageUrl: recipe.images?.[0]?.url ?? recipe.imageUrl,
+      },
+    ]}
+  />
+
+  <!-- FAB: Open AI chat (shown only when AI server is reachable, checked once on load) -->
+  <button
+    type="button"
+    id="recipe-ai-chat-fab"
+    class="fixed bottom-6 right-6 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+    aria-label="KI-Chat zu diesem Rezept öffnen"
+  >
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+    </svg>
+  </button>
 
   <script define:vars={{ recipe, originalRecipe, variants }}>
     // Timer functionality
@@ -457,13 +479,15 @@ try {
 
     function toggleEditMode() {
       isEditMode = !isEditMode;
-      
+      const aiChatFab = document.getElementById('recipe-ai-chat-fab');
+
       if (isEditMode) {
         viewContent?.classList.add('hidden');
         editContent?.classList.remove('hidden');
         updateEditButton(editBtn, true);
         updateEditButton(editBtnMobile, true);
-        
+        if (aiChatFab) aiChatFab.classList.add('hidden');
+
         // Hide draft notification when entering edit mode
         const draftNotification = document.getElementById('draft-notification');
         if (draftNotification) {
@@ -474,7 +498,8 @@ try {
         editContent?.classList.add('hidden');
         updateEditButton(editBtn, false);
         updateEditButton(editBtnMobile, false);
-        
+        if (aiChatFab) aiChatFab.classList.remove('hidden');
+
         // Check for draft again when exiting edit mode
         checkForDraft();
       }
@@ -935,5 +960,50 @@ try {
       });
     });
 
+    // AI chat FAB: visible by default in view mode; hidden only in edit mode
+    function showFabIfAllowed() {
+      const editContent = document.getElementById('edit-content');
+      const inEditMode = editContent && !editContent.classList.contains('hidden');
+      if (inEditMode) return;
+      const fab = document.getElementById('recipe-ai-chat-fab');
+      if (fab) fab.classList.remove('hidden');
+    }
+
+    function hideFab() {
+      const fab = document.getElementById('recipe-ai-chat-fab');
+      if (fab) fab.classList.add('hidden');
+    }
+
+    function setupFabClick() {
+      const fab = document.getElementById('recipe-ai-chat-fab');
+      if (!fab || fab.dataset.aiClickSetup === 'yes') return;
+      fab.dataset.aiClickSetup = 'yes';
+      fab.addEventListener('click', () => {
+        if (window.openRecipeAIChatModal) {
+          window.openRecipeAIChatModal();
+        }
+      });
+    }
+
+    function initAiFab() {
+      setupFabClick();
+      showFabIfAllowed();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initAiFab);
+    } else {
+      initAiFab();
+    }
+
+    // Re-show FAB when chat modal is closed (e.g. if we're in edit mode we don't show; otherwise show)
+    document.addEventListener('recipe-ai-chat-closed', () => {
+      showFabIfAllowed();
+    });
+
+    // Re-apply FAB visibility when page is shown again
+    window.addEventListener('pageshow', () => {
+      showFabIfAllowed();
+    });
   </script>
 </Layout> 

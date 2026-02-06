@@ -1,0 +1,65 @@
+---
+export const prerender = false;
+import Layout from '../../../layouts/Layout.astro';
+import { db } from '../../../lib/database';
+import { getDraftVariant } from '../../../lib/draftVariantStore';
+import type { Recipe } from '../../../types/recipe';
+import EditRecipeForm from '../../../components/recipe/edit/EditRecipeForm.astro';
+import EditFormActions from '../../../components/recipe/edit/EditFormActions.astro';
+
+const { parentId } = Astro.params;
+const draftToken = Astro.url.searchParams.get('draft');
+
+if (!parentId) {
+  return Astro.redirect('/rezepte');
+}
+
+const parentRecipe = db.getRecipe(parentId);
+if (!parentRecipe) {
+  return Astro.redirect('/404');
+}
+
+if (!draftToken) {
+  return Astro.redirect(`/rezept/${parentId}`);
+}
+
+const draft = getDraftVariant(draftToken);
+if (!draft) {
+  return Astro.redirect(`/rezept/${parentId}`);
+}
+
+const now = new Date();
+const draftRecipe: Recipe = {
+  ...(draft.recipeData as Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>),
+  id: 'draft',
+  parentRecipeId: draft.parentRecipeId,
+  variantName: draft.variantName,
+  createdAt: now,
+  updatedAt: now,
+};
+---
+
+<Layout title={`Variante: ${draftRecipe.title} - Kochbuch`}>
+  <div class="max-w-4xl mx-auto">
+    <div class="mb-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+      <p class="text-sm text-indigo-800 dark:text-indigo-200">
+        KI-Vorschlag für eine neue Variante von „{parentRecipe.title}“. Du kannst alles anpassen und dann als neue Variante speichern oder abbrechen.
+      </p>
+    </div>
+
+    <div id="edit-content">
+      <EditRecipeForm recipe={draftRecipe} />
+      <div class="max-w-4xl mx-auto">
+        <EditFormActions
+          recipeId="draft"
+          isVariantDraft={true}
+          parentRecipeId={parentId}
+        />
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ draftVariantName: draft.variantName }}>
+    window.__VARIANT_DRAFT_NAME__ = typeof draftVariantName === 'string' ? draftVariantName : 'KI-Variante';
+  </script>
+</Layout>
