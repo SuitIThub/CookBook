@@ -1,12 +1,40 @@
 ---
 interface Props {
   recipeId: string;
+  /** When true, only show "Als neue Variante speichern" and "Abbrechen" (no normal Save, no Delete). Used for AI variant draft. */
+  isVariantDraft?: boolean;
+  /** For variant draft: redirect here on Cancel. */
+  parentRecipeId?: string;
 }
 
-const { recipeId } = Astro.props;
+const { recipeId, isVariantDraft = false, parentRecipeId } = Astro.props;
 ---
 
 <div class="mt-8 mb-4">
+  {isVariantDraft ? (
+    <!-- Variant draft mode: only save as new variant + cancel -->
+    <>
+      <div class="sm:hidden flex flex-col space-y-3">
+        <button type="button" id="save-variant-draft-btn-mobile" class="px-6 py-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors flex items-center justify-center gap-2 w-full text-base font-medium">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg>
+          <span>Als neue Variante speichern</span>
+        </button>
+        <button type="button" id="cancel-variant-draft-btn-mobile" class="px-6 py-4 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 w-full text-base font-medium">
+          Abbrechen
+        </button>
+      </div>
+      <div class="hidden sm:flex justify-end items-center gap-3 max-w-4xl mx-auto">
+        <button type="button" id="cancel-variant-draft-btn-desktop" class="px-6 py-3 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700">
+          Abbrechen
+        </button>
+        <button type="button" id="save-variant-draft-btn-desktop" class="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg>
+          <span>Als neue Variante speichern</span>
+        </button>
+      </div>
+    </>
+  ) : (
+    <>
   <!-- Mobile layout -->
   <div class="sm:hidden">
     <div class="flex flex-col space-y-3">
@@ -96,51 +124,58 @@ const { recipeId } = Astro.props;
       </button>
     </div>
   </div>
+    </>
+  )}
 </div>
 
-<script>
-  // Get the form element
+<script define:vars={{ isVariantDraft, parentRecipeId }}>
   const form = document.getElementById('edit-recipe-form');
-  
-  // Get the save buttons from the header
-  const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
-  const saveBtnMobile = document.getElementById('save-btn-mobile') as HTMLButtonElement;
-  
-  // Get the save buttons from the bottom
-  const saveBtnBottom = document.getElementById('save-btn-bottom') as HTMLButtonElement;
-  const saveBtnBottomMobile = document.getElementById('save-btn-bottom-mobile') as HTMLButtonElement;
-  
-  // Variant buttons
-  const saveAsVariantBtn = document.getElementById('save-as-variant-btn-bottom') as HTMLButtonElement;
-  const saveAsVariantBtnMobile = document.getElementById('save-as-variant-btn-mobile') as HTMLButtonElement;
+  const saveBtn = document.getElementById('save-btn');
+  const saveBtnMobile = document.getElementById('save-btn-mobile');
+  const saveBtnBottom = document.getElementById('save-btn-bottom');
+  const saveBtnBottomMobile = document.getElementById('save-btn-bottom-mobile');
+  const saveAsVariantBtn = document.getElementById('save-as-variant-btn-bottom');
+  const saveAsVariantBtnMobile = document.getElementById('save-as-variant-btn-mobile');
 
-  // Add click handlers to all save buttons
-  [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].forEach(btn => {
-    btn?.addEventListener('click', () => {
-      // Show loading state on all save buttons
-      [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].forEach(button => {
-        if (button) {
-          const span = button.querySelector('span');
-          const svg = button.querySelector('svg');
-          button.disabled = true;
-          if (span) span.textContent = 'Speichert...';
-          if (svg) svg.style.display = 'none';
-        }
-      });
-      
-      // Submit the form
-      form?.dispatchEvent(new Event('submit'));
-    });
-  });
-
-  // Open modal from both variant buttons
-  [saveAsVariantBtn, saveAsVariantBtnMobile].forEach(btn => {
-    btn?.addEventListener('click', () => {
-      // openVariantModal is provided by VariantModal component at runtime
-      const openVariant = (window as any).openVariantModal;
-      if (typeof openVariant === 'function') {
-        openVariant();
+  if (isVariantDraft && parentRecipeId) {
+    const runSave = () => {
+      const variantName = window.__VARIANT_DRAFT_NAME__;
+      const createVariant = window.createRecipeVariant;
+      if (typeof createVariant === 'function' && variantName !== undefined) {
+        createVariant(variantName);
       }
+    };
+    const runCancel = () => {
+      window.location.href = `/rezept/${parentRecipeId}`;
+    };
+    [
+      document.getElementById('save-variant-draft-btn-mobile'),
+      document.getElementById('save-variant-draft-btn-desktop'),
+    ].forEach((btn) => btn?.addEventListener('click', runSave));
+    [
+      document.getElementById('cancel-variant-draft-btn-mobile'),
+      document.getElementById('cancel-variant-draft-btn-desktop'),
+    ].forEach((btn) => btn?.addEventListener('click', runCancel));
+  } else {
+    [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].forEach(btn => {
+      btn?.addEventListener('click', () => {
+        [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].forEach(button => {
+          if (button) {
+            const span = button.querySelector('span');
+            const svg = button.querySelector('svg');
+            button.disabled = true;
+            if (span) span.textContent = 'Speichert...';
+            if (svg) svg.style.display = 'none';
+          }
+        });
+        form?.dispatchEvent(new Event('submit'));
+      });
     });
-  });
+    [saveAsVariantBtn, saveAsVariantBtnMobile].forEach(btn => {
+      btn?.addEventListener('click', () => {
+        const openVariant = window.openVariantModal;
+        if (typeof openVariant === 'function') openVariant();
+      });
+    });
+  }
 </script> 

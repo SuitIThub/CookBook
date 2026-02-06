@@ -18,6 +18,7 @@
     "db:extract-urls": "node scripts/extract-source-urls.js"
   },
   "dependencies": {
+    "marked": "^15.0.0",
     "@astrojs/node": "^9.2.2",
     "@astrojs/tailwind": "^5.1.0",
     "@types/archiver": "^6.0.3",
