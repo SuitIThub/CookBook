@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kochbuch-v1';
+const CACHE_NAME = 'kochbuch-v2';
 const urlsToCache = [
   '/favicon.svg',
   '/manifest.json'
@@ -12,6 +12,8 @@ self.addEventListener('install', (event) => {
         return cache.addAll(urlsToCache);
       })
   );
+  // Activate updated service worker immediately
+  self.skipWaiting();
 });
 
 // Fetch event - different strategies for different types of requests
@@ -105,5 +107,9 @@ self.addEventListener('activate', (event) => {
         });
       });
     })
+      .then(() => {
+        // Take control of all clients immediately
+        return self.clients.claim();
+      })
   );
 }); 
