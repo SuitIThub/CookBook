@@ -581,6 +581,9 @@ const { recipe } = Astro.props;
         console.warn('No recipe ID found, cannot save draft');
         return false;
       }
+      if (recipeId === 'variante-neu' || recipe.id === 'draft') {
+        return false; // Variant draft page: no draft auto-save
+      }
       
       // Only save if we're in edit mode
       const editContent = document.getElementById('edit-content');
