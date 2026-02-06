@@ -177,6 +177,13 @@ const hasHeroImage = !!heroImage;
           </svg>
           <span>Kochmodus</span>
         </a>
+        <!-- Save as variant button (desktop, initially hidden) -->
+        <button id="save-as-variant-btn-header" class="hidden items-center space-x-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/>
+          </svg>
+          <span>Als Variante speichern</span>
+        </button>
         <!-- Save button (initially hidden) -->
         <button id="save-btn" class="hidden items-center space-x-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -248,6 +255,13 @@ const hasHeroImage = !!heroImage;
           </svg>
           <span>Kochmodus</span>
         </a>
+        <!-- Save as variant button mobile (initially hidden) -->
+        <button id="save-as-variant-btn-header-mobile" class="hidden items-center justify-center space-x-2 px-4 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/>
+          </svg>
+          <span>Als Variante speichern</span>
+        </button>
         <!-- Save button mobile (initially hidden) -->
         <button id="save-btn-mobile" class="hidden items-center justify-center space-x-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -393,12 +407,14 @@ const hasHeroImage = !!heroImage;
     const addToShoppingBtn = document.getElementById('add-to-shopping');
     const cookingModeBtn = document.getElementById('cooking-mode-btn');
     const saveBtn = document.getElementById('save-btn');
+    const saveVariantBtnHeader = document.getElementById('save-as-variant-btn-header');
     
     // Mobile buttons
     const exportContainerMobile = document.getElementById('export-container-mobile');
     const addToShoppingBtnMobile = document.getElementById('add-to-shopping-mobile');
     const cookingModeBtnMobile = document.getElementById('cooking-mode-btn-mobile');
     const saveBtnMobile = document.getElementById('save-btn-mobile');
+    const saveVariantBtnHeaderMobile = document.getElementById('save-as-variant-btn-header-mobile');
     
     // Source URL section (hide in edit mode)
     const sourceUrlSection = document.getElementById('source-url-section');
@@ -420,6 +436,10 @@ const hasHeroImage = !!heroImage;
       saveBtn?.classList.add('flex');
       saveBtnMobile?.classList.remove('hidden');
       saveBtnMobile?.classList.add('flex');
+      saveVariantBtnHeader?.classList.remove('hidden');
+      saveVariantBtnHeader?.classList.add('flex');
+      saveVariantBtnHeaderMobile?.classList.remove('hidden');
+      saveVariantBtnHeaderMobile?.classList.add('flex');
     } else {
       // Show export, shopping list, and cookmode buttons
       exportContainer?.classList.remove('hidden');
@@ -437,6 +457,10 @@ const hasHeroImage = !!heroImage;
       saveBtn?.classList.remove('flex');
       saveBtnMobile?.classList.add('hidden');
       saveBtnMobile?.classList.remove('flex');
+      saveVariantBtnHeader?.classList.add('hidden');
+      saveVariantBtnHeader?.classList.remove('flex');
+      saveVariantBtnHeaderMobile?.classList.add('hidden');
+      saveVariantBtnHeaderMobile?.classList.remove('flex');
     }
   }
 
@@ -450,4 +474,16 @@ const hasHeroImage = !!heroImage;
   const viewContent = document.getElementById('view-content');
   const isInitiallyHidden = viewContent?.classList.contains('hidden') ?? false;
   updateButtonVisibility(isInitiallyHidden);
+
+  // Wire header "save as variant" buttons to open the variant modal
+  const saveVariantHeader = document.getElementById('save-as-variant-btn-header');
+  const saveVariantHeaderMobile = document.getElementById('save-as-variant-btn-header-mobile');
+  [saveVariantHeader, saveVariantHeaderMobile].forEach((btn) => {
+    btn?.addEventListener('click', () => {
+      const openVariant = (window as any).openVariantModal;
+      if (typeof openVariant === 'function') {
+        openVariant();
+      }
+    });
+  });
 </script> 

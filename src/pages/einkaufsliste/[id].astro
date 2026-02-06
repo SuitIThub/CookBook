@@ -321,7 +321,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                 <input type="checkbox" id="select-all-recipes" class="form-checkbox" />
                 <span class="text-sm font-medium">Alle auswählen</span>
               </label>
-              <span id="selected-count" class="text-sm text-muted">0 Rezepte ausgewählt</span>
+              <span id="selected-recipes-count" class="text-sm text-muted">0 Rezepte ausgewählt</span>
             </div>
             <button id="add-selected-recipes" class="btn btn-success btn-sm" disabled>
               Ausgewählte hinzufügen
@@ -363,6 +363,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     // Recipe management variables
     let availableRecipes = [];
     let currentlyHighlightedRecipe = null;
+    const selectedRecipeIds = new Set();
     
     // Toggle state for hiding checked items (default: false = show all items)
     let hideCheckedItems = false;
@@ -1926,29 +1927,87 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         const container = document.getElementById('available-recipes');
         if (!container) return;
         
-        // Get already added recipe IDs
-        const addedRecipeIds = new Set(shoppingListData.recipes?.map(r => r.id) || []);
+        // Build a map of all available recipes by ID (includes variants)
+        const recipeMap = new Map();
+        (availableRecipes || []).forEach((r) => {
+          if (r && r.id) {
+            recipeMap.set(r.id, r);
+          }
+        });
+
+        // Track which exact recipe IDs (originals or variants) are already in the shopping list
+        const addedRecipeIds = new Set(
+          (shoppingListData.recipes || []).map((r) => r.id)
+        );
         
-        container.innerHTML = recipes.map(recipe => {
-          const isAlreadyAdded = addedRecipeIds.has(recipe.id);
-          const cardClasses = isAlreadyAdded 
+        // Group recipes by their root/original recipe ID so variants are shown together
+        const groups = new Map();
+        recipes.forEach((recipe) => {
+          const rootId = recipe.parentRecipeId || recipe.id;
+          if (!groups.has(rootId)) {
+            const rootRecipe = recipeMap.get(rootId) || recipe;
+            groups.set(rootId, { root: rootRecipe, items: [] });
+          }
+          groups.get(rootId).items.push(recipe);
+        });
+
+        container.innerHTML = Array.from(groups.entries()).map(([rootId, group]) => {
+          const rootRecipe = group.root || group.items[0];
+          const groupItems = group.items;
+          const totalInGroup = groupItems.length;
+          const addedInGroup = groupItems.filter((v) => addedRecipeIds.has(v.id)).length;
+          const isGroupFullyAdded = totalInGroup > 0 && addedInGroup === totalInGroup;
+          const cardClasses = isGroupFullyAdded 
             ? 'recipe-card border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed transition-colors'
             : 'recipe-card border border-gray-300 dark:border-gray-600 rounded-lg p-4 hover:border-orange-500 cursor-pointer transition-colors';
-          
-          return `
-            <div class="${cardClasses}" data-recipe-id="${recipe.id}">
-              <div class="flex items-start space-x-3">
-                ${!isAlreadyAdded ? `
-                  <input type="checkbox" class="recipe-checkbox mt-1 w-5 h-5 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2" data-recipe-id="${recipe.id}" />
-                ` : `
-                  <div class="mt-1 w-5 h-5 bg-gray-300 dark:bg-gray-600 rounded flex items-center justify-center">
-                    <svg class="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
+
+          const variantRows = groupItems.map((variantRecipe) => {
+            const isOriginal = !variantRecipe.parentRecipeId;
+            const label = isOriginal
+              ? 'Original'
+              : (variantRecipe.variantName || 'Variante');
+            const ingredientCount = getRecipeIngredientCount(variantRecipe);
+
+            const isVariantAlreadyAdded = addedRecipeIds.has(variantRecipe.id);
+            const isSelected = selectedRecipeIds.has(variantRecipe.id);
+
+            if (isVariantAlreadyAdded) {
+              return `
+                <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300 mt-1">
+                  <div class="flex items-center space-x-2">
+                    <div class="w-5 h-5 bg-gray-300 dark:bg-gray-600 rounded flex items-center justify-center">
+                      <svg class="w-3 h-3 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                    </div>
+                    <span>${label}</span>
                   </div>
-                `}
-                ${recipe.images && recipe.images.length > 0 
-                  ? `<img src="${recipe.images[0].url}" alt="${recipe.title}" class="w-16 h-16 object-cover rounded-lg ${isAlreadyAdded ? 'grayscale' : ''}">`
+                  <span class="text-xs text-gray-500 dark:text-gray-400">${ingredientCount} Zutaten</span>
+                </div>
+              `;
+            }
+
+            return `
+              <label class="flex items-center justify-between text-sm text-gray-700 dark:text-gray-200 mt-1 cursor-pointer">
+                <div class="flex items-center space-x-2">
+                  <input 
+                    type="checkbox" 
+                    class="recipe-checkbox w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 focus:ring-2" 
+                    data-recipe-id="${variantRecipe.id}" 
+                    ${isSelected ? 'checked' : ''}
+                  />
+                  <span>${label}</span>
+                </div>
+                <span class="text-xs text-gray-500 dark:text-gray-400">${ingredientCount} Zutaten</span>
+              </label>
+            `;
+          }).join('');
+
+          return `
+            <div class="${cardClasses}" data-root-recipe-id="${rootId}">
+              <div class="flex items-start space-x-3">
+                ${rootRecipe.images && rootRecipe.images.length > 0 
+                  ? `<img src="${rootRecipe.images[0].url}" alt="${rootRecipe.title}" class="w-16 h-16 object-cover rounded-lg ${isGroupFullyAdded ? 'grayscale' : ''}">`
                   : `<div class="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
                        <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -1956,21 +2015,40 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                      </div>`
                 }
                 <div class="flex-1 min-w-0">
-                  <h3 class="font-medium ${isAlreadyAdded ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'} truncate">
-                    ${recipe.title}
-                    ${isAlreadyAdded ? '<span class="text-xs ml-2 bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-0.5 rounded">Bereits hinzugefügt</span>' : ''}
+                  <h3 class="font-medium ${isGroupFullyAdded ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'} truncate">
+                    ${rootRecipe.title}
+                    ${isGroupFullyAdded ? '<span class="text-xs ml-2 bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-0.5 rounded">Bereits hinzugefügt</span>' : ''}
                   </h3>
-                  <p class="text-sm text-muted mt-1">${getRecipeIngredientCount(recipe)} Zutaten</p>
-                  ${recipe.description ? `<p class="text-sm text-muted mt-1 line-clamp-2">${recipe.description}</p>` : ''}
+                  ${rootRecipe.description ? `<p class="text-sm text-muted mt-1 line-clamp-2">${rootRecipe.description}</p>` : ''}
+                  <div class="mt-2 space-y-1">
+                    ${variantRows}
+                  </div>
                 </div>
               </div>
             </div>
           `;
         }).join('');
         
-        // Attach change handlers for checkboxes
-        container.querySelectorAll('.recipe-checkbox').forEach(checkbox => {
-          checkbox.addEventListener('change', updateSelectedCount);
+        // Attach change handlers for checkboxes and ensure their checked state reflects the selection set
+        container.querySelectorAll('.recipe-checkbox').forEach((checkbox) => {
+          const recipeId = checkbox.getAttribute('data-recipe-id');
+          if (recipeId && selectedRecipeIds.has(recipeId)) {
+            checkbox.checked = true;
+          }
+
+          checkbox.addEventListener('change', (event) => {
+            const target = event.target;
+            const id = target.getAttribute('data-recipe-id');
+            if (!id) return;
+
+            if (target.checked) {
+              selectedRecipeIds.add(id);
+            } else {
+              selectedRecipeIds.delete(id);
+            }
+
+            updateSelectedCount();
+          });
         });
         
         // Update selected count
@@ -1979,9 +2057,8 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 
       // Update selected count and button state
       function updateSelectedCount() {
-        const selectedCheckboxes = document.querySelectorAll('.recipe-checkbox:checked');
-        const selectedCount = selectedCheckboxes.length;
-        const selectedCountElement = document.getElementById('selected-count');
+        const selectedCount = selectedRecipeIds.size;
+        const selectedCountElement = document.getElementById('selected-recipes-count');
         const addSelectedButton = document.getElementById('add-selected-recipes');
         const selectAllCheckbox = document.getElementById('select-all-recipes');
         
@@ -1995,11 +2072,26 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           addSelectedButton.disabled = selectedCount === 0;
         }
         
-        // Update select all checkbox state
-        const allCheckboxes = document.querySelectorAll('.recipe-checkbox');
-        if (selectAllCheckbox && allCheckboxes.length > 0) {
-          selectAllCheckbox.checked = selectedCount === allCheckboxes.length;
-          selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < allCheckboxes.length;
+        // Update select all checkbox state relative to currently visible recipes
+        if (selectAllCheckbox) {
+          const allCheckboxes = document.querySelectorAll('.recipe-checkbox');
+          const totalVisible = allCheckboxes.length;
+
+          if (totalVisible === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+          } else {
+            let selectedVisible = 0;
+            allCheckboxes.forEach((checkbox) => {
+              const id = checkbox.getAttribute('data-recipe-id');
+              if (id && selectedRecipeIds.has(id)) {
+                selectedVisible += 1;
+              }
+            });
+
+            selectAllCheckbox.checked = selectedVisible > 0 && selectedVisible === totalVisible;
+            selectAllCheckbox.indeterminate = selectedVisible > 0 && selectedVisible < totalVisible;
+          }
         }
       }
 
@@ -2428,6 +2520,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 
       // Open recipe modal and load recipes
       addRecipeBtn?.addEventListener('click', () => {
+        // Reset selection state when opening the modal
+        selectedRecipeIds.clear();
+        if (selectAllRecipes) {
+          selectAllRecipes.checked = false;
+          selectAllRecipes.indeterminate = false;
+        }
+
         addRecipeModal?.classList.remove('hidden');
         loadRecipes();
       });
@@ -2443,18 +2542,30 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
 
       // Handle select all recipes
       selectAllRecipes?.addEventListener('change', (e) => {
+        const target = e.target;
+        const shouldSelectAll = target.checked;
+
         const checkboxes = document.querySelectorAll('.recipe-checkbox');
-        checkboxes.forEach(checkbox => {
-          checkbox.checked = e.target.checked;
+        checkboxes.forEach((checkbox) => {
+          const input = checkbox;
+          const recipeId = input.getAttribute('data-recipe-id');
+          if (!recipeId) return;
+
+          input.checked = shouldSelectAll;
+
+          if (shouldSelectAll) {
+            selectedRecipeIds.add(recipeId);
+          } else {
+            selectedRecipeIds.delete(recipeId);
+          }
         });
+
         updateSelectedCount();
       });
 
       // Handle add selected recipes
       addSelectedRecipesBtn?.addEventListener('click', async () => {
-        const selectedRecipes = Array.from(document.querySelectorAll('.recipe-checkbox:checked'))
-          .map(checkbox => checkbox.getAttribute('data-recipe-id'))
-          .filter(Boolean);
+        const selectedRecipes = Array.from(selectedRecipeIds);
 
         if (selectedRecipes.length > 0) {
           await addMultipleRecipesToShoppingList(selectedRecipes);

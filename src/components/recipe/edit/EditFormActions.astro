@@ -21,6 +21,17 @@ const { recipeId } = Astro.props;
         </svg>
         <span>Speichern</span>
       </button>
+      <!-- Save as variant button (mobile) -->
+      <button 
+        type="button" 
+        id="save-as-variant-btn-mobile"
+        class="px-6 py-4 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white rounded-lg transition-colors flex items-center justify-center space-x-2 w-full text-base font-medium shadow-sm touch-manipulation"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/>
+        </svg>
+        <span>Als Variante speichern</span>
+      </button>
       <button 
         type="button" 
         id="delete-recipe-btn"
@@ -61,6 +72,17 @@ const { recipeId } = Astro.props;
       >
         Abbrechen
       </button>
+      <!-- Save as variant button (desktop) -->
+      <button 
+        type="button" 
+        id="save-as-variant-btn-bottom"
+        class="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-md transition-colors flex items-center space-x-2"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/>
+        </svg>
+        <span>Als Variante speichern</span>
+      </button>
       <!-- Save button at bottom (desktop) -->
       <button 
         type="button" 
@@ -88,6 +110,10 @@ const { recipeId } = Astro.props;
   const saveBtnBottom = document.getElementById('save-btn-bottom') as HTMLButtonElement;
   const saveBtnBottomMobile = document.getElementById('save-btn-bottom-mobile') as HTMLButtonElement;
   
+  // Variant buttons
+  const saveAsVariantBtn = document.getElementById('save-as-variant-btn-bottom') as HTMLButtonElement;
+  const saveAsVariantBtnMobile = document.getElementById('save-as-variant-btn-mobile') as HTMLButtonElement;
+
   // Add click handlers to all save buttons
   [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].forEach(btn => {
     btn?.addEventListener('click', () => {
@@ -104,6 +130,17 @@ const { recipeId } = Astro.props;
       
       // Submit the form
       form?.dispatchEvent(new Event('submit'));
+    });
+  });
+
+  // Open modal from both variant buttons
+  [saveAsVariantBtn, saveAsVariantBtnMobile].forEach(btn => {
+    btn?.addEventListener('click', () => {
+      // openVariantModal is provided by VariantModal component at runtime
+      const openVariant = (window as any).openVariantModal;
+      if (typeof openVariant === 'function') {
+        openVariant();
+      }
     });
   });
 </script> 

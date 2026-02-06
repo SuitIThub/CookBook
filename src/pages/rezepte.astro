@@ -8,10 +8,19 @@ import EmptyState from '../components/recipe_list/EmptyState.astro';
 import { db } from '../lib/database';
 import type { Recipe } from '../types/recipe';
 
+type RecipeWithVariants = Recipe & { variants?: Recipe[] };
+
 // Load recipes from database
-let recipes: Recipe[] = [];
+let allRecipes: Recipe[] = [];
+let recipes: RecipeWithVariants[] = [];
 try {
-  recipes = db.getAllRecipes();
+  allRecipes = db.getAllRecipes();
+  // Only show original recipes in the overview list, but attach their variants for selection mode
+  const originals = allRecipes.filter((recipe) => !recipe.parentRecipeId);
+  recipes = originals.map((original) => ({
+    ...original,
+    variants: allRecipes.filter((r) => r.parentRecipeId === original.id)
+  }));
 } catch (error) {
   console.error('Error loading recipes:', error);
 }

@@ -215,23 +215,26 @@ declare global {
     const recipeCard = target.closest('.recipe-card');
     if (!recipeCard || !isSelectionMode) return;
 
-    const recipeId = recipeCard.getAttribute('data-recipe-id');
+    // For cards with multiple variant checkboxes, rely on clicking the checkboxes themselves
+    const checkboxes = recipeCard.querySelectorAll<HTMLInputElement>('.recipe-select-checkbox');
+    if (checkboxes.length !== 1) {
+      return;
+    }
+
+    const checkbox = checkboxes[0];
+    const recipeId = checkbox.dataset.recipeId;
     if (!recipeId) return;
 
-    const checkbox = recipeCard.querySelector<HTMLInputElement>('.recipe-select-checkbox');
-    if (!checkbox) return;
-
-    // Toggle checkbox
+    // Toggle single checkbox (recipes without variants)
     checkbox.checked = !checkbox.checked;
 
     if (checkbox.checked) {
       selectedRecipes.add(recipeId);
-      recipeCard.classList.add('selected');
     } else {
       selectedRecipes.delete(recipeId);
-      recipeCard.classList.remove('selected');
     }
 
+    updateCardSelection(recipeCard);
     updateUI();
   });
 
@@ -262,6 +265,17 @@ declare global {
       bulkActions?.classList.add('hidden');
       regularActions?.classList.remove('hidden');
       selectedCount?.classList.add('hidden');
+    }
+  }
+
+  // Update a single card's selected state based on its checkboxes
+  function updateCardSelection(card: Element | null) {
+    if (!card) return;
+    const anyChecked = card.querySelector('.recipe-select-checkbox:checked') !== null;
+    if (anyChecked) {
+      card.classList.add('selected');
+    } else {
+      card.classList.remove('selected');
     }
   }
 
@@ -297,12 +311,11 @@ declare global {
     const recipeId = checkbox.dataset.recipeId;
     if (!recipeId) return;
     
-    const recipeCard = document.querySelector(`.recipe-card[data-recipe-id="${recipeId}"]`);
+    const recipeCard = checkbox.closest('.recipe-card');
     if (!recipeCard) return;
     
     if (checkbox.checked) {
       selectedRecipes.add(recipeId);
-      recipeCard.classList.add('selected');
       if (!isSelectionMode) {
         isSelectionMode = true;
         document.querySelectorAll('.recipe-card').forEach(card => {
@@ -311,9 +324,9 @@ declare global {
       }
     } else {
       selectedRecipes.delete(recipeId);
-      recipeCard.classList.remove('selected');
     }
     
+    updateCardSelection(recipeCard);
     updateUI();
   });
   

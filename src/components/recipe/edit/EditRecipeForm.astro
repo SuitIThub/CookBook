@@ -657,15 +657,19 @@ const { recipe } = Astro.props;
     }
   }
   
-  // Expose save function and collectRecipeData globally so they can be called from cancel handler
+  // Expose helper functions globally so they can be called from other scripts
   // Do this immediately when the script loads, not just in DOMContentLoaded
   // Wrap in try-catch to handle any errors during exposure
   try {
+    // @ts-ignore - extend window with app-specific helpers
     window.saveDraftToStorage = saveDraftToStorage;
+    // @ts-ignore - extend window with app-specific helpers
     window.collectRecipeData = collectRecipeData;
-    console.log('saveDraftToStorage function exposed globally');
+    // @ts-ignore - extend window with app-specific helpers
+    window.createRecipeVariant = createRecipeVariant;
+    console.log('draft and variant helper functions exposed globally');
   } catch (error) {
-    console.error('Error exposing saveDraftToStorage:', error);
+    console.error('Error exposing draft/variant helper functions:', error);
   }
   
   // Save draft immediately (synchronous, for page unload)
@@ -1612,6 +1616,59 @@ const { recipe } = Astro.props;
     }
     
     return preparationGroups;
+  }
+
+  // Create a new recipe variant based on the current edit state
+  async function createRecipeVariant(variantName) {
+    try {
+      const trimmedName = (variantName || '').trim();
+      const recipeId = window.location.pathname.split('/').pop();
+      if (!recipeId) {
+        throw new Error('Recipe ID not found in URL');
+      }
+
+      // Always link variants to the root original recipe (not to another variant)
+      const rootOriginalId = recipe.parentRecipeId || recipe.id;
+
+      // Collect the current recipe data from the form (including all changes)
+      const updatedRecipe = collectRecipeData();
+
+      const response = await fetch(`/api/recipes?action=create-variant`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          originalId: rootOriginalId,
+          variantName: trimmedName,
+          recipeData: updatedRecipe
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to create recipe variant:', response.status, errorText);
+        throw new Error('Failed to create recipe variant');
+      }
+
+      const newVariant = await response.json();
+
+      // Prevent draft auto-save from creating a new draft on unload after redirect
+      justSavedRecipe = true;
+
+      // Show success notification and redirect to the new variant
+      showNotification('Variante erfolgreich erstellt!', 'success');
+
+      setTimeout(() => {
+        window.location.href = `/rezept/${newVariant.id}`;
+      }, 800);
+
+      return newVariant;
+    } catch (error) {
+      console.error('Error creating recipe variant:', error);
+      showNotification('Fehler beim Erstellen der Variante. Bitte versuchen Sie es erneut.', 'error');
+      throw error;
+    }
   }
 
   async function handleFormSubmit(e) {

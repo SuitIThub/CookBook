@@ -13,16 +13,27 @@ import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
 import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro';
 import EditFormActions from '../../components/recipe/edit/EditFormActions.astro';
 import ShoppingListModal from '../../components/modals/ShoppingListModal.astro';
+import VariantModal from '../../components/modals/VariantModal.astro';
 
 const { id } = Astro.params;
 
 // Rezept aus der Datenbank laden
 let recipe: Recipe | null = null;
+let variants: Recipe[] = [];
+let originalRecipe: Recipe | null = null;
 try {
   recipe = id ? db.getRecipe(id as string) : null;
   if (!recipe) {
     return Astro.redirect('/404');
   }
+
+  // Determine original recipe and load its variants
+  const isVariant = !!recipe.parentRecipeId;
+  const rootOriginalId = isVariant && recipe.parentRecipeId ? recipe.parentRecipeId : recipe.id;
+  const rootOriginal = db.getRecipe(rootOriginalId) || recipe;
+
+  originalRecipe = rootOriginal;
+  variants = db.getVariantsForRecipe(rootOriginalId);
 } catch (error) {
   console.error('Error loading recipe from database:', error);
   return Astro.redirect('/404');
@@ -32,6 +43,70 @@ try {
 <Layout title={`${recipe.title} - Kochbuch`}>
   <div class="max-w-4xl mx-auto">
     <!-- Header Section -->
+    {variants.length > 0 && originalRecipe && (
+      <div class="mb-4">
+        <!-- Desktop variant tabs -->
+        <div class="hidden md:flex border-b border-gray-200 dark:border-gray-700 mb-4">
+          {
+            [
+              { id: originalRecipe.id, label: 'Original' },
+              ...variants.map((v, index) => ({
+                id: v.id,
+                label: v.variantName && v.variantName.trim().length > 0 ? v.variantName : `Variante ${index + 1}`
+              }))
+            ].map((entry) => (
+              <a
+                href={`/rezept/${entry.id}`}
+                class={
+                  'px-4 py-2 -mb-px border-b-2 text-sm font-medium transition-colors ' +
+                  (recipe.id === entry.id
+                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200')
+                }
+              >
+                {entry.label}
+              </a>
+            ))
+          }
+        </div>
+
+        <!-- Mobile variant dropdown -->
+        <div class="md:hidden mb-4">
+          <label
+            for="variant-select"
+            class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1"
+          >
+            Variante auswählen
+          </label>
+          <select
+            id="variant-select"
+            class="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 py-2 px-3 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            onchange="if (this.value) window.location.href = this.value"
+          >
+            <option
+              value={`/rezept/${originalRecipe.id}`}
+              selected={recipe.id === originalRecipe.id}
+            >
+              Original
+            </option>
+            {variants.map((v, index) => {
+              const label =
+                v.variantName && v.variantName.trim().length > 0
+                  ? v.variantName
+                  : `Variante ${index + 1}`;
+              const value = `/rezept/${v.id}`;
+              const isSelected = recipe.id === v.id;
+              return (
+                <option value={value} selected={isSelected}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      </div>
+    )}
+
     <RecipeHeader recipe={recipe} />
 
     <!-- View Mode Content -->
@@ -95,8 +170,9 @@ try {
   </div>
 
   <ShoppingListModal />
+  <VariantModal />
 
-  <script define:vars={{ recipe }}>
+  <script define:vars={{ recipe, originalRecipe, variants }}>
     // Timer functionality
     document.querySelectorAll('.timer-trigger').forEach(button => {
       button.addEventListener('click', (e) => {
