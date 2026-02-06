@@ -160,7 +160,9 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     const pickerCancel = document.getElementById('recipe-ai-chat-picker-cancel');
     const pickerAdd = document.getElementById('recipe-ai-chat-picker-add');
 
-    const RECIPE_VARIANT_KEYWORD = '[RECIPE_VARIANT]';
+    // We treat any occurrence of the literal text RECIPE_VARIANT as a variant marker,
+    // regardless of surrounding brackets/markdown. Detection is lenient; cleanup is stricter.
+    const RECIPE_VARIANT_KEYWORD = 'RECIPE_VARIANT';
     let messages = [];
     let referencedRecipesList = Array.isArray(initialReferencedRecipes)
       ? initialReferencedRecipes.map((r) => ({ id: r.id, title: r.title || '', imageUrl: r.imageUrl }))
