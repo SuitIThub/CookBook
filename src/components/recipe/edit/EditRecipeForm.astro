@@ -1653,6 +1653,18 @@ const { recipe } = Astro.props;
 
       const newVariant = await response.json();
 
+      // After successfully creating the variant, remove any remaining draft
+      // for the current recipe so that no stale "draft" state is shown.
+      try {
+        const deleted = await deleteDraft(recipeId);
+        if (!deleted) {
+          console.warn('No draft deleted after creating variant (might not have existed).');
+        }
+      } catch (deleteError) {
+        console.error('Error deleting draft after creating variant:', deleteError);
+        // Continue anyway; a leftover draft is less severe than blocking variant creation.
+      }
+
       // Prevent draft auto-save from creating a new draft on unload after redirect
       justSavedRecipe = true;
 
