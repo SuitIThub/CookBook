@@ -83,6 +83,8 @@ export interface Recipe {
   imageUrl?: string; // Keep for backward compatibility
   images?: RecipeImage[];
   sourceUrl?: string; // URL of the recipe if imported via URL
+  parentRecipeId?: string; // Optional: ID of the original recipe if this is a variant
+  variantName?: string; // Optional: short title/name to identify this variant
   createdAt: Date;
   updatedAt: Date;
 }

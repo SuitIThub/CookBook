@@ -21,6 +21,8 @@ const EXPECTED_SCHEMA = {
         { name: 'image_url', type: 'TEXT', nullable: true },
         { name: 'images', type: 'TEXT', nullable: true, defaultValue: "'[]'" },
         { name: 'source_url', type: 'TEXT', nullable: true },
+        { name: 'parent_recipe_id', type: 'TEXT', nullable: true },
+        { name: 'variant_name', type: 'TEXT', nullable: true },
         { name: 'is_draft', type: 'INTEGER', nullable: false, defaultValue: '0' },
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
