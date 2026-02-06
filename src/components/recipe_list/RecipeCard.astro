@@ -3,7 +3,7 @@ import type { Recipe } from '../../types/recipe';
 import RecipeImageCarousel from './RecipeImageCarousel.astro';
 
 interface Props {
-  recipe: Recipe;
+  recipe: Recipe & { variants?: Recipe[] };
 }
 
 const { recipe } = Astro.props;
@@ -17,14 +17,16 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
 ---
 
 <div class="recipe-card group relative" data-recipe-id={recipe.id} data-category={recipe.category || ''}>
-  <!-- Selection Checkbox -->
-  <div class="selection-indicator absolute top-2 left-2 z-10 opacity-0 md:group-hover:opacity-100 transition-opacity">
-    <input 
-      type="checkbox" 
-      class="recipe-select-checkbox w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
-      data-recipe-id={recipe.id}
-    >
-  </div>
+  <!-- Selection Checkbox (only for recipes without variants; variant checkboxes are rendered per variant) -->
+  {(!recipe.variants || recipe.variants.length === 0) && (
+    <div class="selection-indicator absolute top-2 left-2 z-10 opacity-0 md:group-hover:opacity-100 transition-opacity">
+      <input 
+        type="checkbox" 
+        class="recipe-select-checkbox w-5 h-5 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+        data-recipe-id={recipe.id}
+      >
+    </div>
+  )}
 
   <!-- Recipe Image Carousel -->
   <RecipeImageCarousel images={recipe.images || []} />
@@ -60,6 +62,33 @@ const totalTime = recipe.metadata.timeEntries?.reduce((total, entry) => total + 
 
     <!-- Divider -->
     <div class="border-t border-gray-200 dark:border-gray-700 my-3"></div>
+
+    <!-- Variant selection rows (shown at bottom of card in selection mode) -->
+    {recipe.variants && recipe.variants.length > 0 && (
+      <div class="mb-3 space-y-1 text-xs text-gray-700 dark:text-gray-200">
+        {[
+          // Include original recipe as "Original"
+          recipe,
+          // Then all variants
+          ...recipe.variants
+        ].map((variant) => {
+          const isOriginal = !variant.parentRecipeId;
+          const label = isOriginal ? 'Original' : (variant.variantName || 'Variante');
+          return (
+            <label class="flex items-center justify-between gap-2 variant-select-row">
+              <div class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  class="recipe-select-checkbox w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                  data-recipe-id={variant.id}
+                />
+                <span class="truncate">{label}</span>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+    )}
 
     <!-- Recipe Metadata -->
     <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">

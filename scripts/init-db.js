@@ -18,6 +18,8 @@ db.exec(`
     image_url TEXT,
     images TEXT,
     source_url TEXT,
+    parent_recipe_id TEXT,
+    variant_name TEXT,
     is_draft INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
