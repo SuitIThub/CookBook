@@ -131,6 +131,46 @@ export const POST: APIRoute = async ({ request, url }) => {
         status: 201,
         headers: { 'Content-Type': 'application/json' }
       });
+    } else if (action === 'create-variant') {
+      // Create a new recipe variant based on an existing recipe
+      const body = await request.json();
+      const { originalId, variantName, recipeData } = body || {};
+
+      if (!originalId || !recipeData) {
+        return new Response(JSON.stringify({ error: 'Original recipe ID and recipe data are required' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Ensure the original recipe exists
+      const originalRecipe = db.getRecipe(originalId);
+      if (!originalRecipe) {
+        return new Response(JSON.stringify({ error: 'Original recipe not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Always link variants to the root original recipe (not to another variant)
+      const rootOriginalId = originalRecipe.parentRecipeId || originalRecipe.id;
+
+      const trimmedVariantName =
+        typeof variantName === 'string' && variantName.trim() !== '' ? variantName.trim() : null;
+
+      const variantRecipeData = {
+        ...recipeData,
+        // Ensure relationship fields are set explicitly
+        parentRecipeId: rootOriginalId,
+        variantName: trimmedVariantName
+      };
+
+      const newVariant = db.createRecipe(variantRecipeData);
+
+      return new Response(JSON.stringify(newVariant), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' }
+      });
     } else {
       // Regular recipe creation with full data
       const recipeData = await request.json();

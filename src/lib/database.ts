@@ -28,11 +28,25 @@ export class CookbookDatabase {
         image_url TEXT,
         images TEXT,
         source_url TEXT,
+        parent_recipe_id TEXT,
+        variant_name TEXT,
         is_draft INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migration: ensure new columns for recipe variants exist on existing databases
+    try {
+      this.db.exec(`ALTER TABLE recipes ADD COLUMN parent_recipe_id TEXT`);
+    } catch (error) {
+      // Ignore error if column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE recipes ADD COLUMN variant_name TEXT`);
+    } catch (error) {
+      // Ignore error if column already exists
+    }
 
     // Categories table for predefined categories
     this.db.exec(`
@@ -130,8 +144,8 @@ export class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, is_draft, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, parent_recipe_id, variant_name, is_draft, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -147,6 +161,8 @@ export class CookbookDatabase {
       newRecipe.imageUrl,
       JSON.stringify(newRecipe.images || []),
       newRecipe.sourceUrl,
+      newRecipe.parentRecipeId || null,
+      newRecipe.variantName || null,
       0, // is_draft = false for regular recipes
       newRecipe.createdAt.toISOString(),
       newRecipe.updatedAt.toISOString()
@@ -187,6 +203,8 @@ export class CookbookDatabase {
       imageUrl: row.image_url,
       images: row.images ? JSON.parse(row.images) : [],
       sourceUrl: row.source_url,
+      parentRecipeId: row.parent_recipe_id || undefined,
+      variantName: row.variant_name || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -214,6 +232,8 @@ export class CookbookDatabase {
       imageUrl: row.image_url,
       images: row.images ? JSON.parse(row.images) : [],
       sourceUrl: row.source_url,
+      parentRecipeId: row.parent_recipe_id || undefined,
+      variantName: row.variant_name || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -236,6 +256,8 @@ export class CookbookDatabase {
       imageUrl: row.image_url,
       images: row.images ? JSON.parse(row.images) : [],
       sourceUrl: row.source_url,
+      parentRecipeId: row.parent_recipe_id || undefined,
+      variantName: row.variant_name || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     }));
@@ -262,9 +284,38 @@ export class CookbookDatabase {
       imageUrl: row.image_url,
       images: row.images ? JSON.parse(row.images) : [],
       sourceUrl: row.source_url,
+      parentRecipeId: row.parent_recipe_id || undefined,
+      variantName: row.variant_name || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
+  }
+
+  /**
+   * Get all non-draft variants for a given original recipe.
+   */
+  getVariantsForRecipe(parentId: string): Recipe[] {
+    const stmt = this.db.prepare('SELECT * FROM recipes WHERE parent_recipe_id = ? AND is_draft = 0 ORDER BY created_at ASC');
+    const rows = stmt.all(parentId) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle,
+      description: row.description,
+      metadata: JSON.parse(row.metadata),
+      category: row.category,
+      tags: row.tags ? JSON.parse(row.tags) : [],
+      ingredientGroups: JSON.parse(row.ingredient_groups),
+      preparationGroups: JSON.parse(row.preparation_groups),
+      imageUrl: row.image_url,
+      images: row.images ? JSON.parse(row.images) : [],
+      sourceUrl: row.source_url,
+      parentRecipeId: row.parent_recipe_id || undefined,
+      variantName: row.variant_name || undefined,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at)
+    }));
   }
 
   updateRecipe(id: string, updates: Partial<Recipe>): Recipe | null {
@@ -282,7 +333,7 @@ export class CookbookDatabase {
     const stmt = this.db.prepare(`
       UPDATE recipes 
       SET title = ?, subtitle = ?, description = ?, metadata = ?, category = ?, tags = ?,
-          ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, source_url = ?, updated_at = ?
+          ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, source_url = ?, parent_recipe_id = ?, variant_name = ?, updated_at = ?
       WHERE id = ? AND is_draft = 0
     `);
 
@@ -298,6 +349,8 @@ export class CookbookDatabase {
       updatedRecipe.imageUrl,
       JSON.stringify(updatedRecipe.images || []),
       updatedRecipe.sourceUrl,
+      updatedRecipe.parentRecipeId || null,
+      updatedRecipe.variantName || null,
       updatedRecipe.updatedAt.toISOString(),
       id
     );
@@ -473,10 +526,15 @@ export class CookbookDatabase {
       return shoppingList;
     }
 
+    // Build display title: include variant name when this is a variant
+    const displayTitle = recipe.variantName
+      ? `${recipe.title} - ${recipe.variantName}`
+      : recipe.title;
+
     // Add recipe to list
     const shoppingListRecipe: ShoppingListRecipe = {
       id: recipe.id,
-      title: recipe.title,
+      title: displayTitle,
       servings: recipe.metadata.servings,
       currentServings: recipe.metadata.servings,
       isCompleted: false,
@@ -1131,6 +1189,8 @@ export class CookbookDatabase {
       imageUrl: currentImageUrl, // Always use current recipe's imageUrl
       images: currentImages, // Always use current recipe's images
       sourceUrl: row.source_url || undefined,
+      parentRecipeId: row.parent_recipe_id || undefined,
+      variantName: row.variant_name || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.draft_last_updated || row.updated_at), // Use draft's last_updated timestamp
       draftLastUpdated: new Date(row.draft_last_updated || row.updated_at)

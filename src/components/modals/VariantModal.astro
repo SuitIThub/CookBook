@@ -1,0 +1,131 @@
+---
+declare global {
+  interface Window {
+    createRecipeVariant?: (variantName: string) => Promise<any>;
+  }
+}
+---
+
+<!-- Variant title modal -->
+<div 
+  id="variant-modal" 
+  class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+      Neue Rezeptvariante erstellen
+    </h3>
+    <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+      Bitte gib einen kurzen Titel für diese Variante ein, damit du sie später leicht wiedererkennst.
+    </p>
+    <div class="mb-4">
+      <label 
+        for="variant-name-input" 
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+      >
+        Variantenname
+      </label>
+      <input
+        id="variant-name-input"
+        type="text"
+        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+        placeholder="z. B. „Ohne Zucker“, „Schnelle Version“, „Partyportion“"
+      />
+    </div>
+    <div class="flex justify-end space-x-3">
+      <button
+        type="button"
+        id="variant-cancel-btn"
+        class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+      >
+        Abbrechen
+      </button>
+      <button
+        type="button"
+        id="variant-confirm-btn"
+        class="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition-colors"
+      >
+        Variante erstellen
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const variantModal = document.getElementById('variant-modal') as HTMLDivElement | null;
+  const variantNameInput = document.getElementById('variant-name-input') as HTMLInputElement | null;
+  const variantCancelBtn = document.getElementById('variant-cancel-btn') as HTMLButtonElement | null;
+  const variantConfirmBtn = document.getElementById('variant-confirm-btn') as HTMLButtonElement | null;
+
+  function openVariantModal() {
+    if (!variantModal) return;
+    variantModal.classList.remove('hidden');
+    variantModal.classList.add('flex');
+    if (variantNameInput) {
+      variantNameInput.value = '';
+      setTimeout(() => {
+        variantNameInput?.focus();
+      }, 10);
+    }
+  }
+
+  function closeVariantModal() {
+    if (!variantModal) return;
+    variantModal.classList.add('hidden');
+    variantModal.classList.remove('flex');
+    if (variantConfirmBtn) {
+      variantConfirmBtn.disabled = false;
+      variantConfirmBtn.textContent = 'Variante erstellen';
+    }
+  }
+
+  // Expose open function globally so edit actions can trigger it
+  (window as any).openVariantModal = openVariantModal;
+
+  // Modal cancel
+  variantCancelBtn?.addEventListener('click', () => {
+    closeVariantModal();
+  });
+
+  // Close modal when clicking on backdrop (but not on dialog content)
+  variantModal?.addEventListener('click', (event) => {
+    if (event.target === variantModal) {
+      closeVariantModal();
+    }
+  });
+
+  // Confirm variant creation
+  variantConfirmBtn?.addEventListener('click', async () => {
+    if (!variantNameInput) return;
+
+    const name = variantNameInput.value.trim();
+    if (!name) {
+      alert('Bitte gib einen kurzen Titel für die Variante ein.');
+      variantNameInput.focus();
+      return;
+    }
+
+    const createVariant = (window as any).createRecipeVariant;
+    if (!createVariant || typeof createVariant !== 'function') {
+      alert('Variante kann derzeit nicht erstellt werden. Bitte lade die Seite neu und versuche es erneut.');
+      return;
+    }
+
+    try {
+      if (variantConfirmBtn) {
+        variantConfirmBtn.disabled = true;
+        variantConfirmBtn.textContent = 'Erstellt...';
+      }
+
+      await createVariant(name);
+      // createRecipeVariant handles redirect and notifications
+    } catch (error) {
+      console.error('Error while creating variant from modal:', error);
+      if (variantConfirmBtn) {
+        variantConfirmBtn.disabled = false;
+        variantConfirmBtn.textContent = 'Variante erstellen';
+      }
+    }
+  });
+</script>
+
