@@ -225,7 +225,8 @@ if (!shoppingList) {
         </div>
       </div>
 
-      <!-- Danger Zone -->
+      <!-- Danger Zone (hidden for permanent list - cannot be deleted) -->
+      {!shoppingList.isPermanent && (
       <div class="card border-red-200 dark:border-red-800">
         <div class="card-content">
           <h3 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">Gefährlicher Bereich</h3>
@@ -237,6 +238,7 @@ if (!shoppingList) {
           </button>
         </div>
       </div>
+      )}
     </form>
   </div>
 

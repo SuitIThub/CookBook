@@ -232,6 +232,14 @@ export const DELETE: APIRoute = async ({ url }) => {
       });
     }
 
+    const list = db.getShoppingList(id);
+    if (list?.isPermanent) {
+      return new Response(JSON.stringify({ error: 'Die Sammelliste kann nicht gelöscht werden.' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     const success = db.deleteShoppingList(id);
     
     if (!success) {

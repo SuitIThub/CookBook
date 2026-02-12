@@ -100,11 +100,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           type="button"
           id="recipe-ai-chat-send-btn"
           class="flex-shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Senden"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 recipe-ai-chat-send-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
           </svg>
-          Senden
+          <span class="recipe-ai-chat-send-label">Senden</span>
         </button>
       </div>
     </div>
@@ -164,6 +165,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     // regardless of surrounding brackets/markdown. Detection is lenient; cleanup is stricter.
     const RECIPE_VARIANT_KEYWORD = 'RECIPE_VARIANT';
     let messages = [];
+    let isGenerating = false;
+    let currentAbortController = null;
     let referencedRecipesList = Array.isArray(initialReferencedRecipes)
       ? initialReferencedRecipes.map((r) => ({ id: r.id, title: r.title || '', imageUrl: r.imageUrl }))
       : [];
@@ -332,6 +335,16 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       return result.trim();
     }
 
+    function appendRegenerateButton(wrap, messageIndex) {
+      if (!wrap || typeof messageIndex !== 'number') return;
+      const regenBtn = document.createElement('button');
+      regenBtn.type = 'button';
+      regenBtn.className = 'mt-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 underline-offset-2 hover:underline self-start';
+      regenBtn.textContent = 'Antwort neu generieren';
+      regenBtn.addEventListener('click', () => regenerateMessage(messageIndex));
+      wrap.appendChild(regenBtn);
+    }
+
     function appendVariantButtonIfNeeded(wrap, bubble, content, messageIndex) {
       if (!content || !content.includes(RECIPE_VARIANT_KEYWORD)) return;
       const displayContent = stripVariantKeyword(content);
@@ -430,7 +443,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       const text = (input && input.value) ? input.value.trim() : '';
       if (!text || !sendBtn) return;
 
-      sendBtn.disabled = true;
+      if (isGenerating) return;
+      isGenerating = true;
+      currentAbortController = new AbortController();
+      sendBtn.disabled = false;
+      const sendLabel = sendBtn.querySelector('.recipe-ai-chat-send-label');
+      if (sendLabel) sendLabel.textContent = 'Abbrechen';
+      sendBtn.title = 'Generierung abbrechen';
       const userEl = renderMessage('user', text);
       userEl.setAttribute('data-ai-msg', '');
       if (placeholder) placeholder.classList.add('hidden');
@@ -458,7 +477,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         const res = await fetch('/api/ai/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recipeId: primaryId, recipeIds, message: text })
+          body: JSON.stringify({ recipeId: primaryId, recipeIds, message: text }),
+          signal: currentAbortController.signal
         });
         if (!res.ok || !res.body) {
           const data = await res.json().catch(() => ({}));
@@ -503,6 +523,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
                 messages.push({ role: 'assistant', content: accumulated });
                 donePushed = true;
                 appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
+                appendRegenerateButton(assistantWrap, messages.length - 1);
               }
             } catch (_e) { /* skip malformed line */ }
           }
@@ -528,6 +549,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
               messages.push({ role: 'assistant', content: accumulated });
               donePushed = true;
               appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
+              appendRegenerateButton(assistantWrap, messages.length - 1);
             }
           } catch (_e) {}
         }
@@ -535,6 +557,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           bubble.textContent = 'Fehler: ' + streamError;
           messages.push({ role: 'user', content: text });
           messages.push({ role: 'assistant', content: 'Fehler: ' + streamError });
+          appendRegenerateButton(assistantWrap, messages.length - 1);
         } else if (!donePushed) {
           if (accumulated) {
             const markedGlobal = getMarked();
@@ -550,20 +573,51 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
             messages.push({ role: 'user', content: text });
             messages.push({ role: 'assistant', content: accumulated });
             appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
+            appendRegenerateButton(assistantWrap, messages.length - 1);
           } else {
             bubble.textContent = 'Keine Antwort erhalten.';
             messages.push({ role: 'user', content: text });
             messages.push({ role: 'assistant', content: 'Keine Antwort erhalten.' });
+            appendRegenerateButton(assistantWrap, messages.length - 1);
           }
         }
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       } catch (e) {
-        bubble.textContent = e instanceof Error ? e.message : 'Netzwerkfehler. Bitte erneut versuchen.';
-        messages.push({ role: 'user', content: text });
-        messages.push({ role: 'assistant', content: bubble.textContent });
-        renderMessages();
+        const isAbort = e && typeof e === 'object' && e.name === 'AbortError';
+        if (isAbort) {
+          const finalContent = accumulated || 'Generierung abgebrochen.';
+          if (accumulated) {
+            const markedGlobal = getMarked();
+            if (markedGlobal && typeof markedGlobal.parse === 'function') {
+              bubble.innerHTML = markedGlobal.parse(accumulated, { breaks: true });
+              bubble.querySelectorAll('a').forEach((a) => {
+                a.setAttribute('target', '_blank');
+                a.setAttribute('rel', 'noopener noreferrer');
+              });
+            } else {
+              bubble.textContent = accumulated;
+            }
+          } else {
+            bubble.textContent = finalContent;
+          }
+          messages.push({ role: 'user', content: text });
+          messages.push({ role: 'assistant', content: finalContent });
+          appendVariantButtonIfNeeded(assistantWrap, bubble, finalContent, messages.length - 1);
+          appendRegenerateButton(assistantWrap, messages.length - 1);
+        } else {
+          bubble.textContent = e instanceof Error ? e.message : 'Netzwerkfehler. Bitte erneut versuchen.';
+          messages.push({ role: 'user', content: text });
+          messages.push({ role: 'assistant', content: bubble.textContent });
+          appendRegenerateButton(assistantWrap, messages.length - 1);
+        }
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
       } finally {
+        isGenerating = false;
+        currentAbortController = null;
         sendBtn.disabled = false;
+        const sendLabel = sendBtn.querySelector('.recipe-ai-chat-send-label');
+        if (sendLabel) sendLabel.textContent = 'Senden';
+        sendBtn.title = 'Senden';
         input.focus();
       }
     }
@@ -646,7 +700,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
 
     closeBtn && closeBtn.addEventListener('click', closeModal);
     deleteBtn && deleteBtn.addEventListener('click', deleteChat);
-    sendBtn && sendBtn.addEventListener('click', sendMessage);
+    sendBtn && sendBtn.addEventListener('click', () => {
+      if (isGenerating && currentAbortController) {
+        currentAbortController.abort();
+        return;
+      }
+      sendMessage();
+    });
 
     input && input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
