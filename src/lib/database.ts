@@ -75,6 +75,7 @@ export class CookbookDatabase {
         items TEXT,
         recipes TEXT,
         is_permanent INTEGER NOT NULL DEFAULT 0,
+        has_seen_global_template_prompt INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -82,6 +83,11 @@ export class CookbookDatabase {
 
     try {
       this.db.exec('ALTER TABLE shopping_lists ADD COLUMN is_permanent INTEGER NOT NULL DEFAULT 0');
+    } catch {
+      // Column already exists
+    }
+    try {
+      this.db.exec('ALTER TABLE shopping_lists ADD COLUMN has_seen_global_template_prompt INTEGER NOT NULL DEFAULT 0');
     } catch {
       // Column already exists
     }
@@ -438,13 +444,16 @@ export class CookbookDatabase {
 
   private shoppingListFromRow(row: any): ShoppingList {
     const items = row.items ? JSON.parse(row.items) : [];
+    const permanentType = row.is_permanent != null ? Number(row.is_permanent) : 0;
     return {
       id: row.id,
       title: row.title,
       description: row.description,
       items,
       recipes: row.recipes ? JSON.parse(row.recipes) : [],
-      isPermanent: !!(row.is_permanent != null ? row.is_permanent : 0),
+      permanentType,
+      isPermanent: permanentType > 0,
+      hasSeenGlobalTemplatePrompt: !!(row.has_seen_global_template_prompt ?? 0),
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -463,6 +472,12 @@ export class CookbookDatabase {
     return this.getShoppingList(PERMANENT_LIST_ID);
   }
 
+  /** Returns the global template shopping list, or null if not found. */
+  getGlobalTemplateShoppingList(): ShoppingList | null {
+    const GLOBAL_TEMPLATE_LIST_ID = 'global-template-shopping-list';
+    return this.getShoppingList(GLOBAL_TEMPLATE_LIST_ID);
+  }
+
   updateShoppingList(id: string, updates: Partial<ShoppingList>): ShoppingList | null {
     const existingList = this.getShoppingList(id);
     if (!existingList) {
@@ -470,6 +485,10 @@ export class CookbookDatabase {
     }
 
     let mergedItems = updates.items !== undefined ? updates.items : existingList.items;
+    const mergedHasSeenGlobalTemplatePrompt =
+      updates.hasSeenGlobalTemplatePrompt !== undefined
+        ? updates.hasSeenGlobalTemplatePrompt
+        : existingList.hasSeenGlobalTemplatePrompt ?? false;
     // Permanent list: items cannot be crossed off – force isChecked to false
     if (existingList.isPermanent && mergedItems.length > 0) {
       mergedItems = mergedItems.map(item => ({ ...item, isChecked: false }));
@@ -479,12 +498,13 @@ export class CookbookDatabase {
       ...existingList,
       ...updates,
       items: mergedItems,
+      hasSeenGlobalTemplatePrompt: mergedHasSeenGlobalTemplatePrompt,
       updatedAt: new Date()
     };
 
     const stmt = this.db.prepare(`
       UPDATE shopping_lists 
-      SET title = ?, description = ?, items = ?, recipes = ?, updated_at = ?
+      SET title = ?, description = ?, items = ?, recipes = ?, is_permanent = ?, has_seen_global_template_prompt = ?, updated_at = ?
       WHERE id = ?
     `);
 
@@ -493,6 +513,8 @@ export class CookbookDatabase {
       updatedList.description,
       JSON.stringify(updatedList.items),
       JSON.stringify(updatedList.recipes),
+      updatedList.permanentType ?? (updatedList.isPermanent ? 1 : 0),
+      mergedHasSeenGlobalTemplatePrompt ? 1 : 0,
       updatedList.updatedAt.toISOString(),
       id
     );
@@ -693,6 +715,42 @@ export class CookbookDatabase {
     this.updateShoppingList(PERMANENT_LIST_ID, { items: permanentItems, recipes: permanentRecipes });
 
     return { duplicateRecipeIds, transferredItemCount, transferredRecipeCount };
+  }
+
+  /**
+   * Apply the global template shopping list to a normal list.
+   * Products and recipes are copied but NOT removed from the template list.
+   * Recipes that already exist on the target list are skipped.
+   */
+  applyGlobalTemplateToList(targetListId: string): { copiedItemCount: number; copiedRecipeCount: number } | null {
+    const GLOBAL_TEMPLATE_LIST_ID = 'global-template-shopping-list';
+    const template = this.getGlobalTemplateShoppingList();
+    const target = this.getShoppingList(targetListId);
+    if (!template || !target || target.isPermanent || target.id === GLOBAL_TEMPLATE_LIST_ID) {
+      return null;
+    }
+
+    let copiedItemCount = 0;
+    let copiedRecipeCount = 0;
+
+    // Copy standalone products (no recipeId)
+    const standaloneItems = template.items.filter(item => !item.recipeId);
+    for (const item of standaloneItems) {
+      const { id: _id, ...itemWithoutId } = item;
+      this.addItemToShoppingList(targetListId, { ...itemWithoutId, isChecked: false });
+      copiedItemCount++;
+    }
+
+    // Copy recipes that are not yet on the target list
+    const targetRecipeIds = new Set((target.recipes || []).map(r => r.id));
+    for (const tplRecipe of template.recipes || []) {
+      if (!targetRecipeIds.has(tplRecipe.id)) {
+        this.addRecipeToShoppingList(targetListId, tplRecipe.id);
+        copiedRecipeCount++;
+      }
+    }
+
+    return { copiedItemCount, copiedRecipeCount };
   }
 
   toggleRecipeCompletion(listId: string, recipeId: string, isCompleted: boolean): ShoppingList | null {

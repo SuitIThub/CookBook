@@ -43,6 +43,7 @@ const EXPECTED_SCHEMA = {
         { name: 'items', type: 'TEXT', nullable: true },
         { name: 'recipes', type: 'TEXT', nullable: true, defaultValue: "'[]'" },
         { name: 'is_permanent', type: 'INTEGER', nullable: false, defaultValue: '0' },
+        { name: 'has_seen_global_template_prompt', type: 'INTEGER', nullable: false, defaultValue: '0' },
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
       ]
@@ -616,7 +617,7 @@ function performDataMigrations(db) {
     console.log('✅ Created recipe_drafts table.');
   }
 
-  // Migration 9: Create permanent shopping list if missing
+  // Migration 9: Create permanent shopping lists if missing
   const PERMANENT_LIST_ID = 'permanent-shopping-list';
   const permanentListExists = db.prepare('SELECT id FROM shopping_lists WHERE id = ?').get(PERMANENT_LIST_ID);
   if (!permanentListExists) {
@@ -632,6 +633,38 @@ function performDataMigrations(db) {
       '[]'
     );
     console.log('✅ Permanent shopping list created.');
+  }
+
+  const GLOBAL_TEMPLATE_LIST_ID = 'global-template-shopping-list';
+  const globalTemplateExists = db.prepare('SELECT id FROM shopping_lists WHERE id = ?').get(GLOBAL_TEMPLATE_LIST_ID);
+  if (!globalTemplateExists) {
+    console.log('🛒 Creating global template shopping list...');
+    db.prepare(`
+      INSERT INTO shopping_lists (id, title, description, items, recipes, is_permanent, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      GLOBAL_TEMPLATE_LIST_ID,
+      'Vorlagen-Einkaufsliste',
+      'Produkte und Rezepte, die Sie jeder Einkaufsliste hinzufügen können – die Vorlage bleibt unverändert.',
+      '[]',
+      '[]'
+    );
+    console.log('✅ Global template shopping list created.');
+  } else {
+    // Rename existing global template to new title/description
+    const updated = db.prepare(`
+      UPDATE shopping_lists SET title = ?, description = ?
+      WHERE id = ? AND (title = ? OR title = ?)
+    `).run(
+      'Vorlagen-Einkaufsliste',
+      'Produkte und Rezepte, die Sie jeder Einkaufsliste hinzufügen können – die Vorlage bleibt unverändert.',
+      GLOBAL_TEMPLATE_LIST_ID,
+      'Globale Sammelliste',
+      'Vorlagen-Einkaufsliste'
+    );
+    if (updated.changes > 0) {
+      console.log('✅ Global template shopping list renamed to "Vorlagen-Einkaufsliste".');
+    }
   }
 }
 

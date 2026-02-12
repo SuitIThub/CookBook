@@ -117,7 +117,11 @@ export interface ShoppingList {
   description?: string;
   items: ShoppingListItem[];
   recipes: ShoppingListRecipe[]; // Hinzugefügte Rezepte
-  isPermanent?: boolean; // Permanent list: cannot be deleted, items cannot be crossed off
+  // Permanent list flags:
+  // permanentType: 0 = normal list, 1 = personal Sammelliste, 2 = globale Vorlage
+  permanentType?: number;
+  isPermanent?: boolean; // Convenience flag: true when permanentType > 0
+  hasSeenGlobalTemplatePrompt?: boolean; // Whether user already saw/applied the global template prompt
   createdAt: Date;
   updatedAt: Date;
 }
