@@ -28,8 +28,8 @@ const completedItems = totalItems - uncheckedItems.length;
             {shoppingList.title}
           </h2>
           {shoppingList.isPermanent && (
-            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200 shrink-0" title="Diese Liste kann nicht gelöscht werden. Artikel können nicht abgehakt werden.">
-              Sammelliste
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200 shrink-0" title={shoppingList.permanentType === 2 ? "Vorlage: Wird auf Einkaufslisten angewendet, kann nicht gelöscht werden." : "Diese Liste kann nicht gelöscht werden. Artikel können nicht abgehakt werden."}>
+              {shoppingList.permanentType === 2 ? 'Vorlage' : 'Sammelliste'}
             </span>
           )}
         </div>

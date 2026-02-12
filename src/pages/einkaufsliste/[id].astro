@@ -38,6 +38,18 @@ if (!shoppingList.isPermanent) {
   }
 }
 
+// Für normale Listen: prüfen, ob globale Vorlage Einträge hat und ob der Hinweis schon gezeigt wurde
+let globalTemplateSummary: { itemCount: number; recipeCount: number } | null = null;
+if (!shoppingList.isPermanent && !shoppingList.hasSeenGlobalTemplatePrompt) {
+  const globalTemplate = db.getGlobalTemplateShoppingList();
+  if (globalTemplate && (globalTemplate.items.length > 0 || (globalTemplate.recipes?.length ?? 0) > 0)) {
+    globalTemplateSummary = {
+      itemCount: globalTemplate.items.length,
+      recipeCount: globalTemplate.recipes?.length ?? 0
+    };
+  }
+}
+
 // Query-Parameter für Edit-Modus überprüfen
 const url = new URL(Astro.request.url);
 const isEditMode = url.searchParams.get('edit') === 'true';
@@ -90,6 +102,15 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             <span class="hidden xs:inline">Bearbeiten</span>
             <span class="xs:hidden">Bearbeiten</span>
           </a>
+          {shoppingList.isPermanent && (
+            <button type="button" id="apply-permanent-to-list-btn" class="btn btn-primary flex items-center justify-center space-x-2" title={shoppingList.permanentType === 2 ? 'Inhalt zu einer Einkaufsliste hinzufügen (Kopie)' : 'Inhalt in eine Einkaufsliste übernehmen (wird hier entfernt)'}>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+              </svg>
+              <span class="hidden xs:inline">{shoppingList.permanentType === 2 ? 'Zu Liste hinzufügen' : 'In Liste übernehmen'}</span>
+              <span class="xs:hidden">{shoppingList.permanentType === 2 ? 'Zu Liste' : 'Übernehmen'}</span>
+            </button>
+          )}
         </div>
       </div>
       <div>
@@ -386,6 +407,52 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
   <AddNoteModal />
   <ImageGalleryModal />
 
+  <!-- Global template (second permanent list) apply modal -->
+  <div id="global-template-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Wiederverwendbare Einkaufsliste anwenden?</h2>
+        <button type="button" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body space-y-4">
+        <p class="text-sm text-gray-700 dark:text-gray-300">
+          Es gibt eine permanente Einkaufsliste mit {globalTemplateSummary?.itemCount ?? 0} Artikeln und {globalTemplateSummary?.recipeCount ?? 0} Rezept{(globalTemplateSummary?.recipeCount ?? 0) !== 1 ? 'en' : ''}.
+          Sollen diese Einträge zu dieser neuen Einkaufsliste hinzugefügt werden?
+        </p>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Die Einträge bleiben auf der Vorlage erhalten und können auch bei zukünftigen Einkaufslisten erneut verwendet werden.
+        </p>
+        <div class="flex gap-2">
+          <button type="button" id="apply-global-template-yes" class="btn btn-primary">Ja, hinzufügen</button>
+          <button type="button" id="apply-global-template-no" class="btn btn-secondary">Nein, danke</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Apply this permanent list to a chosen normal list (manual action from permanent list page) -->
+  <div id="apply-permanent-to-list-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="apply-permanent-to-list-modal-title" class="modal-title">Ziel-Einkaufsliste wählen</h2>
+        <button type="button" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="apply-permanent-to-list-loading" class="text-center py-6 text-muted">
+          Listen werden geladen…
+        </div>
+        <div id="apply-permanent-to-list-list" class="space-y-2 max-h-60 overflow-y-auto hidden">
+          <!-- Filled by script -->
+        </div>
+        <p id="apply-permanent-to-list-empty" class="text-sm text-muted hidden">
+          Keine andere Einkaufsliste vorhanden. Erstellen Sie zuerst eine normale Einkaufsliste.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- Add portions for duplicate recipes (when transferring from permanent list) -->
   <div id="add-portions-transfer-modal" class="modal hidden">
     <div class="modal-overlay"></div>
@@ -410,7 +477,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
-  <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList, isPermanentList: shoppingList.isPermanent ?? false, permanentListSummary: permanentListSummary }}>
+  <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList, isPermanentList: shoppingList.isPermanent ?? false, permanentType: shoppingList.permanentType ?? 0, permanentListSummary: permanentListSummary, globalTemplateSummary: globalTemplateSummary }}>
     // Variables are already defined via define:vars
     let availableUnits = [];
     let unitConversionData = null; // Store unit conversion data for formatting
@@ -759,6 +826,58 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         }
       });
 
+      // Global template (second permanent list) modal on first open of a normal list
+      const globalTemplateModal = document.getElementById('global-template-modal');
+      const applyGlobalTemplateYesBtn = document.getElementById('apply-global-template-yes');
+      const applyGlobalTemplateNoBtn = document.getElementById('apply-global-template-no');
+
+      async function markGlobalTemplatePromptSeen() {
+        try {
+          await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hasSeenGlobalTemplatePrompt: true })
+          });
+        } catch (e) {
+          console.error('Failed to mark global template prompt as seen', e);
+        }
+      }
+
+      if (!isPermanentList && globalTemplateSummary) {
+        globalTemplateModal?.classList.remove('hidden');
+      }
+
+      applyGlobalTemplateYesBtn?.addEventListener('click', async () => {
+        try {
+          const response = await fetch(`/api/shopping-lists/${shoppingListId}/apply-global-template`, {
+            method: 'POST'
+          });
+          await markGlobalTemplatePromptSeen();
+          globalTemplateModal?.classList.add('hidden');
+          if (!response.ok) {
+            const err = await response.json();
+            alert(err.error || 'Fehler beim Anwenden der Vorlage');
+            return;
+          }
+          if (typeof window.showInfo === 'function') {
+            window.showInfo('Vorlagen-Einkaufsliste wurde übernommen.');
+          }
+          window.location.reload();
+        } catch (e) {
+          console.error('Failed to apply global template', e);
+          alert('Fehler beim Anwenden der Vorlage');
+        }
+      });
+
+      const closeGlobalTemplateModal = async () => {
+        globalTemplateModal?.classList.add('hidden');
+        await markGlobalTemplatePromptSeen();
+      };
+
+      applyGlobalTemplateNoBtn?.addEventListener('click', closeGlobalTemplateModal);
+      globalTemplateModal?.querySelector('.modal-close')?.addEventListener('click', closeGlobalTemplateModal);
+      globalTemplateModal?.querySelector('.modal-overlay')?.addEventListener('click', closeGlobalTemplateModal);
+
       // Transfer from permanent list (Sammelliste)
       const transferBanner = document.getElementById('transfer-from-permanent-banner');
       const transferBtn = document.getElementById('transfer-from-permanent-btn');
@@ -773,8 +892,10 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       });
 
       let pendingDuplicateRecipeIds = [];
+      let transferTargetListId = shoppingListId; // target list for transfer (current page when from banner; chosen list when from "apply to list" on permanent page)
       transferBtn?.addEventListener('click', async () => {
         if (!shoppingListId) return;
+        transferTargetListId = shoppingListId;
         try {
           const response = await fetch(`/api/shopping-lists/${shoppingListId}/transfer-from-permanent`, {
             method: 'POST',
@@ -812,9 +933,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       });
 
       addPortionsYesBtn?.addEventListener('click', async () => {
-        if (!shoppingListId || pendingDuplicateRecipeIds.length === 0) return;
+        if (!transferTargetListId || pendingDuplicateRecipeIds.length === 0) return;
         try {
-          const response = await fetch(`/api/shopping-lists/${shoppingListId}/transfer-from-permanent`, {
+          const response = await fetch(`/api/shopping-lists/${transferTargetListId}/transfer-from-permanent`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ addPortionsForRecipeIds: pendingDuplicateRecipeIds })
@@ -852,6 +973,117 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       addPortionsModal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
         addPortionsModal?.classList.add('hidden');
         window.location.reload();
+      });
+
+      // Apply this permanent list to a chosen normal list (button on permanent list page)
+      const PERMANENT_LIST_IDS = ['permanent-shopping-list', 'global-template-shopping-list'];
+      const applyPermanentToListBtn = document.getElementById('apply-permanent-to-list-btn');
+      const applyPermanentToListModal = document.getElementById('apply-permanent-to-list-modal');
+      const applyPermanentToListTitle = document.getElementById('apply-permanent-to-list-modal-title');
+      const applyPermanentToListLoading = document.getElementById('apply-permanent-to-list-loading');
+      const applyPermanentToListList = document.getElementById('apply-permanent-to-list-list');
+      const applyPermanentToListEmpty = document.getElementById('apply-permanent-to-list-empty');
+
+      applyPermanentToListBtn?.addEventListener('click', async () => {
+        if (!applyPermanentToListModal) return;
+        applyPermanentToListModal.classList.remove('hidden');
+        applyPermanentToListLoading?.classList.remove('hidden');
+        applyPermanentToListList?.classList.add('hidden');
+        applyPermanentToListEmpty?.classList.add('hidden');
+        if (applyPermanentToListTitle) {
+          applyPermanentToListTitle.textContent = permanentType === 2
+            ? 'Zu welcher Einkaufsliste hinzufügen?'
+            : 'In welche Einkaufsliste übernehmen?';
+        }
+        try {
+          const response = await fetch('/api/shopping-lists');
+          const allLists = await response.json();
+          const normalLists = allLists.filter(l => !l.isPermanent && l.id !== shoppingListId && !PERMANENT_LIST_IDS.includes(l.id));
+          applyPermanentToListLoading?.classList.add('hidden');
+          if (normalLists.length === 0) {
+            applyPermanentToListEmpty?.classList.remove('hidden');
+            return;
+          }
+          applyPermanentToListList?.classList.remove('hidden');
+          applyPermanentToListList.innerHTML = normalLists.map(list => {
+            const itemCount = list.items?.length ?? 0;
+            const recipeCount = list.recipes?.length ?? 0;
+            const label = `${list.title} (${itemCount} Artikel${recipeCount ? `, ${recipeCount} Rezept${recipeCount !== 1 ? 'e' : ''}` : ''})`;
+            return `<button type="button" class="apply-to-list-choice w-full btn btn-secondary text-left justify-start py-3" data-list-id="${list.id}">${label}</button>`;
+          }).join('');
+          applyPermanentToListList.querySelectorAll('.apply-to-list-choice').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const targetId = btn.getAttribute('data-list-id');
+              if (!targetId) return;
+              applyPermanentToListModal.classList.add('hidden');
+              if (permanentType === 2) {
+                try {
+                  const res = await fetch(`/api/shopping-lists/${targetId}/apply-global-template`, { method: 'POST' });
+                  if (!res.ok) {
+                    const err = await res.json();
+                    alert(err.error || 'Hinzufügen fehlgeschlagen.');
+                    return;
+                  }
+                  if (typeof window.showInfo === 'function') {
+                    window.showInfo('Inhalt wurde zur Einkaufsliste hinzugefügt.');
+                  } else {
+                    alert('Inhalt wurde zur Einkaufsliste hinzugefügt.');
+                  }
+                  window.location.reload();
+                } catch (e) {
+                  console.error('Apply global template failed', e);
+                  alert('Hinzufügen fehlgeschlagen.');
+                }
+                return;
+              }
+              transferTargetListId = targetId;
+              try {
+                const res = await fetch(`/api/shopping-lists/${targetId}/transfer-from-permanent`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({})
+                });
+                if (!res.ok) {
+                  const err = await res.json();
+                  alert(err.error || 'Übernahme fehlgeschlagen.');
+                  return;
+                }
+                const result = await res.json();
+                if (result.duplicateRecipeIds && result.duplicateRecipeIds.length > 0) {
+                  pendingDuplicateRecipeIds = result.duplicateRecipeIds;
+                  const titles = (shoppingListData.recipes || [])
+                    .filter(r => pendingDuplicateRecipeIds.includes(r.id))
+                    .map(r => r.title);
+                  if (addPortionsRecipeList) {
+                    addPortionsRecipeList.innerHTML = titles.map(t => `<li>${t}</li>`).join('');
+                  }
+                  addPortionsModal?.classList.remove('hidden');
+                } else {
+                  if (typeof window.showInfo === 'function') {
+                    window.showInfo('Einträge wurden in die Einkaufsliste übernommen.');
+                  } else {
+                    alert('Einträge wurden übernommen.');
+                  }
+                  window.location.reload();
+                }
+              } catch (e) {
+                console.error('Transfer from permanent list failed', e);
+                alert('Übernahme fehlgeschlagen.');
+              }
+            });
+          });
+        } catch (e) {
+          console.error('Failed to load lists', e);
+          applyPermanentToListLoading?.classList.add('hidden');
+          applyPermanentToListEmpty?.classList.remove('hidden');
+        }
+      });
+
+      applyPermanentToListModal?.querySelector('.modal-close')?.addEventListener('click', () => {
+        applyPermanentToListModal?.classList.add('hidden');
+      });
+      applyPermanentToListModal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
+        applyPermanentToListModal?.classList.add('hidden');
       });
       
       // Function to group items by name (ignoring unit differences) and manual groups
