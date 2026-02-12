@@ -74,10 +74,17 @@ export class CookbookDatabase {
         description TEXT,
         items TEXT,
         recipes TEXT,
+        is_permanent INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    try {
+      this.db.exec('ALTER TABLE shopping_lists ADD COLUMN is_permanent INTEGER NOT NULL DEFAULT 0');
+    } catch {
+      // Column already exists
+    }
 
     // Ingredients table for autocomplete
     this.db.exec(`
@@ -398,8 +405,8 @@ export class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO shopping_lists (id, title, description, items, recipes, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO shopping_lists (id, title, description, items, recipes, is_permanent, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
     `);
 
     stmt.run(
@@ -426,30 +433,34 @@ export class CookbookDatabase {
       return null;
     }
 
+    return this.shoppingListFromRow(row);
+  }
+
+  private shoppingListFromRow(row: any): ShoppingList {
+    const items = row.items ? JSON.parse(row.items) : [];
     return {
       id: row.id,
       title: row.title,
       description: row.description,
-      items: JSON.parse(row.items),
+      items,
       recipes: row.recipes ? JSON.parse(row.recipes) : [],
+      isPermanent: !!(row.is_permanent != null ? row.is_permanent : 0),
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
   }
 
   getAllShoppingLists(): ShoppingList[] {
-    const stmt = this.db.prepare('SELECT * FROM shopping_lists ORDER BY updated_at DESC');
+    const stmt = this.db.prepare('SELECT * FROM shopping_lists ORDER BY is_permanent DESC, updated_at DESC');
     const rows = stmt.all() as any[];
 
-    return rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      items: JSON.parse(row.items),
-      recipes: row.recipes ? JSON.parse(row.recipes) : [],
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    }));
+    return rows.map(row => this.shoppingListFromRow(row));
+  }
+
+  /** Returns the permanent shopping list (Sammelliste), or null if not found. */
+  getPermanentShoppingList(): ShoppingList | null {
+    const PERMANENT_LIST_ID = 'permanent-shopping-list';
+    return this.getShoppingList(PERMANENT_LIST_ID);
   }
 
   updateShoppingList(id: string, updates: Partial<ShoppingList>): ShoppingList | null {
@@ -458,9 +469,16 @@ export class CookbookDatabase {
       return null;
     }
 
+    let mergedItems = updates.items !== undefined ? updates.items : existingList.items;
+    // Permanent list: items cannot be crossed off – force isChecked to false
+    if (existingList.isPermanent && mergedItems.length > 0) {
+      mergedItems = mergedItems.map(item => ({ ...item, isChecked: false }));
+    }
+
     const updatedList = {
       ...existingList,
       ...updates,
+      items: mergedItems,
       updatedAt: new Date()
     };
 
@@ -486,6 +504,10 @@ export class CookbookDatabase {
   }
 
   deleteShoppingList(id: string): boolean {
+    const list = this.getShoppingList(id);
+    if (list?.isPermanent) {
+      return false; // Permanent list cannot be deleted
+    }
     const stmt = this.db.prepare('DELETE FROM shopping_lists WHERE id = ?');
     const result = stmt.run(id);
     
@@ -610,6 +632,67 @@ export class CookbookDatabase {
       items: shoppingList.items, 
       recipes: shoppingList.recipes 
     });
+  }
+
+  /**
+   * Transfer items and recipes from the permanent list to a normal shopping list.
+   * Standalone products and recipes not yet on the target are moved.
+   * Recipes already on the target are either skipped (and returned in duplicateRecipeIds)
+   * or merged by adding portions when their id is in addPortionsForRecipeIds.
+   * Returns { duplicateRecipeIds, transferredItemCount, transferredRecipeCount }.
+   */
+  transferFromPermanentList(
+    targetListId: string,
+    addPortionsForRecipeIds: string[] = []
+  ): { duplicateRecipeIds: string[]; transferredItemCount: number; transferredRecipeCount: number } | null {
+    const PERMANENT_LIST_ID = 'permanent-shopping-list';
+    const permanent = this.getPermanentShoppingList();
+    let target = this.getShoppingList(targetListId);
+    if (!permanent || !target || target.isPermanent || targetListId === PERMANENT_LIST_ID) {
+      return null;
+    }
+
+    let transferredItemCount = 0;
+    let transferredRecipeCount = 0;
+    const duplicateRecipeIds: string[] = [];
+    let permanentItems = [...permanent.items];
+    let permanentRecipes = [...(permanent.recipes || [])];
+
+    // Standalone products (no recipeId): add to target and remove from permanent
+    const standaloneItems = permanentItems.filter(item => !item.recipeId);
+    for (const item of standaloneItems) {
+      const { id: _id, ...itemWithoutId } = item;
+      this.addItemToShoppingList(targetListId, { ...itemWithoutId, isChecked: false });
+      transferredItemCount++;
+    }
+    permanentItems = permanentItems.filter(item => item.recipeId != null);
+
+    // Recipes: add new ones; for duplicates either add portions or record for user
+    const permRecipesToProcess = [...permanentRecipes];
+    for (const permRecipe of permRecipesToProcess) {
+      target = this.getShoppingList(targetListId)!;
+      const targetRecipeIds = new Set((target.recipes || []).map(r => r.id));
+      const recipeId = permRecipe.id;
+      if (!targetRecipeIds.has(recipeId)) {
+        this.addRecipeToShoppingList(targetListId, recipeId);
+        transferredRecipeCount++;
+        permanentRecipes = permanentRecipes.filter(r => r.id !== recipeId);
+        permanentItems = permanentItems.filter(item => item.recipeId !== recipeId);
+      } else if (addPortionsForRecipeIds.includes(recipeId)) {
+        const targetRecipe = this.getShoppingList(targetListId)!.recipes.find(r => r.id === recipeId)!;
+        const newServings = (targetRecipe.currentServings ?? targetRecipe.servings) + (permRecipe.currentServings ?? permRecipe.servings);
+        this.updateRecipeServingsInShoppingList(targetListId, recipeId, newServings);
+        transferredRecipeCount++;
+        permanentRecipes = permanentRecipes.filter(r => r.id !== recipeId);
+        permanentItems = permanentItems.filter(item => item.recipeId !== recipeId);
+      } else {
+        duplicateRecipeIds.push(recipeId);
+      }
+    }
+
+    this.updateShoppingList(PERMANENT_LIST_ID, { items: permanentItems, recipes: permanentRecipes });
+
+    return { duplicateRecipeIds, transferredItemCount, transferredRecipeCount };
   }
 
   toggleRecipeCompletion(listId: string, recipeId: string, isCompleted: boolean): ShoppingList | null {
@@ -866,12 +949,12 @@ export class CookbookDatabase {
 
     // Update quantities of items from this recipe
     shoppingList.items = shoppingList.items.map(item => {
-      if (item.recipeId === recipeId && item.originalQuantity) {
+      if (item.recipeId === recipeId && item.originalQuantity && item.quantity) {
         return {
           ...item,
           quantity: {
-            ...item.quantity,
-            amount: parseFloat((item.originalQuantity.amount * scalingFactor).toFixed(2))
+            amount: parseFloat((item.originalQuantity.amount * scalingFactor).toFixed(2)),
+            unit: item.quantity.unit
           }
         };
       }

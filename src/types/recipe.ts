@@ -117,6 +117,7 @@ export interface ShoppingList {
   description?: string;
   items: ShoppingListItem[];
   recipes: ShoppingListRecipe[]; // Hinzugefügte Rezepte
+  isPermanent?: boolean; // Permanent list: cannot be deleted, items cannot be crossed off
   createdAt: Date;
   updatedAt: Date;
 }

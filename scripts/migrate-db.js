@@ -42,6 +42,7 @@ const EXPECTED_SCHEMA = {
         { name: 'description', type: 'TEXT', nullable: true },
         { name: 'items', type: 'TEXT', nullable: true },
         { name: 'recipes', type: 'TEXT', nullable: true, defaultValue: "'[]'" },
+        { name: 'is_permanent', type: 'INTEGER', nullable: false, defaultValue: '0' },
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
       ]
@@ -615,7 +616,23 @@ function performDataMigrations(db) {
     console.log('✅ Created recipe_drafts table.');
   }
 
-  // Add more data migrations here as needed...
+  // Migration 9: Create permanent shopping list if missing
+  const PERMANENT_LIST_ID = 'permanent-shopping-list';
+  const permanentListExists = db.prepare('SELECT id FROM shopping_lists WHERE id = ?').get(PERMANENT_LIST_ID);
+  if (!permanentListExists) {
+    console.log('🛒 Creating permanent shopping list...');
+    db.prepare(`
+      INSERT INTO shopping_lists (id, title, description, items, recipes, is_permanent, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      PERMANENT_LIST_ID,
+      'Sammelliste',
+      'Produkte und Rezepte hier sammeln – beim Öffnen einer Einkaufsliste können Sie sie dorthin übernehmen.',
+      '[]',
+      '[]'
+    );
+    console.log('✅ Permanent shopping list created.');
+  }
 }
 
 function showSchemaSummary(db) {

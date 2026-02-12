@@ -26,6 +26,18 @@ if (!shoppingList) {
   return Astro.redirect('/einkaufslisten');
 }
 
+// Für normale Listen: prüfen ob die Sammelliste Einträge hat (für Transfer-Hinweis)
+let permanentListSummary: { itemCount: number; recipeCount: number } | null = null;
+if (!shoppingList.isPermanent) {
+  const permanentList = db.getPermanentShoppingList();
+  if (permanentList && (permanentList.items.length > 0 || (permanentList.recipes?.length ?? 0) > 0)) {
+    permanentListSummary = {
+      itemCount: permanentList.items.length,
+      recipeCount: permanentList.recipes?.length ?? 0
+    };
+  }
+}
+
 // Query-Parameter für Edit-Modus überprüfen
 const url = new URL(Astro.request.url);
 const isEditMode = url.searchParams.get('edit') === 'true';
@@ -93,6 +105,23 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       </div>
     </div>
 
+    <!-- Transfer from permanent list banner (only for normal lists when permanent has content) -->
+    {permanentListSummary && (
+      <div id="transfer-from-permanent-banner" class="mb-4 p-4 rounded-lg border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/20">
+        <p class="text-sm text-gray-700 dark:text-gray-300 mb-3">
+          Auf Ihrer <strong>Sammelliste</strong> befinden sich {permanentListSummary.itemCount} Artikel und {permanentListSummary.recipeCount} Rezept{permanentListSummary.recipeCount !== 1 ? 'e' : ''}. Möchten Sie diese in diese Einkaufsliste übernehmen?
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="transfer-from-permanent-btn" class="btn btn-primary btn-sm">
+            In diese Liste übernehmen
+          </button>
+          <button type="button" id="dismiss-transfer-banner-btn" class="btn btn-ghost btn-sm text-muted">
+            Später
+          </button>
+        </div>
+      </div>
+    )}
+
     <!-- Shopping List Recipes -->
     <div id="shopping-recipes-section" class="card" style="display: none;">
       <div class="card-content">
@@ -151,10 +180,11 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       </div>
     </template>
 
-    <!-- Hide Checked Items Toggle and Grouping Controls -->
+    <!-- Hide Checked Items Toggle and Grouping Controls (hidden for permanent list: items cannot be checked) -->
     <div class="card mt-6">
       <div class="card-content">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          {!shoppingList.isPermanent && (
           <label class="flex items-center space-x-3 cursor-pointer">
             <input 
               type="checkbox" 
@@ -165,6 +195,8 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
               Erledigte Artikel ausblenden
             </span>
           </label>
+          )}
+          {shoppingList.isPermanent && <div />}
           <div class="flex items-center gap-2">
             <button id="suggest-grouping-btn" class="btn btn-secondary btn-sm flex items-center space-x-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -354,8 +386,31 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
   <AddNoteModal />
   <ImageGalleryModal />
 
+  <!-- Add portions for duplicate recipes (when transferring from permanent list) -->
+  <div id="add-portions-transfer-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Rezepte bereits in der Liste</h2>
+        <button type="button" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-sm text-gray-700 dark:text-gray-300 mb-3">
+          Die folgenden Rezepte sind bereits in dieser Einkaufsliste. Sollen die Portionen addiert werden?
+        </p>
+        <ul id="add-portions-recipe-list" class="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 mb-4">
+          <!-- Filled by script -->
+        </ul>
+        <div class="flex gap-2">
+          <button type="button" id="add-portions-yes-btn" class="btn btn-primary">Ja, Portionen addieren</button>
+          <button type="button" id="add-portions-no-btn" class="btn btn-secondary">Nein</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
-  <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList }}>
+  <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList, isPermanentList: shoppingList.isPermanent ?? false, permanentListSummary: permanentListSummary }}>
     // Variables are already defined via define:vars
     let availableUnits = [];
     let unitConversionData = null; // Store unit conversion data for formatting
@@ -703,6 +758,101 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           console.error('Error sharing:', error);
         }
       });
+
+      // Transfer from permanent list (Sammelliste)
+      const transferBanner = document.getElementById('transfer-from-permanent-banner');
+      const transferBtn = document.getElementById('transfer-from-permanent-btn');
+      const dismissTransferBtn = document.getElementById('dismiss-transfer-banner-btn');
+      const addPortionsModal = document.getElementById('add-portions-transfer-modal');
+      const addPortionsRecipeList = document.getElementById('add-portions-recipe-list');
+      const addPortionsYesBtn = document.getElementById('add-portions-yes-btn');
+      const addPortionsNoBtn = document.getElementById('add-portions-no-btn');
+
+      dismissTransferBtn?.addEventListener('click', () => {
+        transferBanner?.classList.add('hidden');
+      });
+
+      let pendingDuplicateRecipeIds = [];
+      transferBtn?.addEventListener('click', async () => {
+        if (!shoppingListId) return;
+        try {
+          const response = await fetch(`/api/shopping-lists/${shoppingListId}/transfer-from-permanent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          if (!response.ok) {
+            const err = await response.json();
+            alert(err.error || 'Übernahme fehlgeschlagen');
+            return;
+          }
+          const result = await response.json();
+          if (result.duplicateRecipeIds && result.duplicateRecipeIds.length > 0) {
+            pendingDuplicateRecipeIds = result.duplicateRecipeIds;
+            const titles = (shoppingListData.recipes || [])
+              .filter(r => pendingDuplicateRecipeIds.includes(r.id))
+              .map(r => r.title);
+            if (addPortionsRecipeList) {
+              addPortionsRecipeList.innerHTML = titles.map(t => `<li>${t}</li>`).join('');
+            }
+            addPortionsModal?.classList.remove('hidden');
+            transferBanner?.classList.add('hidden');
+          } else {
+            if (typeof window.showInfo === 'function') {
+              window.showInfo('Einträge von der Sammelliste wurden übernommen.');
+            } else {
+              alert('Einträge von der Sammelliste wurden übernommen.');
+            }
+            window.location.reload();
+          }
+        } catch (e) {
+          console.error('Transfer from permanent list failed', e);
+          alert('Übernahme fehlgeschlagen.');
+        }
+      });
+
+      addPortionsYesBtn?.addEventListener('click', async () => {
+        if (!shoppingListId || pendingDuplicateRecipeIds.length === 0) return;
+        try {
+          const response = await fetch(`/api/shopping-lists/${shoppingListId}/transfer-from-permanent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ addPortionsForRecipeIds: pendingDuplicateRecipeIds })
+          });
+          addPortionsModal?.classList.add('hidden');
+          if (response.ok) {
+            if (typeof window.showInfo === 'function') {
+              window.showInfo('Portionen wurden addiert. Einträge von der Sammelliste wurden übernommen.');
+            } else {
+              alert('Portionen wurden addiert.');
+            }
+            window.location.reload();
+          } else {
+            alert('Fehler beim Addieren der Portionen.');
+          }
+        } catch (e) {
+          addPortionsModal?.classList.add('hidden');
+          console.error('Add portions failed', e);
+          alert('Fehler beim Addieren der Portionen.');
+        }
+      });
+
+      addPortionsNoBtn?.addEventListener('click', () => {
+        addPortionsModal?.classList.add('hidden');
+        if (typeof window.showInfo === 'function') {
+          window.showInfo('Übernahme abgeschlossen. Die genannten Rezepte bleiben auf der Sammelliste.');
+        }
+        window.location.reload();
+      });
+
+      addPortionsModal?.querySelector('.modal-close')?.addEventListener('click', () => {
+        addPortionsModal?.classList.add('hidden');
+        window.location.reload();
+      });
+      addPortionsModal?.querySelector('.modal-overlay')?.addEventListener('click', () => {
+        addPortionsModal?.classList.add('hidden');
+        window.location.reload();
+      });
       
       // Function to group items by name (ignoring unit differences) and manual groups
       function groupItems(items) {
@@ -993,6 +1143,11 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                       ${isSelected ? 'checked' : ''}
                     />
                   ` : ''}
+                  ${isPermanentList ? `
+                    <span class="w-5 h-5 flex-shrink-0 flex items-center justify-center text-gray-400 dark:text-gray-500" title="Auf der Sammelliste können Artikel nicht abgehakt werden">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    </span>
+                  ` : `
                   <input 
                     type="checkbox" 
                     class="item-checkbox w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2 ${isPartiallyChecked ? 'opacity-50' : ''} ${isGroupingMode ? 'opacity-50 cursor-not-allowed' : ''} flex-shrink-0"
@@ -1000,6 +1155,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                     ${isGroupingMode ? 'disabled' : ''}
                     title="${isPartiallyChecked ? 'Teilweise erledigt' : isGroupingMode ? 'Gruppierungsmodus aktiv' : ''}"
                   />
+                  `}
                   <span class="font-medium transition-colors flex-shrink-0 ${
                     isChecked 
                       ? 'text-green-800 dark:text-green-300 line-through' 
