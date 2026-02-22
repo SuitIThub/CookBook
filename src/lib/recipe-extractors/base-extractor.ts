@@ -157,20 +157,55 @@ export abstract class BaseRecipeExtractor {
   }
   
   /**
-   * Fetch HTML content from URL
+   * Default timeout for fetch in ms (some sites like rewe.de are slow or use bot checks)
+   */
+  private static readonly FETCH_TIMEOUT_MS = 25000;
+
+  /**
+   * Fetch HTML content from URL with browser-like headers to reduce bot blocking.
    */
   protected async fetchHtml(url: string): Promise<string> {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), BaseRecipeExtractor.FETCH_TIMEOUT_MS);
+
+    try {
+      const urlObj = new URL(url);
+      const origin = `${urlObj.protocol}//${urlObj.host}`;
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
+          'Referer': origin + '/',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': urlObj.pathname === '/' ? 'none' : 'same-origin',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        redirect: 'follow',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${url}: ${response.status}`);
       }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${url}: ${response.status}`);
+
+      return response.text();
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          throw new Error(`Failed to fetch ${url}: request timed out`);
+        }
+        if (err.cause instanceof Error && err.message.includes('fetch')) {
+          throw new Error(`Failed to fetch ${url}: ${err.cause.message}`);
+        }
+        throw new Error(`Failed to fetch ${url}: ${err.message}`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    
-    return response.text();
   }
   
   /**
