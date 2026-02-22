@@ -18,6 +18,45 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
     // Fallback to basic HTML parsing
     return this.parseHtmlRecipe(html, url);
   }
+
+  /**
+   * Parse a raw JSON-LD payload (e.g. from a bookmarklet) into ExtractedRecipeData.
+   * Accepts a single Recipe object, an array of nodes, or an object with @graph.
+   * @param payload - Parsed JSON-LD (object or array)
+   * @param sourceUrl - Optional source URL for the recipe
+   */
+  parseJsonLdPayload(payload: unknown, sourceUrl = ''): ExtractedRecipeData {
+    const recipe = this.findRecipeInJsonLdPayload(payload);
+    if (!recipe) {
+      throw new Error('No Recipe found in JSON-LD payload');
+    }
+    return this.parseJsonLdRecipe(recipe, sourceUrl);
+  }
+
+  /**
+   * Find the first Recipe node in a parsed JSON-LD payload (object, array, @graph, or mainEntity).
+   */
+  findRecipeInJsonLdPayload(payload: unknown): any {
+    if (payload == null || typeof payload !== 'object') return null;
+    const items = Array.isArray(payload) ? payload : [payload];
+    for (const item of items) {
+      if (item && typeof item === 'object') {
+        if (this.isRecipeData(item)) return item;
+        if (Array.isArray(item['@graph'])) {
+          const recipe = item['@graph'].find((node: any) => this.isRecipeData(node));
+          if (recipe) return recipe;
+        }
+        // WebPage and similar often nest the Recipe in mainEntity
+        const mainEntity = item['mainEntity'];
+        if (mainEntity != null) {
+          const mainItems = Array.isArray(mainEntity) ? mainEntity : [mainEntity];
+          const recipe = mainItems.find((node: any) => node && this.isRecipeData(node));
+          if (recipe) return recipe;
+        }
+      }
+    }
+    return null;
+  }
   
   private extractJsonLd(html: string): any {
     // Look for JSON-LD script tags
@@ -35,10 +74,16 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
           if (this.isRecipeData(item)) {
             return item;
           }
-          
           // Check if it's a graph structure
           if (item['@graph']) {
             const recipe = item['@graph'].find((node: any) => this.isRecipeData(node));
+            if (recipe) return recipe;
+          }
+          // WebPage and similar often nest the Recipe in mainEntity
+          const mainEntity = item['mainEntity'];
+          if (mainEntity != null) {
+            const mainItems = Array.isArray(mainEntity) ? mainEntity : [mainEntity];
+            const recipe = mainItems.find((node: any) => node && this.isRecipeData(node));
             if (recipe) return recipe;
           }
         }

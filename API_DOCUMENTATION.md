@@ -399,6 +399,56 @@ Mögliche Fehler:
 - `400`: Ungültige URL
 - `500`: Fehler beim Import (Website nicht erreichbar, kein Rezept gefunden, etc.)
 
+#### Import von JSON-LD
+
+```plaintext
+POST /api/recipes/import/json-ld
+```
+
+Importiert ein Rezept aus rohem JSON-LD (z. B. von einem Bookmarklet auf einer Rezeptseite). Das Format ist unabhängig vom internen Rezept-JSON der App. Nützlich für Seiten, die Server-Anfragen blockieren (z. B. rewe.de).
+
+Request-Body (JSON):
+- `jsonLd` (erforderlich): Ein Objekt oder Array mit Schema.org JSON-LD. Es wird automatisch nach einem Rezept-Knoten gesucht (direkt, in `@graph` oder in `mainEntity`).
+- `sourceUrl` (optional): Quell-URL des Rezepts (wird am Rezept gespeichert).
+
+Bei Erfolg wird Status `200` und das importierte Rezept zurückgegeben.
+
+Beispiel-Request:
+```shell
+curl --request POST \
+  --header "Content-Type: application/json" \
+  --data '{
+    "jsonLd": {
+      "@context": "http://schema.org",
+      "@type": "Recipe",
+      "name": "Beispielrezept",
+      "recipeIngredient": ["200 g Mehl", "2 Eier"],
+      "recipeInstructions": [{"@type": "HowToStep", "text": "Alles mischen."}]
+    },
+    "sourceUrl": "https://www.example.com/rezept"
+  }' \
+  --url "https://example.com/api/recipes/import/json-ld"
+```
+
+Beispiel-Response:
+```json
+{
+  "success": true,
+  "recipe": {...},
+  "extractorUsed": "JSON-LD Generic Extractor",
+  "sourceUrl": "https://www.example.com/rezept",
+  "imported": 1,
+  "recipeId": "123",
+  "warnings": [
+    "Bitte überprüfen Sie die extrahierten Zutaten auf Korrektheit und Vollständigkeit."
+  ]
+}
+```
+
+Mögliche Fehler:
+- `400`: `jsonLd` fehlt, kein Rezept im JSON-LD gefunden, oder ungültiges Format
+- `500`: Fehler beim Verarbeiten
+
 #### Import-Vorschau
 
 ```plaintext

@@ -124,8 +124,14 @@ export const POST: APIRoute = async ({ request }) => {
     
     // Provide more specific error messages
     let userMessage = 'Fehler beim Importieren des Rezepts';
-    if (errorMessage.includes('Failed to fetch')) {
-      userMessage = 'Die Website konnte nicht erreicht werden. Bitte überprüfen Sie die URL.';
+    if (errorMessage.includes('timed out')) {
+      userMessage = 'Die Website hat zu lange nicht geantwortet. Manche Seiten (z. B. rewe.de) blockieren oder verzögern automatische Zugriffe – bitte versuchen Sie es später oder geben Sie das Rezept manuell ein.';
+    } else if (errorMessage.includes('Failed to fetch')) {
+      if (errorMessage.includes(': 403')) {
+        userMessage = 'Die Website blockiert automatische Zugriffe (z. B. rewe.de). Bitte geben Sie das Rezept manuell ein oder kopieren Sie die Rezeptdaten per Hand.';
+      } else {
+        userMessage = 'Die Website konnte nicht erreicht werden. Bitte überprüfen Sie die URL und Ihre Internetverbindung.';
+      }
     } else if (errorMessage.includes('JSON.parse')) {
       userMessage = 'Fehler beim Parsen der Website-Daten.';
     } else if (errorMessage.includes('extractors failed')) {
