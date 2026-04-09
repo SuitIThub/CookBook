@@ -14,7 +14,7 @@ const images = recipe.images || [];
 
 <div data-recipe-images={JSON.stringify(images)} data-recipe-id={recipe.id} data-mode={mode}>
   {images.length > 0 && (
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 p-6">
+    <div class="recipe-page-image-gallery bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 p-6">
       <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Bilder</h2>
       
       <!-- Image Gallery -->
@@ -23,7 +23,8 @@ const images = recipe.images || [];
           <div class="flex-shrink-0 relative group">
             <div class="w-32 h-32 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
               <img 
-                src={image.url} 
+                src={image.url}
+                data-media-src={image.url} 
                 alt="Recipe image" 
                 class="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
                 data-lightbox="recipe-gallery"
@@ -65,7 +66,7 @@ const images = recipe.images || [];
   )}
 
   {mode === 'view' && images.length === 0 && recipe.id && (
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 p-6">
+    <div class="recipe-page-image-gallery bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 mb-6 p-6">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Bilder</h2>
         <button 

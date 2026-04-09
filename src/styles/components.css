@@ -848,4 +848,20 @@ input[type="number"] {
   @apply fixed right-4 top-20 p-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg transition-colors z-[60];
 }
 
- 
+/* Low-bandwidth / data-saver: collapse media-heavy regions (class set on <html>) */
+html.low-bandwidth .recipe-image-carousel,
+html.low-bandwidth .recipe-image-placeholder {
+  display: none !important;
+}
+
+html.low-bandwidth .recipe-header-hero {
+  display: none !important;
+}
+
+html.low-bandwidth .recipe-header-overlap {
+  margin-top: 0 !important;
+}
+
+html.low-bandwidth .recipe-page-image-gallery {
+  display: none !important;
+}

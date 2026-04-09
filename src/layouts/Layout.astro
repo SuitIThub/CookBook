@@ -34,6 +34,12 @@ const { title } = Astro.props;
       
       // Ensure visibility is set
       document.documentElement.style.visibility = 'visible';
+
+      try {
+        if (localStorage.getItem('lowBandwidth') === '1') {
+          document.documentElement.classList.add('low-bandwidth');
+        }
+      } catch (e) {}
     })();
   </script>
   <head>
@@ -106,6 +112,22 @@ const { title } = Astro.props;
             <a href="/zutaten" class="nav-link">
               Zutaten
             </a>
+            <!-- Low-bandwidth (data saver) -->
+            <button
+              type="button"
+              id="low-bandwidth-toggle"
+              data-toggle-low-bandwidth
+              onclick="window.__cookbookToggleLowBandwidth(event)"
+              class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400"
+              aria-label="Datenspar-Modus"
+              aria-pressed="false"
+              title="Datenspar-Modus: keine Rezeptbilder, keine Einbettungen"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 2L2 22" />
+              </svg>
+            </button>
             <!-- Theme Toggle Button -->
             <button id="theme-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
               <!-- Sun icon (visible in dark mode, to switch to light mode) -->
@@ -121,6 +143,22 @@ const { title } = Astro.props;
 
           <!-- Mobile hamburger button -->
           <div class="flex items-center space-x-2 portrait:flex landscape:hidden">
+            <!-- Low-bandwidth (data saver) mobile -->
+            <button
+              type="button"
+              id="low-bandwidth-toggle-mobile"
+              data-toggle-low-bandwidth
+              onclick="window.__cookbookToggleLowBandwidth(event)"
+              class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400"
+              aria-label="Datenspar-Modus"
+              aria-pressed="false"
+              title="Datenspar-Modus"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 2L2 22" />
+              </svg>
+            </button>
             <!-- Theme Toggle Button for Mobile -->
             <button id="theme-toggle-mobile" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
               <!-- Sun icon (visible in dark mode, to switch to light mode) -->
@@ -162,6 +200,140 @@ const { title } = Astro.props;
           </div>
         </div>
       </nav>
+      <!-- Low-bandwidth runtime: self-contained, persistent across page swaps -->
+      <script is:inline>
+        (function () {
+          var STORAGE_KEY = 'lowBandwidth';
+
+          function readEnabled() {
+            try {
+              return localStorage.getItem(STORAGE_KEY) === '1';
+            } catch (e) {
+              return document.documentElement.classList.contains('low-bandwidth');
+            }
+          }
+
+          function persistEnabled(enabled) {
+            try {
+              if (enabled) localStorage.setItem(STORAGE_KEY, '1');
+              else localStorage.removeItem(STORAGE_KEY);
+            } catch (e) {}
+          }
+
+          function updateButtons(enabled) {
+            document.querySelectorAll('[data-toggle-low-bandwidth]').forEach(function (btn) {
+              btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+              if (enabled) {
+                btn.classList.add('text-orange-500');
+                btn.classList.add('dark:text-orange-400');
+              } else {
+                btn.classList.remove('text-orange-500');
+                btn.classList.remove('dark:text-orange-400');
+              }
+            });
+          }
+
+          function applyMedia(enabled) {
+            // Enforce layout behavior directly (in addition to CSS class rules)
+            document.querySelectorAll('.recipe-image-carousel, .recipe-image-placeholder').forEach(function (el) {
+              el.style.display = enabled ? 'none' : '';
+            });
+            document.querySelectorAll('.recipe-page-image-gallery').forEach(function (el) {
+              el.style.display = enabled ? 'none' : '';
+            });
+            document.querySelectorAll('.recipe-header-hero').forEach(function (el) {
+              el.style.display = enabled ? 'none' : '';
+            });
+            document.querySelectorAll('.recipe-header-overlap').forEach(function (el) {
+              if (enabled) el.style.marginTop = '0';
+              else el.style.marginTop = '';
+            });
+
+            document.querySelectorAll('img[data-media-src]').forEach(function (node) {
+              var img = node;
+              var dataSrc = img.getAttribute('data-media-src') || '';
+              if (enabled) {
+                var src = img.getAttribute('src');
+                if (src) {
+                  img.setAttribute('data-media-held-src', src);
+                  img.removeAttribute('src');
+                }
+              } else {
+                var held = img.getAttribute('data-media-held-src');
+                var target = held || dataSrc;
+                if (target && !img.getAttribute('src')) {
+                  img.setAttribute('src', target);
+                }
+              }
+            });
+
+            document.querySelectorAll('iframe[data-embed-src]').forEach(function (node) {
+              var frame = node;
+              if (enabled) {
+                var src = frame.getAttribute('src');
+                if (src) {
+                  frame.setAttribute('data-embed-held-src', src);
+                  frame.removeAttribute('src');
+                }
+              } else {
+                var details = frame.closest('details.cookbook-embed');
+                if (details && !details.open) return;
+                var dataSrc = frame.getAttribute('data-embed-src') || '';
+                var held = frame.getAttribute('data-embed-held-src');
+                var target = held || dataSrc;
+                if (target && !frame.getAttribute('src')) {
+                  frame.setAttribute('src', target);
+                }
+              }
+            });
+
+            document.querySelectorAll('details.cookbook-embed').forEach(function (d) {
+              d.open = !enabled;
+            });
+          }
+
+          function applyAll(enabled) {
+            document.documentElement.classList.toggle('low-bandwidth', enabled);
+            updateButtons(enabled);
+            applyMedia(enabled);
+          }
+
+          window.cookbookApplyLowBandwidthMedia = applyAll;
+          window.__cookbookToggleLowBandwidth = function (event) {
+            if (event && typeof event.preventDefault === 'function') {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+            var enabled = !readEnabled();
+            persistEnabled(enabled);
+            applyAll(enabled);
+          };
+
+          if (!window.__cookbookLowBandwidthClickWired) {
+            window.__cookbookLowBandwidthClickWired = true;
+            document.addEventListener('click', function (event) {
+              var target = event.target;
+              if (!target || typeof target.closest !== 'function') return;
+              if (!target.closest('[data-toggle-low-bandwidth]')) return;
+              window.__cookbookToggleLowBandwidth(event);
+            }, true);
+          }
+
+          function applyFromStorage() {
+            applyAll(readEnabled());
+          }
+
+          // Re-apply across Astro client-side navigations and bfcache restores.
+          document.addEventListener('astro:after-swap', applyFromStorage);
+          window.addEventListener('pageshow', applyFromStorage);
+
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyFromStorage);
+          } else {
+            applyFromStorage();
+          }
+        })();
+      </script>
     </header>
 
     <main class="container py-8">
@@ -200,6 +372,96 @@ const { title } = Astro.props;
             hide: () => void;
           };
         }
+      }
+
+      function isLowBandwidth() {
+        return document.documentElement.classList.contains('low-bandwidth');
+      }
+
+      function refreshLowBandwidthToggleButtons() {
+        const lb = isLowBandwidth();
+        document.querySelectorAll('[data-toggle-low-bandwidth]').forEach((el) => {
+          const btn = el as HTMLButtonElement;
+          btn.setAttribute('aria-pressed', lb ? 'true' : 'false');
+          btn.classList.toggle('text-orange-500', lb);
+          btn.classList.toggle('dark:text-orange-400', lb);
+        });
+      }
+
+      function initCookbookEmbeds() {
+        document.querySelectorAll('details.cookbook-embed').forEach((details) => {
+          const d = details as HTMLDetailsElement & { _lbEmbedWired?: boolean };
+          if (d._lbEmbedWired) return;
+          d._lbEmbedWired = true;
+          d.addEventListener('toggle', () => {
+            if (isLowBandwidth() || !d.open) return;
+            d.querySelectorAll('iframe[data-embed-src]').forEach((ifr) => {
+              const el = ifr as HTMLIFrameElement;
+              const url = el.getAttribute('data-embed-src') || '';
+              const held = el.getAttribute('data-embed-held-src');
+              const target = held || url;
+              if (target && !el.getAttribute('src')) el.src = target;
+            });
+          });
+        });
+      }
+
+      function applyLowBandwidthMedia() {
+        const lb = isLowBandwidth();
+
+        document.querySelectorAll('img[data-media-src]').forEach((img) => {
+          const el = img as HTMLImageElement;
+          const dataUrl = el.getAttribute('data-media-src') || '';
+          if (lb) {
+            const src = el.getAttribute('src');
+            if (src) {
+              el.setAttribute('data-media-held-src', src);
+              el.removeAttribute('src');
+            }
+          } else {
+            const held = el.getAttribute('data-media-held-src');
+            const target = held || dataUrl;
+            if (target) el.src = target;
+          }
+        });
+
+        if (lb) {
+          document.querySelectorAll('iframe[data-embed-src]').forEach((ifr) => {
+            const el = ifr as HTMLIFrameElement;
+            const src = el.getAttribute('src');
+            if (src) {
+              el.setAttribute('data-embed-held-src', src);
+              el.removeAttribute('src');
+            }
+          });
+        }
+
+        document.querySelectorAll('details.cookbook-embed').forEach((d) => {
+          (d as HTMLDetailsElement).open = !lb;
+        });
+
+        if (!lb) {
+          document.querySelectorAll('iframe[data-embed-src]').forEach((ifr) => {
+            const el = ifr as HTMLIFrameElement;
+            const details = el.closest('details.cookbook-embed');
+            if (!details || !(details as HTMLDetailsElement).open) return;
+            const dataUrl = el.getAttribute('data-embed-src') || '';
+            const held = el.getAttribute('data-embed-held-src');
+            const target = held || dataUrl;
+            if (target && !el.getAttribute('src')) el.src = target;
+          });
+        }
+
+        refreshLowBandwidthToggleButtons();
+      }
+
+      (window as Window & { cookbookApplyLowBandwidthMedia?: () => void }).cookbookApplyLowBandwidthMedia =
+        applyLowBandwidthMedia;
+
+      function initializeLowBandwidth() {
+        refreshLowBandwidthToggleButtons();
+        initCookbookEmbeds();
+        applyLowBandwidthMedia();
       }
 
       // Theme toggle functionality
@@ -587,6 +849,7 @@ const { title } = Astro.props;
             // Small delay to let page settle
             setTimeout(() => {
               initializeTheme();
+              initializeLowBandwidth();
               initializeMobileMenu();
               initializeModal();
               
@@ -597,13 +860,19 @@ const { title } = Astro.props;
         });
       }
 
-      // Initialize all functionality
-      document.addEventListener('DOMContentLoaded', () => {
-        console.log('DOM Content Loaded - Initializing...'); // Debug log
+      // Init once: bundled module scripts may run after DOMContentLoaded already fired
+      function runLayoutClientInit() {
+        console.log('Layout client init...'); // Debug log
         initializeTheme();
+        initializeLowBandwidth();
         initializeMobileMenu();
         initializeModal();
-      });
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runLayoutClientInit);
+      } else {
+        runLayoutClientInit();
+      }
     </script>
   </body>
 </html> 
