@@ -22,6 +22,12 @@
       
       // Ensure visibility is set
       document.documentElement.style.visibility = 'visible';
+
+      try {
+        if (localStorage.getItem('lowBandwidth') === '1') {
+          document.documentElement.classList.add('low-bandwidth');
+        }
+      } catch (e) {}
     })();
   </script>
   <head>
@@ -73,6 +79,62 @@
     </style>
   </head>
   <body class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+    <script is:inline>
+      (function () {
+        function updateButtons(enabled) {
+          document.querySelectorAll('[data-toggle-low-bandwidth]').forEach(function (btn) {
+            btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+            if (enabled) {
+              btn.classList.add('text-orange-500');
+              btn.classList.add('dark:text-orange-400');
+            } else {
+              btn.classList.remove('text-orange-500');
+              btn.classList.remove('dark:text-orange-400');
+            }
+          });
+        }
+
+        function apply() {
+          var enabled = document.documentElement.classList.contains('low-bandwidth');
+          updateButtons(enabled);
+        }
+
+        window.__cookbookToggleLowBandwidth = function (event) {
+          if (event && typeof event.preventDefault === 'function') {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          var root = document.documentElement;
+          var enabled = !root.classList.contains('low-bandwidth');
+          root.classList.toggle('low-bandwidth', enabled);
+          try {
+            if (enabled) localStorage.setItem('lowBandwidth', '1');
+            else localStorage.removeItem('lowBandwidth');
+          } catch (e) {}
+          if (typeof window.cookbookApplyLowBandwidthMedia === 'function') {
+            window.cookbookApplyLowBandwidthMedia();
+          } else {
+            apply();
+          }
+        };
+
+        if (!window.__cookbookLowBandwidthClickWired) {
+          window.__cookbookLowBandwidthClickWired = true;
+          document.addEventListener('click', function (event) {
+            var target = event.target;
+            if (!target || typeof target.closest !== 'function') return;
+            if (!target.closest('[data-toggle-low-bandwidth]')) return;
+            window.__cookbookToggleLowBandwidth(event);
+          }, true);
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', apply);
+        } else {
+          apply();
+        }
+      })();
+    </script>
     <main>
       <slot />
     </main>
@@ -96,8 +158,23 @@
         themeToggle?.addEventListener('click', toggleTheme);
       }
 
+      function refreshHomeLowBandwidthToggle() {
+        const lb = document.documentElement.classList.contains('low-bandwidth');
+        const btn = document.getElementById('low-bandwidth-toggle');
+        if (btn) {
+          btn.setAttribute('aria-pressed', lb ? 'true' : 'false');
+          btn.classList.toggle('text-orange-500', lb);
+          btn.classList.toggle('dark:text-orange-400', lb);
+        }
+      }
+
+      function initializeLowBandwidthHome() {
+        refreshHomeLowBandwidthToggle();
+      }
+
       // Initialize theme toggle
       initializeTheme();
+      initializeLowBandwidthHome();
 
       // Mark CSS as loaded
       document.documentElement.classList.add('css-loaded');

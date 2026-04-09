@@ -13,7 +13,8 @@ const { images } = Astro.props;
     {images.length === 1 ? (
       <div class="w-full h-48 bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
         <img 
-          src={images[0].url} 
+          src={images[0].url}
+          data-media-src={images[0].url} 
           alt="Recipe image" 
           class="max-w-full max-h-full object-contain"
         />
@@ -24,7 +25,8 @@ const { images } = Astro.props;
           {images.map((image: RecipeImage, index: number) => (
             <div class="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
               <img 
-                src={image.url} 
+                src={image.url}
+                data-media-src={image.url} 
                 alt={`Recipe image ${index + 1}`} 
                 class="max-w-full max-h-full object-contain"
                 style={`transform: translateX(-${0}%)`}
