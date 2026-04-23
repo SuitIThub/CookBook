@@ -1,6 +1,11 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database';
-import { ollamaProposeVariant, ollamaProposeVariantFromMessage, type ChatMessage } from '../../../lib/ai';
+import {
+  ollamaProposeVariant,
+  ollamaProposeVariantFromMessage,
+  type AIRequestConfig,
+  type ChatMessage,
+} from '../../../lib/ai';
 import { createDraftToken } from '../../../lib/draftVariantStore';
 import type { Recipe } from '../../../types/recipe';
 
@@ -276,12 +281,15 @@ function repairRecipeDataFromOriginal(
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const { recipeId, recipeIds, messages, variantMessage, preview } = body as {
+    const { recipeId, recipeIds, messages, variantMessage, preview, provider, model, openRouterApiKey } = body as {
       recipeId?: string;
       recipeIds?: string[];
       messages?: ChatMessage[];
       variantMessage?: string;
       preview?: boolean;
+      provider?: AIRequestConfig['provider'];
+      model?: string;
+      openRouterApiKey?: string;
     };
 
     if (!recipeId) {
@@ -323,16 +331,22 @@ export const POST: APIRoute = async ({ request }) => {
     const recipeContext = markdownParts.join('\n\n');
 
     const rootOriginalId = recipe.parentRecipeId || recipe.id;
+    const aiConfig: AIRequestConfig = {
+      provider,
+      model,
+      openRouterApiKey,
+    };
 
     const proposed =
       typeof variantMessage === 'string' && variantMessage.trim() !== ''
-        ? await ollamaProposeVariantFromMessage(recipeContext, variantMessage.trim())
+        ? await ollamaProposeVariantFromMessage(recipeContext, variantMessage.trim(), aiConfig)
         : await ollamaProposeVariant(
             recipeContext,
             (messages?.length ?? 0) > 0
               ? 'Der Nutzer hat sich im Chat über das Rezept unterhalten. Leite die gewünschten Änderungen aus dem Verlauf ab.'
               : 'Der Nutzer möchte eine Variante ohne spezifischen Chat-Kontext. Erstelle eine sinnvolle Variante (z.B. andere Portionen, kleine Anpassungen).',
-            messages ?? []
+            messages ?? [],
+            aiConfig
           );
 
     const rawName =

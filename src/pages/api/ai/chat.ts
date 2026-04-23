@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database';
-import { ollamaChatStream, type ChatMessage } from '../../../lib/ai';
+import { aiChatStream, type AIRequestConfig, type ChatMessage } from '../../../lib/ai';
 
 // In-memory cache: recipeId -> messages (user/assistant only; recipe context is injected on send)
 const chatCache = new Map<string, ChatMessage[]>();
@@ -36,10 +36,13 @@ export const GET: APIRoute = async ({ url }) => {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const { recipeId, recipeIds, message } = body as {
+    const { recipeId, recipeIds, message, provider, model, openRouterApiKey } = body as {
       recipeId?: string;
       recipeIds?: string[];
       message?: string;
+      provider?: AIRequestConfig['provider'];
+      model?: string;
+      openRouterApiKey?: string;
     };
 
     if (!recipeId || typeof message !== 'string' || !message.trim()) {
@@ -101,11 +104,16 @@ ${recipeMarkdown}`,
 
     const encoder = new TextEncoder();
     let fullContent = '';
+    const aiConfig: AIRequestConfig = {
+      provider,
+      model,
+      openRouterApiKey,
+    };
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of ollamaChatStream(messagesForOllama)) {
+          for await (const chunk of aiChatStream(messagesForOllama, aiConfig)) {
             fullContent += chunk;
             controller.enqueue(encoder.encode(JSON.stringify({ delta: chunk }) + '\n'));
           }
