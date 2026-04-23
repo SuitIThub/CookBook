@@ -19,12 +19,73 @@ function getOllamaModel(): string {
   return model.trim();
 }
 
+function getOpenRouterModel(): string {
+  const model = import.meta.env.OPENROUTER_MODEL;
+  if (!model || typeof model !== 'string' || model.trim() === '') {
+    throw new Error('OPENROUTER_MODEL is not set or empty');
+  }
+  return model.trim();
+}
+
+export type AIProvider = 'ollama' | 'openrouter';
+
+export interface AIRequestConfig {
+  provider?: AIProvider;
+  model?: string;
+  openRouterApiKey?: string;
+}
+
+function getProvider(config?: AIRequestConfig): AIProvider {
+  return config?.provider === 'openrouter' ? 'openrouter' : 'ollama';
+}
+
+function getModelForProvider(config?: AIRequestConfig): string {
+  const customModel = typeof config?.model === 'string' ? config.model.trim() : '';
+  if (customModel) return customModel;
+  return getProvider(config) === 'openrouter' ? getOpenRouterModel() : getOllamaModel();
+}
+
 export function getOllamaChatUrl(): string {
   return `${getOllamaBase()}/api/chat`;
 }
 
 export function getModel(): string {
   return getOllamaModel();
+}
+
+export async function listOllamaModels(): Promise<string[]> {
+  const res = await fetch(`${getOllamaBase()}/api/tags`, {
+    method: 'GET',
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Ollama models failed: ${res.status} ${text}`);
+  }
+  const data = (await res.json()) as { models?: { name?: string }[] };
+  return (data.models ?? [])
+    .map((m) => m.name?.trim() ?? '')
+    .filter(Boolean);
+}
+
+export async function listOpenRouterModels(apiKey?: string): Promise<string[]> {
+  const headers: Record<string, string> = {};
+  if (typeof apiKey === 'string' && apiKey.trim()) {
+    headers.Authorization = `Bearer ${apiKey.trim()}`;
+  }
+  const res = await fetch('https://openrouter.ai/api/v1/models', {
+    method: 'GET',
+    headers,
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenRouter models failed: ${res.status} ${text}`);
+  }
+  const data = (await res.json()) as { data?: { id?: string }[] };
+  return (data.data ?? [])
+    .map((m) => m.id?.trim() ?? '')
+    .filter(Boolean);
 }
 
 export interface ChatMessage {
@@ -55,6 +116,113 @@ export async function ollamaChat(messages: { role: string; content: string }[]):
   const data = (await res.json()) as { message?: { content?: string }; done?: boolean };
   const content = data.message?.content ?? '';
   return content;
+}
+
+export async function openRouterChat(
+  messages: { role: string; content: string }[],
+  config?: AIRequestConfig,
+  extraBody?: Record<string, unknown>
+): Promise<string> {
+  const apiKey = config?.openRouterApiKey?.trim();
+  if (!apiKey) {
+    throw new Error('OpenRouter API key missing');
+  }
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: getModelForProvider({ ...config, provider: 'openrouter' }),
+      messages,
+      stream: false,
+      ...extraBody,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenRouter chat failed: ${res.status} ${text}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string | Array<{ text?: string; type?: string }> } }>;
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const combined = content
+      .map((part) => (part && typeof part.text === 'string' ? part.text : ''))
+      .join('')
+      .trim();
+    return combined;
+  }
+  return '';
+}
+
+function extractJsonObject(raw: string): string {
+  const text = raw.trim();
+  if (!text) return text;
+  const codeFenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeFenceMatch?.[1]) return codeFenceMatch[1].trim();
+
+  const start = text.indexOf('{');
+  if (start === -1) return text;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\') {
+        escape = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') depth++;
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return text.slice(start, i + 1).trim();
+      }
+    }
+  }
+  return text;
+}
+
+function parseProposedVariant(rawMessage: string, source: string): ProposedVariant {
+  let raw = extractJsonObject(rawMessage);
+
+  function tryRepairJson(s: string): string {
+    return s
+      .replace(/,(\s*[}\]])/g, '$1')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
+  }
+
+  let parsed: ProposedVariant | null = null;
+  for (const attempt of [raw, tryRepairJson(raw)]) {
+    try {
+      parsed = JSON.parse(attempt) as ProposedVariant;
+      if (parsed?.variantName && parsed?.recipeData) break;
+      parsed = null;
+    } catch {
+      // try repaired next
+    }
+  }
+  if (!parsed?.variantName || !parsed?.recipeData) {
+    throw new Error(`Invalid JSON from ${source}: ${raw.substring(0, 300)}`);
+  }
+  return parsed;
 }
 
 /**
@@ -116,6 +284,76 @@ export async function* ollamaChatStream(
   } finally {
     reader.releaseLock();
   }
+}
+
+export async function* openRouterChatStream(
+  messages: { role: string; content: string }[],
+  config?: AIRequestConfig
+): AsyncGenerator<string, void, unknown> {
+  const apiKey = config?.openRouterApiKey?.trim();
+  if (!apiKey) {
+    throw new Error('OpenRouter API key missing');
+  }
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: getModelForProvider({ ...config, provider: 'openrouter' }),
+      messages,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenRouter chat failed: ${res.status} ${text}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line || !line.startsWith('data:')) continue;
+        const payload = line.replace(/^data:\s*/, '');
+        if (payload === '[DONE]') continue;
+        try {
+          const data = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>;
+          };
+          const content = data.choices?.[0]?.delta?.content ?? '';
+          if (content) yield content;
+        } catch {
+          // ignore malformed lines
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+export async function* aiChatStream(
+  messages: { role: string; content: string }[],
+  config?: AIRequestConfig
+): AsyncGenerator<string, void, unknown> {
+  if (getProvider(config) === 'openrouter') {
+    yield* openRouterChatStream(messages, config);
+    return;
+  }
+  yield* ollamaChatStream(messages);
 }
 
 /** Schema for AI-generated recipe variant (Ollama structured output). */
@@ -235,7 +473,8 @@ export interface ProposedVariant {
 export async function ollamaProposeVariant(
   recipeContext: string,
   conversationSummary: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  config?: AIRequestConfig
 ): Promise<ProposedVariant> {
   const conversationSnippet = messages
     .slice(-10)
@@ -275,49 +514,48 @@ ${conversationSnippet}
 
 Gib das JSON mit variantName (max. 3 Wörter) und recipeData zurück. Pro Zutat nur ein Eintrag in "quantities". Verwende für alle id-Felder UUID-ähnliche Werte (z.B. "a1b2c3", "d4e5f6").`;
 
-  const url = getOllamaChatUrl();
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: getModel(),
-      messages: [{ role: 'user', content: userContent }],
-      stream: false,
-      format: RECIPE_VARIANT_FORMAT,
-      options: { temperature: 0.3 },
-    }),
-  });
+  const rawMessage =
+    getProvider(config) === 'openrouter'
+      ? await openRouterChat([{ role: 'user', content: userContent }], config)
+      : await (async () => {
+          const url = getOllamaChatUrl();
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: getModelForProvider(config),
+              messages: [{ role: 'user', content: userContent }],
+              stream: false,
+              format: RECIPE_VARIANT_FORMAT,
+              options: { temperature: 0.3 },
+            }),
+          });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Ollama propose-variant failed: ${res.status} ${text}`);
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Ollama propose-variant failed: ${res.status} ${text}`);
+          }
+          const data = (await res.json()) as { message?: { content?: string } };
+          return data.message?.content ?? '';
+        })();
+  if (getProvider(config) === 'openrouter') {
+    const responseWithSchema = await openRouterChat(
+      [{ role: 'user', content: userContent }],
+      config,
+      {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'recipe_variant',
+            strict: true,
+            schema: RECIPE_VARIANT_FORMAT,
+          },
+        },
+      }
+    );
+    return parseProposedVariant(responseWithSchema, 'OpenRouter');
   }
-
-  const data = (await res.json()) as { message?: { content?: string } };
-  let raw = data.message?.content?.trim() ?? '';
-  raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-
-  function tryRepairJson(s: string): string {
-    return s
-      .replace(/,(\s*[}\]])/g, '$1')
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n');
-  }
-
-  let parsed: ProposedVariant | null = null;
-  for (const attempt of [raw, tryRepairJson(raw)]) {
-    try {
-      parsed = JSON.parse(attempt) as ProposedVariant;
-      if (parsed?.variantName && parsed?.recipeData) break;
-      parsed = null;
-    } catch {
-      // try repaired next
-    }
-  }
-  if (!parsed?.variantName || !parsed?.recipeData) {
-    throw new Error(`Invalid JSON from Ollama: ${raw.substring(0, 200)}`);
-  }
-  return parsed;
+  return parseProposedVariant(rawMessage, 'Ollama');
 }
 
 /**
@@ -327,7 +565,8 @@ Gib das JSON mit variantName (max. 3 Wörter) und recipeData zurück. Pro Zutat 
  */
 export async function ollamaProposeVariantFromMessage(
   originalRecipeMarkdown: string,
-  variantMessage: string
+  variantMessage: string,
+  config?: AIRequestConfig
 ): Promise<ProposedVariant> {
   const userContent = `Erstelle aus dem folgenden Rezept-Kontext (erst Original-Rezept, danach ggf. weitere referenzierte Rezepte) und der beschriebenen Variante ein JSON (variantName + recipeData). Antworte NUR mit dem JSON-Objekt, kein anderer Text.
 
@@ -345,47 +584,46 @@ ${variantMessage}
 
 Gib nur das JSON mit variantName (max. 3 Wörter) und dem vollständigen recipeData zurück. Pro Zutat nur ein Eintrag in "quantities".`;
 
-  const url = getOllamaChatUrl();
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: getModel(),
-      messages: [{ role: 'user', content: userContent }],
-      stream: false,
-      format: RECIPE_VARIANT_FORMAT,
-      options: { temperature: 0.3 },
-    }),
-  });
+  const rawMessage =
+    getProvider(config) === 'openrouter'
+      ? await openRouterChat([{ role: 'user', content: userContent }], config)
+      : await (async () => {
+          const url = getOllamaChatUrl();
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: getModelForProvider(config),
+              messages: [{ role: 'user', content: userContent }],
+              stream: false,
+              format: RECIPE_VARIANT_FORMAT,
+              options: { temperature: 0.3 },
+            }),
+          });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Ollama propose-variant failed: ${res.status} ${text}`);
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Ollama propose-variant failed: ${res.status} ${text}`);
+          }
+          const data = (await res.json()) as { message?: { content?: string } };
+          return data.message?.content ?? '';
+        })();
+  if (getProvider(config) === 'openrouter') {
+    const responseWithSchema = await openRouterChat(
+      [{ role: 'user', content: userContent }],
+      config,
+      {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'recipe_variant',
+            strict: true,
+            schema: RECIPE_VARIANT_FORMAT,
+          },
+        },
+      }
+    );
+    return parseProposedVariant(responseWithSchema, 'OpenRouter');
   }
-
-  const data = (await res.json()) as { message?: { content?: string } };
-  let raw = data.message?.content?.trim() ?? '';
-  raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-
-  function tryRepairJson(s: string): string {
-    return s
-      .replace(/,(\s*[}\]])/g, '$1')
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n');
-  }
-
-  let parsed: ProposedVariant | null = null;
-  for (const attempt of [raw, tryRepairJson(raw)]) {
-    try {
-      parsed = JSON.parse(attempt) as ProposedVariant;
-      if (parsed?.variantName && parsed?.recipeData) break;
-      parsed = null;
-    } catch {
-      // try repaired next
-    }
-  }
-  if (!parsed?.variantName || !parsed?.recipeData) {
-    throw new Error(`Invalid JSON from Ollama: ${raw.substring(0, 200)}`);
-  }
-  return parsed;
+  return parseProposedVariant(rawMessage, 'Ollama');
 }
