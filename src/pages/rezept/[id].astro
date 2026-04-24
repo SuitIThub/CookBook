@@ -20,6 +20,7 @@ const { id } = Astro.params;
 
 // Rezept aus der Datenbank laden
 let recipe: Recipe | null = null;
+let editRecipe: Recipe | null = null;
 let variants: Recipe[] = [];
 let originalRecipe: Recipe | null = null;
 try {
@@ -35,6 +36,9 @@ try {
 
   originalRecipe = rootOriginal;
   variants = db.getVariantsForRecipe(rootOriginalId);
+  const aiDraftMode = Astro.url.searchParams.get('aiDraft') === '1';
+  const draftRecipe = aiDraftMode ? db.getDraft(recipe.id) : null;
+  editRecipe = draftRecipe || recipe;
 } catch (error) {
   console.error('Error loading recipe from database:', error);
   return Astro.redirect('/404');
@@ -163,7 +167,7 @@ try {
           Entwurf verwerfen
         </button>
       </div>
-      <EditRecipeForm recipe={recipe} />
+      <EditRecipeForm recipe={editRecipe || recipe} />
       <div class="max-w-4xl mx-auto">
         <EditFormActions recipeId={recipe.id} />
       </div>
@@ -186,7 +190,7 @@ try {
   <button
     type="button"
     id="recipe-ai-chat-fab"
-    class="fixed bottom-6 right-6 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+    class="fixed bottom-6 right-6 z-[80] flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
     aria-label="KI-Chat zu diesem Rezept öffnen"
   >
     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -821,7 +825,10 @@ try {
       const shouldEdit = urlParams.get('edit');
       
       if (shouldEdit === 'true') {
-        const newUrl = window.location.pathname;
+        const params = new URLSearchParams(window.location.search);
+        params.delete('edit');
+        const next = params.toString();
+        const newUrl = next ? `${window.location.pathname}?${next}` : window.location.pathname;
         window.history.replaceState({}, '', newUrl);
         toggleEditMode();
       }
@@ -966,12 +973,49 @@ try {
       const inEditMode = editContent && !editContent.classList.contains('hidden');
       if (inEditMode) return;
       const fab = document.getElementById('recipe-ai-chat-fab');
-      if (fab) fab.classList.remove('hidden');
+      if (fab) {
+        fab.classList.remove('hidden');
+        updateFabOffset();
+      }
     }
 
     function hideFab() {
       const fab = document.getElementById('recipe-ai-chat-fab');
       if (fab) fab.classList.add('hidden');
+    }
+
+    function updateFabOffset() {
+      const fab = document.getElementById('recipe-ai-chat-fab');
+      if (!fab) return;
+      const gap = 12;
+
+      const timerSidebar = document.getElementById('timer-sidebar');
+      if (timerSidebar && !timerSidebar.classList.contains('hidden') && !timerSidebar.classList.contains('collapsed')) {
+        const sidebarRect = timerSidebar.getBoundingClientRect();
+        const visibleSidebarWidth = Math.max(0, window.innerWidth - sidebarRect.left);
+        fab.style.right = `${visibleSidebarWidth + gap}px`;
+      } else {
+        fab.style.right = '';
+      }
+
+      const hasFooter =
+        document.body.classList.contains('timer-footer-active') ||
+        document.body.classList.contains('timer-footer-expanded-active');
+
+      if (!hasFooter) {
+        fab.style.bottom = '';
+        return;
+      }
+
+      const timerFooter = document.getElementById('timer-footer');
+      if (!timerFooter || timerFooter.classList.contains('hidden')) {
+        fab.style.bottom = '5.5rem';
+        return;
+      }
+
+      const rect = timerFooter.getBoundingClientRect();
+      const visibleFooterHeight = Math.max(0, window.innerHeight - rect.top);
+      fab.style.bottom = `${visibleFooterHeight + gap}px`;
     }
 
     function setupFabClick() {
@@ -987,6 +1031,7 @@ try {
 
     function initAiFab() {
       setupFabClick();
+      updateFabOffset();
       showFabIfAllowed();
     }
 
@@ -1003,7 +1048,15 @@ try {
 
     // Re-apply FAB visibility when page is shown again
     window.addEventListener('pageshow', () => {
+      updateFabOffset();
       showFabIfAllowed();
     });
+
+    window.addEventListener('resize', updateFabOffset);
+    window.addEventListener('orientationchange', () => setTimeout(updateFabOffset, 120));
+
+    // Timer manager toggles classes on <body>; react immediately.
+    const bodyObserver = new MutationObserver(() => updateFabOffset());
+    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   </script>
 </Layout> 

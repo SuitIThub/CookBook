@@ -281,8 +281,9 @@ function repairRecipeDataFromOriginal(
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const { recipeId, recipeIds, messages, variantMessage, preview, provider, model, openRouterApiKey } = body as {
+    const { recipeId, targetRecipeId, recipeIds, messages, variantMessage, preview, provider, model, openRouterApiKey } = body as {
       recipeId?: string;
+      targetRecipeId?: string;
       recipeIds?: string[];
       messages?: ChatMessage[];
       variantMessage?: string;
@@ -292,26 +293,17 @@ export const POST: APIRoute = async ({ request }) => {
       openRouterApiKey?: string;
     };
 
-    if (!recipeId) {
-      return new Response(JSON.stringify({ error: 'recipeId required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const recipe = db.getRecipe(recipeId);
-    if (!recipe) {
-      return new Response(JSON.stringify({ error: 'Recipe not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const validContextIds = Array.isArray(recipeIds)
+      ? recipeIds.filter((id) => typeof id === 'string' && id && id !== '__all_recipes__' && !!db.getRecipe(id))
+      : [];
+    const fallbackContextId = typeof recipeId === 'string' && recipeId && recipeId !== '__all_recipes__' && db.getRecipe(recipeId)
+      ? recipeId
+      : (validContextIds[0] || null);
 
     const origin = new URL(request.url).origin;
-    const idsToLoad =
-      Array.isArray(recipeIds) && recipeIds.length > 0
-        ? [recipeId, ...recipeIds.filter((id: string) => id && id !== recipeId)]
-        : [recipeId];
+    const idsToLoad = fallbackContextId
+      ? [fallbackContextId, ...validContextIds.filter((id) => id !== fallbackContextId)]
+      : [];
 
     const markdownParts: string[] = [];
     for (let i = 0; i < idsToLoad.length; i++) {
@@ -330,7 +322,23 @@ export const POST: APIRoute = async ({ request }) => {
     }
     const recipeContext = markdownParts.join('\n\n');
 
-    const rootOriginalId = recipe.parentRecipeId || recipe.id;
+    const targetRecipe =
+      typeof targetRecipeId === 'string' && targetRecipeId.trim()
+        ? db.getRecipe(targetRecipeId.trim())
+        : null;
+    if (targetRecipeId && !targetRecipe) {
+      return new Response(JSON.stringify({ error: 'Target recipe not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (!targetRecipe && !fallbackContextId && !(typeof variantMessage === 'string' && variantMessage.trim() !== '')) {
+      return new Response(JSON.stringify({ error: 'Recipe context missing for variant generation' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const rootOriginalId = targetRecipe ? (targetRecipe.parentRecipeId || targetRecipe.id) : null;
     const aiConfig: AIRequestConfig = {
       provider,
       model,
@@ -356,14 +364,36 @@ export const POST: APIRoute = async ({ request }) => {
     const trimmedVariantName = rawName.split(/\s+/).slice(0, 3).join(' ') || rawName;
 
     let recipeData = sanitizeRecipeData(proposed.recipeData as Record<string, unknown>);
-    recipeData = repairRecipeDataFromOriginal(recipe, recipeData) as Record<string, unknown>;
-    const variantRecipeData = {
-      ...recipeData,
-      parentRecipeId: rootOriginalId,
-      variantName: trimmedVariantName,
-    };
+    if (targetRecipe) {
+      recipeData = repairRecipeDataFromOriginal(targetRecipe, recipeData) as Record<string, unknown>;
+    }
+    const variantRecipeData = targetRecipe
+      ? {
+          ...recipeData,
+          parentRecipeId: rootOriginalId,
+          variantName: trimmedVariantName,
+        }
+      : {
+          ...recipeData,
+          parentRecipeId: undefined,
+          variantName: undefined,
+        };
 
     if (preview === true) {
+      if (!targetRecipe) {
+        const newRecipe = db.createRecipe(variantRecipeData as Parameters<typeof db.createRecipe>[0]);
+        return new Response(
+          JSON.stringify({
+            preview: true,
+            mode: 'new_recipe',
+            recipeId: newRecipe.id,
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
       const token = createDraftToken({
         parentRecipeId: rootOriginalId,
         variantName: trimmedVariantName,
@@ -372,6 +402,7 @@ export const POST: APIRoute = async ({ request }) => {
       return new Response(
         JSON.stringify({
           preview: true,
+          mode: 'variant',
           token,
           parentRecipeId: rootOriginalId,
           variantName: trimmedVariantName,

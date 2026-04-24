@@ -32,6 +32,7 @@ const { recipe } = Astro.props;
 </div>
 
 <script define:vars={{ recipe }}>
+  const aiEditToken = new URLSearchParams(window.location.search).get('aiEditToken');
   // Make recipe data available globally for ingredient linking
   window.currentRecipe = recipe;
   
@@ -242,6 +243,10 @@ const { recipe } = Astro.props;
     if (form) {
       form.addEventListener('submit', handleFormSubmit);
     }
+
+    if (aiEditToken) {
+      await applyAiEditHighlights(aiEditToken);
+    }
     
     // Store initial recipe state for change detection
     initialRecipeState = JSON.parse(JSON.stringify(recipe));
@@ -381,6 +386,86 @@ const { recipe } = Astro.props;
       }
     } catch (error) {
       console.error('Error loading draft:', error);
+    }
+  }
+
+  async function applyAiEditHighlights(token) {
+    try {
+      const res = await fetch(`/api/ai/edit-preview?token=${encodeURIComponent(token)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || !Array.isArray(data.highlights)) return;
+      const isDebug = new URLSearchParams(window.location.search).get('debug') === '1';
+
+      const banner = document.createElement('div');
+      banner.className = 'mb-4 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20 p-3';
+      const title = document.createElement('p');
+      title.className = 'text-sm font-semibold text-indigo-700 dark:text-indigo-300';
+      title.textContent = 'KI-Änderungsvorschlag geladen – bitte prüfen und speichern.';
+      banner.appendChild(title);
+
+      if (data.diagnostics && typeof data.diagnostics.message === 'string') {
+        const diag = document.createElement('p');
+        const isOk = data.diagnostics.status === 'ok';
+        diag.className = isOk
+          ? 'mt-1 text-xs text-indigo-700 dark:text-indigo-300'
+          : 'mt-1 text-xs text-amber-700 dark:text-amber-300';
+        diag.textContent = `Diagnose: ${data.diagnostics.message}`;
+        banner.appendChild(diag);
+        if (isDebug && data.diagnostics.rawExcerpt) {
+          const raw = document.createElement('pre');
+          raw.className = 'mt-2 max-h-28 overflow-auto rounded border border-indigo-100 dark:border-indigo-900 bg-white/70 dark:bg-gray-800/50 p-2 text-[11px] text-indigo-900 dark:text-indigo-100 whitespace-pre-wrap';
+          raw.textContent = data.diagnostics.rawExcerpt;
+          banner.appendChild(raw);
+        }
+      }
+
+      const list = document.createElement('ul');
+      list.className = 'mt-2 space-y-1 text-xs text-indigo-900 dark:text-indigo-100';
+      const maxItems = 8;
+      data.highlights.slice(0, maxItems).forEach((h) => {
+        const li = document.createElement('li');
+        li.className = 'rounded bg-white/70 dark:bg-gray-800/40 px-2 py-1 border border-indigo-100 dark:border-indigo-900';
+        li.textContent = `${h.path || 'Feld'}: "${h.before || ''}" -> "${h.after || ''}"`;
+        list.appendChild(li);
+      });
+      if (data.highlights.length > 0) {
+        banner.appendChild(list);
+      }
+
+      const form = document.getElementById('edit-recipe-form');
+      if (form && form.parentNode) {
+        form.parentNode.insertBefore(banner, form);
+      }
+
+      const pathSet = new Set(data.highlights.map((h) => h.path || ''));
+      const markInput = (id) => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600');
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      };
+      if (pathSet.has('title')) markInput('edit-title');
+      if (pathSet.has('subtitle')) markInput('edit-subtitle');
+      if (pathSet.has('description')) markInput('edit-description');
+      if (pathSet.has('metadata.nutrition')) {
+        ['edit-calories', 'edit-carbohydrates', 'edit-protein', 'edit-fat'].forEach(markInput);
+      }
+      if (pathSet.has('metadata.timeEntries')) {
+        const timeWrap = document.getElementById('time-entries-container');
+        if (timeWrap) timeWrap.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600', 'rounded-md');
+      }
+      if (pathSet.has('ingredientGroups')) {
+        const ingWrap = document.getElementById('ingredients-edit-container');
+        if (ingWrap) ingWrap.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600', 'rounded-md');
+      }
+      if (pathSet.has('preparationGroups')) {
+        const prepWrap = document.getElementById('preparation-edit-container');
+        if (prepWrap) prepWrap.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600', 'rounded-md');
+      }
+    } catch (e) {
+      console.error('Could not apply AI edit highlights', e);
     }
   }
   

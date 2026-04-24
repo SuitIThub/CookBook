@@ -1,7 +1,7 @@
 ---
 declare global {
   interface Window {
-    openShoppingListModal?: (selectedRecipes: Set<string>) => Promise<void>;
+    openShoppingListModal?: (selectedRecipes: Set<string>, recipeServingsById?: Record<string, number>) => Promise<void>;
     createNewShoppingList?: () => Promise<void>;
   }
 }
@@ -48,6 +48,7 @@ declare global {
 
   // Store selected recipes in modal scope
   let currentSelectedRecipes: Set<string> = new Set();
+  let currentRecipeServingsById: Record<string, number> = {};
   let isCreatingList = false; // Prevent multiple simultaneous requests
   
   // Global flag to prevent multiple listener attachments
@@ -91,13 +92,16 @@ declare global {
   }
 
   // Expose function to open modal - always update, but only define once
-  window.openShoppingListModal = async (selectedRecipes: Set<string>) => {
+  window.openShoppingListModal = async (selectedRecipes: Set<string>, recipeServingsById: Record<string, number> = {}) => {
     if (selectedRecipes.size === 0) return;
 
     // Always update the selected recipes when modal opens
     if (!updateSelectedRecipes(selectedRecipes)) {
       return;
     }
+    currentRecipeServingsById = recipeServingsById && typeof recipeServingsById === 'object'
+      ? { ...recipeServingsById }
+      : {};
 
     try {
       // Fetch existing shopping lists
@@ -244,7 +248,8 @@ declare global {
       try {
         const requestBody = {
           title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
-          recipeIds: recipeArray
+          recipeIds: recipeArray,
+          recipeServingsById: currentRecipeServingsById
         };
         
         const response = await fetch('/api/shopping-lists', {
@@ -286,7 +291,8 @@ declare global {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          recipeIds: Array.from(selectedRecipes)
+          recipeIds: Array.from(selectedRecipes),
+          recipeServingsById: currentRecipeServingsById
         })
       });
       

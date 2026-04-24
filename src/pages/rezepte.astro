@@ -5,6 +5,7 @@ import SearchBar from '../components/recipe_list/SearchBar.astro';
 import RecipeCard from '../components/recipe_list/RecipeCard.astro';
 import RecipeListHeader from '../components/recipe_list/RecipeListHeader.astro';
 import EmptyState from '../components/recipe_list/EmptyState.astro';
+import RecipeAIChatModal from '../components/modals/RecipeAIChatModal.astro';
 import { db } from '../lib/database';
 import type { Recipe } from '../types/recipe';
 
@@ -76,6 +77,27 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
     {recipes.length === 0 && <EmptyState />}
   </div>
 </Layout>
+
+<RecipeAIChatModal
+  referencedRecipes={[
+    {
+      id: '__all_recipes__',
+      title: 'Alle Rezepte',
+    },
+  ]}
+/>
+
+<button
+  type="button"
+  id="recipe-ai-chat-fab"
+  class="fixed bottom-6 right-6 z-[80] flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+  aria-label="KI-Chat zu allen Rezepten öffnen"
+  title="KI-Chat"
+>
+  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+  </svg>
+</button>
 
 <script>
   // Note: Filter reapplication is handled by SearchBar.astro component
@@ -237,6 +259,16 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
       }
     } catch (e) {
       console.error('Error handling shared import URL:', e);
+    }
+
+    const aiFab = document.getElementById('recipe-ai-chat-fab');
+    if (aiFab && aiFab.dataset.aiSetup !== 'yes') {
+      aiFab.dataset.aiSetup = 'yes';
+      aiFab.addEventListener('click', () => {
+        if (window.openRecipeAIChatModal) {
+          window.openRecipeAIChatModal();
+        }
+      });
     }
   });
 
