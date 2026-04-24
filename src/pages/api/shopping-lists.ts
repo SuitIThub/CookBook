@@ -57,7 +57,7 @@ export const GET: APIRoute = async ({ url }) => {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const data = await request.json();
-    const { title, description, recipeIds } = data;
+    const { title, description, recipeIds, recipeServingsById } = data;
     
     if (!title) {
       return new Response(JSON.stringify({ error: 'Title is required' }), {
@@ -73,6 +73,15 @@ export const POST: APIRoute = async ({ request }) => {
     if (recipeIds && Array.isArray(recipeIds) && recipeIds.length > 0) {
       for (const recipeId of recipeIds) {
         db.addRecipeToShoppingList(newShoppingList.id, recipeId);
+        const desiredServingsRaw = recipeServingsById && typeof recipeServingsById === 'object'
+          ? (recipeServingsById as Record<string, unknown>)[recipeId]
+          : undefined;
+        const desiredServings = typeof desiredServingsRaw === 'number'
+          ? desiredServingsRaw
+          : Number.parseInt(String(desiredServingsRaw ?? ''), 10);
+        if (Number.isFinite(desiredServings) && desiredServings > 0) {
+          db.updateRecipeServingsInShoppingList(newShoppingList.id, recipeId, desiredServings);
+        }
       }
       
       // Get updated shopping list with recipes

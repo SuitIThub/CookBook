@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kochbuch-v2';
+const CACHE_NAME = 'kochbuch-v3';
 const urlsToCache = [
   '/favicon.svg',
   '/manifest.json'

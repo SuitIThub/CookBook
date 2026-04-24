@@ -23,45 +23,87 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
 
 <div
   id="recipe-ai-chat-modal"
-  class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+  class="hidden fixed inset-0 z-[90] flex items-stretch md:items-center justify-center bg-black/50 p-0 md:p-4"
+  style="z-index: 1000;"
   aria-modal="true"
   aria-labelledby="recipe-ai-chat-title"
 >
-  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col border border-gray-200 dark:border-gray-700">
+  <div class="bg-white dark:bg-gray-800 rounded-none md:rounded-xl shadow-2xl w-screen h-screen md:w-full md:max-w-2xl md:h-[80vh] flex flex-col border-0 md:border border-gray-200 dark:border-gray-700">
     <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-      <h2 id="recipe-ai-chat-title" class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-        <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-          </svg>
-        </span>
-        <span id="recipe-ai-chat-title-text">KI-Chat: {recipeTitle}</span>
-      </h2>
-      <div class="flex items-center gap-2">
+    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div class="flex items-center justify-between gap-3">
+        <h2 id="recipe-ai-chat-title" class="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2 min-w-0">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+            </svg>
+          </span>
+          <span id="recipe-ai-chat-title-text" class="truncate">KI-Chat: {recipeTitle}</span>
+        </h2>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            id="recipe-ai-chat-delete-btn"
+            class="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            title="Chat-Verlauf löschen"
+          >
+            Chat löschen
+          </button>
+          <button
+            type="button"
+            id="recipe-ai-chat-close-btn"
+            class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            aria-label="Schließen"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="mt-3 flex flex-col md:flex-row md:items-center gap-2">
+        <div class="flex items-center gap-2">
+          <label for="recipe-ai-chat-provider-select" class="text-xs font-medium text-gray-500 dark:text-gray-400">Provider</label>
+          <select
+            id="recipe-ai-chat-provider-select"
+            class="px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          >
+            <option value="ollama">Ollama</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <label for="recipe-ai-chat-model-select" class="text-xs font-medium text-gray-500 dark:text-gray-400">Modell</label>
+          <select
+            id="recipe-ai-chat-model-select"
+            class="min-w-0 flex-1 px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          ></select>
+          <button
+            type="button"
+            id="recipe-ai-chat-model-refresh-btn"
+            class="px-2 py-1.5 text-xs rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            Neu laden
+          </button>
+        </div>
+      </div>
+      <p id="recipe-ai-chat-model-status" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400"></p>
+      <div class="mt-3 flex items-center gap-2">
+        <div id="recipe-ai-chat-tabs" class="flex-1 min-w-0 flex gap-1 overflow-x-auto pb-1">
+          <!-- chat tabs rendered by script -->
+        </div>
         <button
           type="button"
-          id="recipe-ai-chat-delete-btn"
-          class="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-          title="Chat-Verlauf löschen"
+          id="recipe-ai-chat-new-tab-btn"
+          class="flex-shrink-0 px-2 py-1 text-xs rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
         >
-          Chat löschen
-        </button>
-        <button
-          type="button"
-          id="recipe-ai-chat-close-btn"
-          class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          aria-label="Schließen"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
+          Neuer Chat
         </button>
       </div>
     </div>
 
     <!-- Messages -->
-    <div id="recipe-ai-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-[200px] max-h-[40vh] bg-gray-50 dark:bg-gray-900/30">
+    <div id="recipe-ai-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 bg-gray-50 dark:bg-gray-900/30">
       <div id="recipe-ai-chat-placeholder" class="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
         Stelle Fragen zum Rezept oder bitte die KI, eine Variante vorzuschlagen. Der Verlauf wird gespeichert, bis du „Chat löschen“ wählst.
       </div>
@@ -115,7 +157,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
 <!-- Picker modal: add recipes to chat context -->
 <div
   id="recipe-ai-chat-picker-modal"
-  class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+  class="hidden fixed inset-0 z-[95] flex items-center justify-center bg-black/50 p-4"
+  style="z-index: 1010;"
   aria-modal="true"
   aria-label="Rezepte zum Chat hinzufügen"
 >
@@ -160,10 +203,18 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     const pickerClose = document.getElementById('recipe-ai-chat-picker-close');
     const pickerCancel = document.getElementById('recipe-ai-chat-picker-cancel');
     const pickerAdd = document.getElementById('recipe-ai-chat-picker-add');
+    const aiProviderSelect = document.getElementById('recipe-ai-chat-provider-select');
+    const aiModelSelect = document.getElementById('recipe-ai-chat-model-select');
+    const aiModelRefreshBtn = document.getElementById('recipe-ai-chat-model-refresh-btn');
+    const aiModelStatus = document.getElementById('recipe-ai-chat-model-status');
+    const chatTabsEl = document.getElementById('recipe-ai-chat-tabs');
+    const newChatTabBtn = document.getElementById('recipe-ai-chat-new-tab-btn');
 
-    // We treat any occurrence of the literal text RECIPE_VARIANT as a variant marker,
-    // regardless of surrounding brackets/markdown. Detection is lenient; cleanup is stricter.
-    const RECIPE_VARIANT_KEYWORD = 'RECIPE_VARIANT';
+    const RECIPE_VARIANT_TOOL_REGEX = /\[RECIPE_VARIANT(?::([a-zA-Z0-9-_]+))?\]/g;
+    const ALL_RECIPES_CONTEXT_ID = '__all_recipes__';
+    const RECIPE_REF_TOOL_REGEX = /\[RECIPE_REF:([a-zA-Z0-9-_]+)\]/g;
+    const SHOPPING_LIST_TOOL_REGEX = /\[SHOPPING_LIST_RECIPES:([a-zA-Z0-9\-_,@:\s]+)\]/g;
+    const RECIPE_EDIT_TOOL_REGEX = /\[RECIPE_EDIT:([a-zA-Z0-9-_]+)(?:\|regions=([a-zA-Z0-9._,\s-]+))?\]/g;
     let messages = [];
     let isGenerating = false;
     let currentAbortController = null;
@@ -172,6 +223,240 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       : [];
     let allRecipesForPicker = [];
     const AI_SETTINGS_KEY = 'cookbook.ai.settings';
+    const CHAT_MODEL_MEMORY_KEY = 'cookbook.ai.chat.modelMemory';
+    const CHAT_TABS_STORAGE_PREFIX = 'cookbook.ai.chat.tabs.v1';
+    const CHAT_TAB_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+    let activeChatProvider = 'ollama';
+    let activeChatModel = '';
+    let chatTabs = [];
+    let activeChatTabId = '';
+    const titleGenerationInFlight = new Set();
+    const recipeTitleCache = new Map();
+    const DEBUG_ENABLED = new URLSearchParams(window.location.search).get('debug') === '1';
+    let allRecipesCache = null;
+
+    function withDebugParam(targetUrl) {
+      if (!DEBUG_ENABLED) return targetUrl;
+      try {
+        const url = new URL(targetUrl, window.location.origin);
+        url.searchParams.set('debug', '1');
+        return `${url.pathname}${url.search}${url.hash}`;
+      } catch {
+        return targetUrl;
+      }
+    }
+
+    function makeTabId() {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function nowIso() {
+      return new Date().toISOString();
+    }
+
+    function getChatTabsStorageKey() {
+      return `${CHAT_TABS_STORAGE_PREFIX}:${getPrimaryRecipeId()}`;
+    }
+
+    function normalizeChatMessages(input) {
+      if (!Array.isArray(input)) return [];
+      return input
+        .filter((m) => m && typeof m === 'object')
+        .map((m) => {
+          const role = m.role === 'user' || m.role === 'assistant' ? m.role : null;
+          const content = typeof m.content === 'string' ? m.content : null;
+          if (!role || content == null) return null;
+          return { role, content };
+        })
+        .filter(Boolean);
+    }
+
+    function makeDefaultTab() {
+      const now = nowIso();
+      return {
+        id: makeTabId(),
+        title: 'Neuer Chat',
+        aiTitleGenerated: false,
+        messages: [],
+        createdAt: now,
+        updatedAt: now,
+        lastViewedAt: now,
+      };
+    }
+
+    function deriveTabTitle(messagesList) {
+      const firstUser = Array.isArray(messagesList)
+        ? messagesList.find((m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim())
+        : null;
+      if (!firstUser) return 'Neuer Chat';
+      const text = firstUser.content.trim().replace(/\s+/g, ' ');
+      return text.length > 34 ? `${text.slice(0, 34)}...` : text;
+    }
+
+    function persistChatTabs() {
+      try {
+        localStorage.setItem(getChatTabsStorageKey(), JSON.stringify(chatTabs));
+      } catch (e) {
+        console.warn('Persist chat tabs failed', e);
+      }
+    }
+
+    function touchActiveTab() {
+      const idx = chatTabs.findIndex((t) => t.id === activeChatTabId);
+      if (idx < 0) return;
+      const tab = chatTabs[idx];
+      tab.messages = normalizeChatMessages(messages);
+      if (!tab.title || tab.title === 'Neuer Chat') {
+        tab.title = deriveTabTitle(tab.messages);
+      }
+      tab.updatedAt = nowIso();
+      tab.lastViewedAt = nowIso();
+      chatTabs[idx] = tab;
+      persistChatTabs();
+      renderChatTabs();
+      void maybeGenerateAiTabTitle(tab.id);
+    }
+
+    async function maybeGenerateAiTabTitle(tabId) {
+      const tab = chatTabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      if (titleGenerationInFlight.has(tabId)) return;
+      if (tab.aiTitleGenerated === true) return;
+      const heuristicTitle = deriveTabTitle(tab.messages);
+      if (tab.title && tab.title !== 'Neuer Chat' && tab.title !== heuristicTitle) return;
+      const hasUser = Array.isArray(tab.messages) && tab.messages.some((m) => m.role === 'user' && m.content && m.content.trim());
+      if (!hasUser) return;
+      titleGenerationInFlight.add(tabId);
+      try {
+        const res = await fetch('/api/ai/chat-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: tab.messages.slice(-8),
+            ...getAISettings(),
+            provider: activeChatProvider,
+            model: activeChatModel,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.title) return;
+        const freshIdx = chatTabs.findIndex((t) => t.id === tabId);
+        if (freshIdx < 0) return;
+        const fresh = chatTabs[freshIdx];
+        const freshHeuristic = deriveTabTitle(fresh.messages);
+        if (fresh.aiTitleGenerated === true) return;
+        if (fresh.title && fresh.title !== 'Neuer Chat' && fresh.title !== freshHeuristic) return;
+        fresh.title = String(data.title).trim().slice(0, 48) || fresh.title || 'Neuer Chat';
+        fresh.aiTitleGenerated = true;
+        fresh.updatedAt = nowIso();
+        chatTabs[freshIdx] = fresh;
+        persistChatTabs();
+        renderChatTabs();
+      } catch (e) {
+        console.warn('AI title generation failed', e);
+      } finally {
+        titleGenerationInFlight.delete(tabId);
+      }
+    }
+
+    function selectChatTab(tabId) {
+      const tab = chatTabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      activeChatTabId = tab.id;
+      tab.lastViewedAt = nowIso();
+      messages = normalizeChatMessages(tab.messages);
+      persistChatTabs();
+      renderChatTabs();
+      renderMessages();
+    }
+
+    function removeChatTab(tabId) {
+      if (chatTabs.length <= 1) return;
+      const filtered = chatTabs.filter((t) => t.id !== tabId);
+      if (filtered.length === 0) return;
+      chatTabs = filtered;
+      if (!chatTabs.some((t) => t.id === activeChatTabId)) {
+        activeChatTabId = chatTabs[0].id;
+      }
+      persistChatTabs();
+      selectChatTab(activeChatTabId);
+    }
+
+    function createChatTab() {
+      const tab = makeDefaultTab();
+      chatTabs.unshift(tab);
+      activeChatTabId = tab.id;
+      messages = [];
+      persistChatTabs();
+      renderChatTabs();
+      renderMessages();
+      if (input) input.focus();
+    }
+
+    function renderChatTabs() {
+      if (!chatTabsEl) return;
+      chatTabsEl.innerHTML = '';
+      chatTabs.forEach((tab) => {
+        const isActive = tab.id === activeChatTabId;
+        const item = document.createElement('div');
+        item.className = `flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${isActive ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' : 'border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300'}`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'truncate max-w-[150px]';
+        btn.textContent = tab.title || 'Neuer Chat';
+        btn.addEventListener('click', () => selectChatTab(tab.id));
+        item.appendChild(btn);
+        if (chatTabs.length > 1) {
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.className = 'text-gray-400 hover:text-red-500';
+          del.setAttribute('aria-label', 'Tab löschen');
+          del.innerHTML = '&times;';
+          del.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeChatTab(tab.id);
+          });
+          item.appendChild(del);
+        }
+        chatTabsEl.appendChild(item);
+      });
+    }
+
+    function initChatTabs() {
+      const now = Date.now();
+      let loaded = [];
+      try {
+        const raw = localStorage.getItem(getChatTabsStorageKey());
+        const parsed = raw ? JSON.parse(raw) : [];
+        loaded = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        loaded = [];
+      }
+      chatTabs = loaded
+        .filter((tab) => tab && typeof tab === 'object' && typeof tab.id === 'string')
+        .map((tab) => ({
+          id: tab.id,
+          title: typeof tab.title === 'string' && tab.title.trim() ? tab.title.trim() : 'Neuer Chat',
+          aiTitleGenerated: tab.aiTitleGenerated === true,
+          messages: normalizeChatMessages(tab.messages),
+          createdAt: typeof tab.createdAt === 'string' ? tab.createdAt : nowIso(),
+          updatedAt: typeof tab.updatedAt === 'string' ? tab.updatedAt : nowIso(),
+          lastViewedAt: typeof tab.lastViewedAt === 'string' ? tab.lastViewedAt : nowIso(),
+        }))
+        .filter((tab) => {
+          const ts = Date.parse(tab.lastViewedAt);
+          return Number.isFinite(ts) ? now - ts <= CHAT_TAB_RETENTION_MS : true;
+        });
+      if (chatTabs.length === 0) {
+        chatTabs = [makeDefaultTab()];
+      }
+      activeChatTabId = chatTabs[0].id;
+      messages = normalizeChatMessages(chatTabs[0].messages);
+      persistChatTabs();
+      renderChatTabs();
+      renderMessages();
+    }
 
     function getAISettings() {
       const defaults = { provider: 'ollama', model: '', openRouterApiKey: '' };
@@ -184,8 +469,91 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       }
     }
 
+    function getDefaultAIConfig() {
+      const settings = getAISettings();
+      return {
+        provider: settings.provider === 'openrouter' ? 'openrouter' : 'ollama',
+        model: typeof settings.model === 'string' ? settings.model : '',
+        openRouterApiKey: typeof settings.openRouterApiKey === 'string' ? settings.openRouterApiKey : '',
+      };
+    }
+
+    function getChatModelMemory() {
+      try {
+        const raw = localStorage.getItem(CHAT_MODEL_MEMORY_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function setChatModelMemory(memory) {
+      localStorage.setItem(CHAT_MODEL_MEMORY_KEY, JSON.stringify(memory || {}));
+    }
+
+    async function loadModelsForHeader(provider, apiKey, selectedModel) {
+      if (!aiModelSelect || !aiModelStatus) return '';
+      aiModelSelect.innerHTML = '<option value="">Lade Modelle...</option>';
+      aiModelSelect.disabled = true;
+      aiModelStatus.textContent = '';
+      try {
+        const headers = {};
+        if (provider === 'openrouter' && apiKey) headers['x-openrouter-api-key'] = apiKey;
+        const res = await fetch(`/api/ai/models?provider=${encodeURIComponent(provider)}`, { headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Modelle konnten nicht geladen werden');
+        const models = Array.isArray(data.models) ? data.models : [];
+        const openRouterAccess = data.openRouterAccess && typeof data.openRouterAccess === 'object'
+          ? data.openRouterAccess
+          : null;
+        aiModelSelect.innerHTML = '';
+        if (models.length === 0) {
+          aiModelSelect.innerHTML = '<option value="">Keine Modelle gefunden</option>';
+          aiModelSelect.disabled = true;
+          aiModelStatus.textContent = 'Keine Modelle verfügbar.';
+          return '';
+        }
+        models.forEach((model) => {
+          const opt = document.createElement('option');
+          opt.value = model;
+          opt.textContent = model;
+          aiModelSelect.appendChild(opt);
+        });
+        const target = selectedModel && models.includes(selectedModel) ? selectedModel : models[0];
+        aiModelSelect.value = target;
+        aiModelSelect.disabled = false;
+        if (provider === 'openrouter' && openRouterAccess && openRouterAccess.freeOnly) {
+          aiModelStatus.textContent = `${models.length} kostenlose OpenRouter-Modelle verfügbar.`;
+        } else {
+          aiModelStatus.textContent = `${models.length} Modelle verfügbar.`;
+        }
+        return target;
+      } catch (e) {
+        aiModelSelect.innerHTML = '<option value="">Fehler beim Laden</option>';
+        aiModelSelect.disabled = true;
+        aiModelStatus.textContent = e instanceof Error ? e.message : 'Fehler beim Laden';
+        return '';
+      }
+    }
+
+    async function syncHeaderModelChooser() {
+      if (!aiProviderSelect || !aiModelSelect) return;
+      const settings = getDefaultAIConfig();
+      const provider = settings.provider;
+      aiProviderSelect.value = provider;
+      const selectedModel = await loadModelsForHeader(provider, settings.openRouterApiKey, settings.model);
+      activeChatProvider = provider;
+      activeChatModel = selectedModel || '';
+    }
+
     function getPrimaryRecipeId() {
       return referencedRecipesList.length > 0 ? referencedRecipesList[0].id : recipeId;
+    }
+
+    function isAllRecipesContext() {
+      return getPrimaryRecipeId() === ALL_RECIPES_CONTEXT_ID;
     }
 
     function updateChatTitle() {
@@ -203,6 +571,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (!referencedListEl) return;
       referencedListEl.innerHTML = '';
       referencedRecipesList.forEach((r) => {
+        if (r.id && r.title) recipeTitleCache.set(r.id, r.title);
         const chip = document.createElement('div');
         chip.className = 'flex items-center gap-1.5 min-w-0 flex-shrink-0 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 shadow-sm pr-1 py-1 pl-2 group';
         const link = document.createElement('a');
@@ -210,6 +579,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.className = 'flex items-center gap-2 min-w-0 flex-1 hover:opacity-80';
+        if (r.id === ALL_RECIPES_CONTEXT_ID) {
+          link.removeAttribute('href');
+          link.removeAttribute('target');
+          link.removeAttribute('rel');
+          link.className = 'flex items-center gap-2 min-w-0 flex-1 cursor-default';
+        }
         if (r.imageUrl) {
           const img = document.createElement('img');
           img.src = r.imageUrl;
@@ -227,18 +602,20 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         titleSpan.textContent = r.title;
         link.appendChild(titleSpan);
         chip.appendChild(link);
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'p-1 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20';
-        removeBtn.setAttribute('aria-label', 'Referenz entfernen');
-        removeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
-        removeBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          referencedRecipesList = referencedRecipesList.filter((x) => x.id !== r.id);
-          renderReferencedBar();
-          updateChatTitle();
-        });
-        chip.appendChild(removeBtn);
+        if (r.id !== ALL_RECIPES_CONTEXT_ID) {
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'p-1 rounded text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20';
+          removeBtn.setAttribute('aria-label', 'Referenz entfernen');
+          removeBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+          removeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            referencedRecipesList = referencedRecipesList.filter((x) => x.id !== r.id);
+            renderReferencedBar();
+            updateChatTitle();
+          });
+          chip.appendChild(removeBtn);
+        }
         referencedListEl.appendChild(chip);
       });
       if (referencedWrapEl) referencedWrapEl.classList.toggle('hidden', referencedRecipesList.length === 0);
@@ -246,6 +623,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     }
 
     function openReferencePicker() {
+      if (isAllRecipesContext()) return;
       if (!pickerModal || !pickerList) return;
       pickerModal.classList.remove('hidden');
       pickerModal.classList.add('flex');
@@ -337,13 +715,19 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       }
     }
 
+    function extractVariantPayload(text) {
+      if (!text || typeof text !== 'string') return { hasVariant: false, recipeId: '' };
+      const regex = new RegExp(RECIPE_VARIANT_TOOL_REGEX);
+      const match = regex.exec(text);
+      if (!match) return { hasVariant: false, recipeId: '' };
+      return { hasVariant: true, recipeId: match?.[1] || '' };
+    }
+
     function stripVariantKeyword(text) {
       if (!text || typeof text !== 'string') return text || '';
       let result = text;
-      // [RECIPE_VARIANT] on its own line
-      result = result.replace(/^\s*\[RECIPE_VARIANT\]\s*\n?/im, '');
-      // **RECIPE_VARIANT** on its own line
-      result = result.replace(/^\s*\*\*RECIPE_VARIANT\*\*\s*\n?/im, '');
+      result = result.replace(/^\s*\[RECIPE_VARIANT(?::[a-zA-Z0-9-_]+)?\]\s*\n?/gim, '');
+      result = result.replace(/^\s*\*\*\[?RECIPE_VARIANT(?::[a-zA-Z0-9-_]+)?\]?\*\*\s*\n?/gim, '');
       return result.trim();
     }
 
@@ -368,6 +752,342 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       };
     }
 
+    function extractRecipeRefIds(text) {
+      if (!text || typeof text !== 'string') return [];
+      const ids = [];
+      let match;
+      const regex = new RegExp(RECIPE_REF_TOOL_REGEX);
+      while ((match = regex.exec(text)) !== null) {
+        if (match?.[1]) ids.push(match[1]);
+      }
+      return Array.from(new Set(ids));
+    }
+
+    function extractShoppingListSelection(text) {
+      if (!text || typeof text !== 'string') return { recipeIds: [], servingsByRecipeId: {} };
+      const ids = [];
+      const servingsByRecipeId = {};
+      let match;
+      const regex = new RegExp(SHOPPING_LIST_TOOL_REGEX);
+      while ((match = regex.exec(text)) !== null) {
+        const raw = match?.[1] || '';
+        raw
+          .split(',')
+          .map((v) => v.trim().replace(/\s+/g, ''))
+          .filter(Boolean)
+          .forEach((entry) => {
+            const parts = entry.split('@');
+            const id = (parts[0] || '').trim();
+            if (!id) return;
+            ids.push(id);
+            const servingsRaw = (parts[1] || '').trim();
+            if (servingsRaw) {
+              const parsed = Number.parseInt(servingsRaw, 10);
+              if (Number.isFinite(parsed) && parsed > 0) servingsByRecipeId[id] = parsed;
+            }
+          });
+      }
+      return { recipeIds: Array.from(new Set(ids)), servingsByRecipeId };
+    }
+
+    function extractRecipeEditPayload(text) {
+      if (!text || typeof text !== 'string') return { id: '', regions: [] };
+      const regex = new RegExp(RECIPE_EDIT_TOOL_REGEX);
+      const match = regex.exec(text);
+      if (!match?.[1]) return { id: '', regions: [] };
+      const regions = (match?.[2] || '')
+        .split(',')
+        .map((r) => r.trim())
+        .filter(Boolean);
+      return { id: match[1], regions };
+    }
+
+    function stripAiToolTags(text) {
+      if (!text || typeof text !== 'string') return text || '';
+      return text
+        .replace(RECIPE_VARIANT_TOOL_REGEX, '')
+        .replace(RECIPE_REF_TOOL_REGEX, '')
+        .replace(SHOPPING_LIST_TOOL_REGEX, '')
+        .replace(RECIPE_EDIT_TOOL_REGEX, '')
+        .trim();
+    }
+
+    async function fetchRecipeSummariesByIds(ids) {
+      if (!Array.isArray(ids) || ids.length === 0) return [];
+      try {
+        const allRes = await fetch('/api/recipes');
+        if (!allRes.ok) return [];
+        const allRecipes = await allRes.json();
+        const byId = new Map(
+          (Array.isArray(allRecipes) ? allRecipes : []).map((r) => [
+            r.id,
+            {
+              id: r.id,
+              title: r.title || 'Rezept',
+              imageUrl: r.images?.[0]?.url || r.imageUrl || '',
+            },
+          ])
+        );
+        return ids
+          .map((id) => byId.get(id))
+          .filter(Boolean);
+      } catch {
+        return [];
+      }
+    }
+
+    async function fetchAllRecipesCached() {
+      if (Array.isArray(allRecipesCache)) return allRecipesCache;
+      try {
+        const res = await fetch('/api/recipes');
+        if (!res.ok) return [];
+        const data = await res.json();
+        allRecipesCache = Array.isArray(data) ? data : [];
+        allRecipesCache.forEach((r) => {
+          if (r?.id && r?.title) recipeTitleCache.set(r.id, r.title);
+        });
+        return allRecipesCache;
+      } catch {
+        return [];
+      }
+    }
+
+    async function resolveRecipeDisplayName(recipeId) {
+      if (!recipeId) return '';
+      if (recipeTitleCache.has(recipeId)) return recipeTitleCache.get(recipeId);
+      const byRef = referencedRecipesList.find((r) => r.id === recipeId)?.title || '';
+      if (byRef) {
+        recipeTitleCache.set(recipeId, byRef);
+        return byRef;
+      }
+      const all = await fetchAllRecipesCached();
+      const found = all.find((r) => r?.id === recipeId)?.title || '';
+      if (found) recipeTitleCache.set(recipeId, found);
+      return found;
+    }
+
+    function setEditButtonLabel(btn, recipeId, recipeName) {
+      if (!btn) return;
+      const target = recipeName || `ID ${recipeId}`;
+      const safeTarget = String(target).replace(/[&<>"']/g, (ch) => (
+        ch === '&' ? '&amp;' :
+        ch === '<' ? '&lt;' :
+        ch === '>' ? '&gt;' :
+        ch === '"' ? '&quot;' : '&#39;'
+      ));
+      btn.innerHTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg> Änderungen in "${safeTarget}" prüfen`;
+    }
+
+    function setVariantButtonLabel(btn, recipeId, recipeName) {
+      if (!btn) return;
+      if (!recipeId) {
+        btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Neues Rezept erstellen';
+        return;
+      }
+      const target = recipeName || `ID ${recipeId}`;
+      const safeTarget = String(target).replace(/[&<>"']/g, (ch) => (
+        ch === '&' ? '&amp;' :
+        ch === '<' ? '&lt;' :
+        ch === '>' ? '&gt;' :
+        ch === '"' ? '&quot;' : '&#39;'
+      ));
+      btn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg> Variante für "${safeTarget}" erstellen`;
+    }
+
+    function normalizeForMatch(value) {
+      return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    async function inferRecipeRefsFromText(text) {
+      const normalizedText = normalizeForMatch(text);
+      if (!normalizedText) return [];
+      const recipes = await fetchAllRecipesCached();
+      const matches = [];
+      recipes.forEach((rec) => {
+        const title = rec?.title || '';
+        const normTitle = normalizeForMatch(title);
+        if (!normTitle || normTitle.length < 5) return;
+        if (normalizedText.includes(normTitle)) {
+          matches.push({
+            id: rec.id,
+            title,
+            imageUrl: rec.images?.[0]?.url || rec.imageUrl || '',
+            score: normTitle.length,
+          });
+        }
+      });
+      return matches
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4)
+        .map(({ score, ...rest }) => rest);
+    }
+
+    function createRecipeReferenceCards(container, recipeRefs) {
+      if (!container || !Array.isArray(recipeRefs) || recipeRefs.length === 0) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'mt-2 w-full max-w-[85%] grid gap-2';
+      recipeRefs.forEach((rec) => {
+        const link = document.createElement('a');
+        link.href = withDebugParam(`/rezept/${rec.id}`);
+        link.className = 'flex items-center gap-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-800 px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors';
+        link.style.maxWidth = '360px';
+        link.style.minHeight = '64px';
+        if (rec.imageUrl) {
+          const img = document.createElement('img');
+          img.src = rec.imageUrl;
+          img.alt = rec.title || 'Rezeptbild';
+          img.className = 'rounded object-cover flex-shrink-0';
+          img.style.width = '56px';
+          img.style.height = '56px';
+          img.style.objectFit = 'cover';
+          link.appendChild(img);
+        } else {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'rounded bg-gray-200 dark:bg-gray-700 flex-shrink-0 flex items-center justify-center text-gray-500 dark:text-gray-300 text-xs font-semibold';
+          placeholder.style.width = '56px';
+          placeholder.style.height = '56px';
+          placeholder.textContent = 'REZEPT';
+          link.appendChild(placeholder);
+        }
+        const text = document.createElement('span');
+        text.className = 'text-sm font-medium text-gray-900 dark:text-gray-100';
+        text.style.lineHeight = '1.2';
+        text.textContent = rec.title || 'Rezept';
+        link.appendChild(text);
+        wrap.appendChild(link);
+      });
+      container.appendChild(wrap);
+    }
+
+    function createRecipeReferenceFallback(container, unresolvedIds) {
+      if (!container || !Array.isArray(unresolvedIds) || unresolvedIds.length === 0) return;
+      const hint = document.createElement('div');
+      hint.className = 'mt-2 max-w-[85%] rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200';
+      hint.textContent = `Einige Rezept-Referenzen konnten nicht aufgelöst werden: ${unresolvedIds.join(', ')}`;
+      container.appendChild(hint);
+    }
+
+    function createShoppingListSuggestionButton(container, recipeIds, servingsByRecipeId) {
+      if (!container || !Array.isArray(recipeIds) || recipeIds.length === 0) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mt-2 py-1 px-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/25 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-md transition-colors inline-flex items-center gap-1';
+      btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg> Zur Einkaufsliste hinzufügen';
+      btn.addEventListener('click', async () => {
+        if (!window.openShoppingListModal) {
+          alert('Einkaufslisten-Modal ist nicht verfügbar.');
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Wird vorbereitet...';
+        try {
+          // Ensure the shopping list modal is not hidden behind chat.
+          closeModal();
+          await window.openShoppingListModal(new Set(recipeIds), servingsByRecipeId || {});
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg> Zur Einkaufsliste hinzufügen';
+        }
+      });
+      container.appendChild(btn);
+    }
+
+    function createRecipeEditSuggestionButton(container, recipeId, rawAssistantContent, regions) {
+      if (!container || !recipeId) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mt-2 py-1.5 px-2.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/25 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-md transition-colors inline-flex items-center gap-1 leading-none';
+      setEditButtonLabel(btn, recipeId, '');
+      resolveRecipeDisplayName(recipeId).then((name) => {
+        if (btn && !btn.disabled) setEditButtonLabel(btn, recipeId, name);
+      });
+      const fixIconSize = () => {
+        const svg = btn.querySelector('svg');
+        if (svg instanceof SVGElement) {
+          svg.style.width = '14px';
+          svg.style.height = '14px';
+          svg.style.flexShrink = '0';
+        }
+      };
+      fixIconSize();
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Wird vorbereitet...';
+        try {
+          const primaryId = getPrimaryRecipeId();
+          const recipeIds = referencedRecipesList.length > 0 ? referencedRecipesList.map((r) => r.id) : [primaryId];
+          const res = await fetch('/api/ai/propose-edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipeId,
+              recipeIds,
+              regions: Array.isArray(regions) ? regions : [],
+              editMessage: stripAiToolTags(rawAssistantContent || ''),
+              ...getAISettings(),
+              provider: activeChatProvider,
+              model: activeChatModel,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            alert(data.error || 'Edit-Vorschlag konnte nicht vorbereitet werden.');
+            return;
+          }
+          if (data.preview === true && data.token) {
+            window.location.href = withDebugParam(`/rezept/${recipeId}?edit=true&aiDraft=1&aiEditToken=${encodeURIComponent(data.token)}`);
+            return;
+          }
+          alert('Edit-Vorschlag konnte nicht vorbereitet werden.');
+        } catch (e) {
+          console.error('AI edit proposal failed', e);
+          alert('Fehler beim Vorbereiten der Änderungen.');
+        } finally {
+          btn.disabled = false;
+          setEditButtonLabel(btn, recipeId, recipeTitleCache.get(recipeId) || '');
+          fixIconSize();
+        }
+      });
+      container.appendChild(btn);
+    }
+
+    function appendAssistantToolUi(container, rawContent) {
+      if (!container) return;
+      const recipeRefIds = extractRecipeRefIds(rawContent || '');
+      const shoppingListSelection = extractShoppingListSelection(rawContent || '');
+      const recipeEdit = extractRecipeEditPayload(rawContent || '');
+
+      if (recipeRefIds.length > 0) {
+        fetchRecipeSummariesByIds(recipeRefIds).then((refs) => {
+          createRecipeReferenceCards(container, refs);
+          const resolvedIds = new Set((refs || []).map((r) => r.id));
+          const unresolved = recipeRefIds.filter((id) => !resolvedIds.has(id));
+          createRecipeReferenceFallback(container, unresolved);
+        });
+      } else if (isAllRecipesContext()) {
+        inferRecipeRefsFromText(rawContent || '').then((refs) => {
+          if (refs.length > 0) createRecipeReferenceCards(container, refs);
+        });
+      }
+
+      if (shoppingListSelection.recipeIds.length > 0) {
+        createShoppingListSuggestionButton(
+          container,
+          shoppingListSelection.recipeIds,
+          shoppingListSelection.servingsByRecipeId
+        );
+      }
+      if (recipeEdit.id) {
+        createRecipeEditSuggestionButton(container, recipeEdit.id, rawContent || '', recipeEdit.regions);
+      }
+    }
+
     function renderMarkdown(target, text) {
       const markedGlobal = getMarked();
       if (text && markedGlobal && typeof markedGlobal.parse === 'function') {
@@ -382,7 +1102,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     }
 
     function renderAssistantContent(bubble, thinkingHost, content) {
-      const split = splitThinkingContent(content || '');
+      const cleaned = stripAiToolTags(content || '');
+      const split = splitThinkingContent(cleaned);
       renderMarkdown(bubble, split.visible);
       if (!thinkingHost) return;
       thinkingHost.innerHTML = '';
@@ -411,7 +1132,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     }
 
     function appendVariantButtonIfNeeded(wrap, bubble, content, messageIndex) {
-      if (!content || !content.includes(RECIPE_VARIANT_KEYWORD)) return;
+      const variantPayload = extractVariantPayload(content || '');
+      if (!variantPayload.hasVariant) return;
       const displayContent = stripVariantKeyword(content);
       renderAssistantContent(bubble, null, displayContent);
       wrap.setAttribute('data-message-index', String(messageIndex));
@@ -419,8 +1141,14 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.setAttribute('data-ai-variant-btn', '1');
+      if (variantPayload.recipeId) btn.setAttribute('data-ai-variant-recipe-id', variantPayload.recipeId);
       btn.className = 'mt-1 py-1 px-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/25 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-md transition-colors inline-flex items-center gap-1';
-      btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg> Variante erstellen';
+      setVariantButtonLabel(btn, variantPayload.recipeId || '', '');
+      if (variantPayload.recipeId) {
+        resolveRecipeDisplayName(variantPayload.recipeId).then((name) => {
+          if (btn && !btn.disabled) setVariantButtonLabel(btn, variantPayload.recipeId, name);
+        });
+      }
       btn.addEventListener('click', () => createVariantFromMessage(messageIndex));
       wrap.appendChild(btn);
     }
@@ -428,8 +1156,11 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     function renderMessage(role, content, options) {
       const useMarkdown = options?.markdown !== false;
       const messageIndex = options?.messageIndex;
-      const isVariantMessage = role === 'assistant' && content && content.includes(RECIPE_VARIANT_KEYWORD);
-      const displayContent = isVariantMessage ? stripVariantKeyword(content) : (content || '');
+      const variantPayload = role === 'assistant' ? extractVariantPayload(content || '') : { hasVariant: false, recipeId: '' };
+      const isVariantMessage = role === 'assistant' && variantPayload.hasVariant;
+      const recipeRefIds = role === 'assistant' ? extractRecipeRefIds(content || '') : [];
+      const withoutToolTags = role === 'assistant' ? stripAiToolTags(content || '') : (content || '');
+      const displayContent = isVariantMessage ? stripVariantKeyword(withoutToolTags) : withoutToolTags;
 
       const div = document.createElement('div');
       div.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} ${role === 'user' ? 'justify-end' : 'justify-start'}`;
@@ -452,8 +1183,14 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.setAttribute('data-ai-variant-btn', '1');
+        if (variantPayload.recipeId) btn.setAttribute('data-ai-variant-recipe-id', variantPayload.recipeId);
         btn.className = 'mt-1 py-1 px-2 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/25 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-md transition-colors inline-flex items-center gap-1';
-        btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg> Variante erstellen';
+        setVariantButtonLabel(btn, variantPayload.recipeId || '', '');
+        if (variantPayload.recipeId) {
+          resolveRecipeDisplayName(variantPayload.recipeId).then((name) => {
+            if (btn && !btn.disabled) setVariantButtonLabel(btn, variantPayload.recipeId, name);
+          });
+        }
         btn.addEventListener('click', () => createVariantFromMessage(messageIndex));
         div.appendChild(btn);
       }
@@ -464,6 +1201,9 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         regenBtn.textContent = 'Antwort neu generieren';
         regenBtn.addEventListener('click', () => regenerateMessage(messageIndex));
         div.appendChild(regenBtn);
+      }
+      if (role === 'assistant') {
+        appendAssistantToolUi(div, content || '');
       }
       return div;
     }
@@ -479,19 +1219,6 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         messagesContainer.appendChild(el);
       });
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    async function loadChat() {
-      try {
-        const primaryId = getPrimaryRecipeId();
-        const res = await fetch(`/api/ai/chat?recipeId=${encodeURIComponent(primaryId)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        messages = data.messages || [];
-        renderMessages();
-      } catch (e) {
-        console.error('Load chat failed', e);
-      }
     }
 
     async function sendMessage() {
@@ -513,7 +1240,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       input.value = '';
 
       const assistantWrap = document.createElement('div');
-      assistantWrap.className = 'flex justify-start';
+      assistantWrap.className = 'flex flex-col items-start justify-start';
       assistantWrap.setAttribute('data-ai-msg', '');
       const bubble = document.createElement('div');
       bubble.className = 'max-w-[85%] px-4 py-2 rounded-2xl rounded-bl-md bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm ai-msg-bubble prose prose-sm dark:prose-invert max-w-none';
@@ -537,8 +1264,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           body: JSON.stringify({
             recipeId: primaryId,
             recipeIds,
+            chatId: activeChatTabId,
+            history: messages,
             message: text,
             ...getAISettings(),
+            provider: activeChatProvider,
+            model: activeChatModel,
           }),
           signal: currentAbortController.signal
         });
@@ -560,6 +1291,9 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
             if (!trimmed) continue;
             try {
               const data = JSON.parse(trimmed);
+              if (DEBUG_ENABLED) {
+                console.log('[AI DEBUG stream line]', trimmed);
+              }
               if (data.error) {
                 streamError = data.error;
                 break;
@@ -574,7 +1308,9 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
                 renderAssistantContent(bubble, thinkingHost, accumulated);
                 messages.push({ role: 'user', content: text });
                 messages.push({ role: 'assistant', content: accumulated });
+                touchActiveTab();
                 donePushed = true;
+                appendAssistantToolUi(assistantWrap, accumulated);
                 appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
                 appendRegenerateButton(assistantWrap, messages.length - 1);
               }
@@ -591,7 +1327,9 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
               renderAssistantContent(bubble, thinkingHost, accumulated);
               messages.push({ role: 'user', content: text });
               messages.push({ role: 'assistant', content: accumulated });
+              touchActiveTab();
               donePushed = true;
+              appendAssistantToolUi(assistantWrap, accumulated);
               appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
               appendRegenerateButton(assistantWrap, messages.length - 1);
             }
@@ -602,20 +1340,27 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           thinkingHost.innerHTML = '';
           messages.push({ role: 'user', content: text });
           messages.push({ role: 'assistant', content: 'Fehler: ' + streamError });
+          touchActiveTab();
           appendRegenerateButton(assistantWrap, messages.length - 1);
         } else if (!donePushed) {
           if (accumulated) {
             renderAssistantContent(bubble, thinkingHost, accumulated);
             messages.push({ role: 'user', content: text });
             messages.push({ role: 'assistant', content: accumulated });
+            touchActiveTab();
+            appendAssistantToolUi(assistantWrap, accumulated);
             appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
             appendRegenerateButton(assistantWrap, messages.length - 1);
           } else {
             bubble.textContent = 'Keine Antwort erhalten.';
             messages.push({ role: 'user', content: text });
             messages.push({ role: 'assistant', content: 'Keine Antwort erhalten.' });
+            touchActiveTab();
             appendRegenerateButton(assistantWrap, messages.length - 1);
           }
+        }
+        if (DEBUG_ENABLED) {
+          console.log('[AI DEBUG full assistant raw]', accumulated);
         }
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       } catch (e) {
@@ -630,6 +1375,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           }
           messages.push({ role: 'user', content: text });
           messages.push({ role: 'assistant', content: finalContent });
+          touchActiveTab();
+          appendAssistantToolUi(assistantWrap, finalContent);
           appendVariantButtonIfNeeded(assistantWrap, bubble, finalContent, messages.length - 1);
           appendRegenerateButton(assistantWrap, messages.length - 1);
         } else {
@@ -637,6 +1384,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           thinkingHost.innerHTML = '';
           messages.push({ role: 'user', content: text });
           messages.push({ role: 'assistant', content: bubble.textContent });
+          touchActiveTab();
           appendRegenerateButton(assistantWrap, messages.length - 1);
         }
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -653,14 +1401,15 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
 
     async function deleteChat() {
       if (!confirm('Chat-Verlauf wirklich löschen? Dies kann nicht rückgängig gemacht werden.')) return;
-      try {
-        await fetch(`/api/ai/chat?recipeId=${encodeURIComponent(getPrimaryRecipeId())}`, { method: 'DELETE' });
-        messages = [];
-        renderMessages();
-        if (placeholder) placeholder.classList.remove('hidden');
-      } catch (e) {
-        console.error('Delete chat failed', e);
+      messages = [];
+      const idx = chatTabs.findIndex((t) => t.id === activeChatTabId);
+      if (idx >= 0) {
+        chatTabs[idx].title = 'Neuer Chat';
+        chatTabs[idx].aiTitleGenerated = false;
       }
+      touchActiveTab();
+      renderMessages();
+      if (placeholder) placeholder.classList.remove('hidden');
     }
 
     async function createVariantFromMessage(messageIndex) {
@@ -670,6 +1419,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (!variantMessage.trim()) return;
 
       const btn = document.querySelector(`[data-message-index="${messageIndex}"] [data-ai-variant-btn="1"]`);
+      const targetRecipeId = btn ? btn.getAttribute('data-ai-variant-recipe-id') || '' : '';
       if (btn) {
         btn.disabled = true;
         btn.textContent = 'Wird vorbereitet…';
@@ -682,10 +1432,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             recipeId: primaryId,
+            targetRecipeId,
             recipeIds,
             variantMessage,
             preview: true,
             ...getAISettings(),
+            provider: activeChatProvider,
+            model: activeChatModel,
           })
         });
         const data = await res.json();
@@ -693,8 +1446,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           alert(data.error || 'Variante konnte nicht vorbereitet werden.');
           return;
         }
-        if (data.preview === true && data.token && data.parentRecipeId) {
-          window.location.href = `/rezept/${data.parentRecipeId}/variante-neu?draft=${encodeURIComponent(data.token)}`;
+        if (data.preview === true && data.mode === 'variant' && data.token && data.parentRecipeId) {
+          window.location.href = withDebugParam(`/rezept/${data.parentRecipeId}/variante-neu?draft=${encodeURIComponent(data.token)}`);
+          return;
+        }
+        if (data.preview === true && data.mode === 'new_recipe' && data.recipeId) {
+          window.location.href = withDebugParam(`/rezept/${data.recipeId}?edit=true`);
           return;
         }
         if (window.showSuccess) {
@@ -702,27 +1459,30 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         } else {
           alert('Variante wurde erstellt.');
         }
-        if (data.id) window.location.href = `/rezept/${data.id}`;
+        if (data.id) window.location.href = withDebugParam(`/rezept/${data.id}`);
       } catch (e) {
         console.error('Create variant failed', e);
         alert('Fehler beim Erstellen der Variante.');
       } finally {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h9v9H4zM9 9h9v9H9z"/></svg> Variante erstellen';
+          setVariantButtonLabel(btn, targetRecipeId, recipeTitleCache.get(targetRecipeId) || '');
         }
       }
     }
 
-    function openModal() {
+    async function openModal() {
       if (!modal) return;
+      const fab = document.getElementById('recipe-ai-chat-fab');
+      if (fab) fab.classList.add('hidden');
       referencedRecipesList = Array.isArray(initialReferencedRecipes)
         ? initialReferencedRecipes.map((r) => ({ id: r.id, title: r.title || '', imageUrl: r.imageUrl }))
         : [];
       renderReferencedBar();
       modal.classList.remove('hidden');
       modal.classList.add('flex');
-      loadChat();
+      await syncHeaderModelChooser();
+      initChatTabs();
       setTimeout(() => input && input.focus(), 100);
     }
 
@@ -730,11 +1490,54 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (!modal) return;
       modal.classList.add('hidden');
       modal.classList.remove('flex');
+      const fab = document.getElementById('recipe-ai-chat-fab');
+      if (fab) fab.classList.remove('hidden');
       document.dispatchEvent(new CustomEvent('recipe-ai-chat-closed'));
     }
 
     closeBtn && closeBtn.addEventListener('click', closeModal);
     deleteBtn && deleteBtn.addEventListener('click', deleteChat);
+    newChatTabBtn && newChatTabBtn.addEventListener('click', createChatTab);
+    aiProviderSelect && aiProviderSelect.addEventListener('change', async () => {
+      const settings = getDefaultAIConfig();
+      const provider = aiProviderSelect.value === 'openrouter' ? 'openrouter' : 'ollama';
+      const memory = getChatModelMemory();
+      const preferredModel = provider === settings.provider ? settings.model : (memory[provider] || '');
+      const model = await loadModelsForHeader(provider, settings.openRouterApiKey, preferredModel);
+      activeChatProvider = provider;
+      activeChatModel = model || '';
+      if (provider !== settings.provider && activeChatModel) {
+        setChatModelMemory({ ...memory, [provider]: activeChatModel });
+      }
+    });
+    aiModelSelect && aiModelSelect.addEventListener('change', () => {
+      const settings = getDefaultAIConfig();
+      const selectedModel = aiModelSelect.value || '';
+      activeChatModel = selectedModel;
+      if (activeChatProvider !== settings.provider && selectedModel) {
+        const memory = getChatModelMemory();
+        setChatModelMemory({ ...memory, [activeChatProvider]: selectedModel });
+      }
+    });
+    aiModelRefreshBtn && aiModelRefreshBtn.addEventListener('click', async () => {
+      const settings = getDefaultAIConfig();
+      const provider = aiProviderSelect && aiProviderSelect.value === 'openrouter' ? 'openrouter' : 'ollama';
+      const selectedModel = await loadModelsForHeader(
+        provider,
+        settings.openRouterApiKey,
+        aiModelSelect ? aiModelSelect.value : activeChatModel
+      );
+      activeChatProvider = provider;
+      activeChatModel = selectedModel || '';
+      if (provider !== settings.provider && activeChatModel) {
+        const memory = getChatModelMemory();
+        setChatModelMemory({ ...memory, [provider]: activeChatModel });
+      }
+    });
+    document.addEventListener('ai-settings-updated', () => {
+      if (!modal || modal.classList.contains('hidden')) return;
+      syncHeaderModelChooser();
+    });
     sendBtn && sendBtn.addEventListener('click', () => {
       if (isGenerating && currentAbortController) {
         currentAbortController.abort();

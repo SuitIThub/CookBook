@@ -27,6 +27,14 @@ function getOpenRouterModel(): string {
   return model.trim();
 }
 
+function getOpenRouterEnvApiKey(): string {
+  const apiKey = import.meta.env.OPENROUTER_API_KEY;
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+    throw new Error('OPENROUTER_API_KEY is not set or empty');
+  }
+  return apiKey.trim();
+}
+
 export type AIProvider = 'ollama' | 'openrouter';
 
 export interface AIRequestConfig {
@@ -69,10 +77,125 @@ export async function listOllamaModels(): Promise<string[]> {
 }
 
 export async function listOpenRouterModels(apiKey?: string): Promise<string[]> {
-  const headers: Record<string, string> = {};
-  if (typeof apiKey === 'string' && apiKey.trim()) {
-    headers.Authorization = `Bearer ${apiKey.trim()}`;
+  return listOpenRouterModelsWithOptions(apiKey);
+}
+
+function parseOpenRouterPrice(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) return parsed;
   }
+  return Number.NaN;
+}
+
+export function isOpenRouterFreeModel(modelId: string): boolean {
+  return modelId.trim().toLowerCase().endsWith(':free');
+}
+
+export async function validateOpenRouterApiKey(apiKey?: string): Promise<boolean> {
+  const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+  if (!key) return false;
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export interface OpenRouterKeyInfo {
+  label: string | null;
+  limit: number | null;
+  limitReset: string | null;
+  limitRemaining: number | null;
+  usage: number | null;
+  usageDaily: number | null;
+  usageWeekly: number | null;
+  usageMonthly: number | null;
+  isFreeTier: boolean | null;
+  rateLimitRemaining: number | null;
+  rateLimitResetSeconds: number | null;
+  rateLimitResetAt: string | null;
+}
+
+export async function getOpenRouterKeyInfo(apiKey?: string): Promise<OpenRouterKeyInfo> {
+  const key = typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : getOpenRouterEnvApiKey();
+  const res = await fetch('https://openrouter.ai/api/v1/key', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenRouter key info failed: ${res.status} ${text}`);
+  }
+  const payload = (await res.json()) as {
+    data?: {
+      label?: string;
+      limit?: number | null;
+      limit_reset?: string | null;
+      limit_remaining?: number | null;
+      usage?: number;
+      usage_daily?: number;
+      usage_weekly?: number;
+      usage_monthly?: number;
+      is_free_tier?: boolean;
+      rate_limit?: {
+        remaining?: number;
+        reset?: number | string;
+      };
+    };
+  };
+  const headerReset = res.headers.get('x-ratelimit-reset');
+  const resetSeconds = headerReset ? Number.parseInt(headerReset, 10) : Number.NaN;
+  const fallbackRemaining =
+    typeof payload.data?.rate_limit?.remaining === 'number' ? payload.data.rate_limit.remaining : Number.NaN;
+  const fallbackResetRaw = payload.data?.rate_limit?.reset;
+  const fallbackResetSeconds =
+    typeof fallbackResetRaw === 'number'
+      ? fallbackResetRaw
+      : typeof fallbackResetRaw === 'string'
+        ? Number.parseInt(fallbackResetRaw, 10)
+        : Number.NaN;
+  const effectiveResetSeconds = Number.isFinite(resetSeconds) ? resetSeconds : fallbackResetSeconds;
+  const rateLimitResetAt =
+    Number.isFinite(effectiveResetSeconds) && effectiveResetSeconds >= 0
+      ? new Date(Date.now() + effectiveResetSeconds * 1000).toISOString()
+      : null;
+  return {
+    label: payload.data?.label ?? null,
+    limit: typeof payload.data?.limit === 'number' ? payload.data.limit : null,
+    limitReset: typeof payload.data?.limit_reset === 'string' ? payload.data.limit_reset : null,
+    limitRemaining: typeof payload.data?.limit_remaining === 'number' ? payload.data.limit_remaining : null,
+    usage: typeof payload.data?.usage === 'number' ? payload.data.usage : null,
+    usageDaily: typeof payload.data?.usage_daily === 'number' ? payload.data.usage_daily : null,
+    usageWeekly: typeof payload.data?.usage_weekly === 'number' ? payload.data.usage_weekly : null,
+    usageMonthly: typeof payload.data?.usage_monthly === 'number' ? payload.data.usage_monthly : null,
+    isFreeTier: typeof payload.data?.is_free_tier === 'boolean' ? payload.data.is_free_tier : null,
+    rateLimitRemaining: (() => {
+      const value = res.headers.get('x-ratelimit-remaining');
+      const parsed = value ? Number.parseInt(value, 10) : Number.NaN;
+      if (Number.isFinite(parsed)) return parsed;
+      if (Number.isFinite(fallbackRemaining)) return fallbackRemaining;
+      return null;
+    })(),
+    rateLimitResetSeconds: Number.isFinite(effectiveResetSeconds) ? effectiveResetSeconds : null,
+    rateLimitResetAt,
+  };
+}
+
+export async function listOpenRouterModelsWithOptions(
+  apiKey?: string,
+  options?: { freeOnly?: boolean }
+): Promise<string[]> {
+  const key = typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : getOpenRouterEnvApiKey();
+  const headers: Record<string, string> = {};
+  headers.Authorization = `Bearer ${key}`;
   const res = await fetch('https://openrouter.ai/api/v1/models', {
     method: 'GET',
     headers,
@@ -82,10 +205,30 @@ export async function listOpenRouterModels(apiKey?: string): Promise<string[]> {
     const text = await res.text();
     throw new Error(`OpenRouter models failed: ${res.status} ${text}`);
   }
-  const data = (await res.json()) as { data?: { id?: string }[] };
-  return (data.data ?? [])
-    .map((m) => m.id?.trim() ?? '')
-    .filter(Boolean);
+  const data = (await res.json()) as {
+    data?: Array<{
+      id?: string;
+      pricing?: { prompt?: string | number; completion?: string | number };
+    }>;
+  };
+  const models = (data.data ?? [])
+    .map((m) => ({
+      id: m.id?.trim() ?? '',
+      promptPrice: parseOpenRouterPrice(m.pricing?.prompt),
+      completionPrice: parseOpenRouterPrice(m.pricing?.completion),
+    }))
+    .filter((m) => Boolean(m.id));
+  if (options?.freeOnly) {
+    return models
+      .filter(
+        (m) =>
+          isOpenRouterFreeModel(m.id) ||
+          ((Number.isNaN(m.promptPrice) || m.promptPrice === 0) &&
+            (Number.isNaN(m.completionPrice) || m.completionPrice === 0))
+      )
+      .map((m) => m.id);
+  }
+  return models.map((m) => m.id);
 }
 
 export interface ChatMessage {
@@ -123,9 +266,9 @@ export async function openRouterChat(
   config?: AIRequestConfig,
   extraBody?: Record<string, unknown>
 ): Promise<string> {
-  const apiKey = config?.openRouterApiKey?.trim();
+  const apiKey = config?.openRouterApiKey?.trim() || getOpenRouterEnvApiKey();
   if (!apiKey) {
-    throw new Error('OpenRouter API key missing');
+    throw new Error('OpenRouter API key missing (user key or OPENROUTER_API_KEY)');
   }
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -290,9 +433,9 @@ export async function* openRouterChatStream(
   messages: { role: string; content: string }[],
   config?: AIRequestConfig
 ): AsyncGenerator<string, void, unknown> {
-  const apiKey = config?.openRouterApiKey?.trim();
+  const apiKey = config?.openRouterApiKey?.trim() || getOpenRouterEnvApiKey();
   if (!apiKey) {
-    throw new Error('OpenRouter API key missing');
+    throw new Error('OpenRouter API key missing (user key or OPENROUTER_API_KEY)');
   }
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',

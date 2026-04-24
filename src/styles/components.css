@@ -296,7 +296,8 @@
 
 /* Timer Components */
 .timer-footer {
-  @apply fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg transform transition-transform duration-300 ease-in-out z-[60];
+  @apply fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg transform transition-transform duration-300 ease-in-out z-[30];
+  z-index: 30 !important;
 }
 
 .timer-button {
@@ -309,7 +310,8 @@
 
 /* Multi-Timer Components */
 .timer-sidebar {
-  @apply fixed right-0 top-16 bottom-0 w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-lg transform transition-transform duration-300 ease-in-out overflow-y-auto z-[60];
+  @apply fixed right-0 top-16 bottom-0 w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-lg transform transition-transform duration-300 ease-in-out overflow-y-auto z-[30];
+  z-index: 30 !important;
 }
 
 /* When collapsed, hide sidebar completely */
@@ -329,7 +331,8 @@
 }
 
 .timer-sidebar-toggle {
-  @apply fixed top-1/3 bg-orange-500 hover:bg-orange-600 text-white py-3 px-2 cursor-pointer z-[60] items-center justify-center transition-all duration-200 shadow-lg;
+  @apply fixed top-1/3 bg-orange-500 hover:bg-orange-600 text-white py-3 px-2 cursor-pointer z-[30] items-center justify-center transition-all duration-200 shadow-lg;
+  z-index: 30 !important;
   transform: translateY(-50%); /* Center within the top third */
   right: 0px; /* Default position when sidebar is collapsed - perfectly flush */
   border-radius: 0.5rem 0 0 0.5rem; /* Always rounded left only */
@@ -374,6 +377,15 @@
   
   .timer-footer-expanded-active main {
     padding-bottom: 40vh; /* Reasonable fallback for expanded footer */
+  }
+
+  /* Keep the AI chat FAB above the mobile timer footer. */
+  .timer-footer-active #recipe-ai-chat-fab {
+    bottom: 5.5rem; /* footer toggle height + gap */
+  }
+
+  .timer-footer-expanded-active #recipe-ai-chat-fab {
+    bottom: 42vh; /* stay above expanded timer sheet */
   }
 }
 
@@ -845,7 +857,8 @@ input[type="number"] {
 }
 
 .timer-toggle-btn {
-  @apply fixed right-4 top-20 p-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg transition-colors z-[60];
+  @apply fixed right-4 top-20 p-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg transition-colors z-[30];
+  z-index: 30 !important;
 }
 
 /* Low-bandwidth / data-saver: collapse media-heavy regions (class set on <html>) */

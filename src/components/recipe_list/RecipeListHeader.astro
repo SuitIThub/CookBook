@@ -13,7 +13,7 @@ const { recipeCount } = Astro.props;
 declare global {
   interface Window {
     openImportModal?: () => void;
-    openShoppingListModal?: (selectedRecipes: Set<string>) => Promise<void>;
+    openShoppingListModal?: (selectedRecipes: Set<string>, recipeServingsById?: Record<string, number>) => Promise<void>;
     createNewShoppingList?: () => Promise<void>;
   }
 }

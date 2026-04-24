@@ -11,7 +11,7 @@ export const POST: APIRoute = async ({ request, params }) => {
       });
     }
 
-    const { recipeIds } = await request.json();
+    const { recipeIds, recipeServingsById } = await request.json();
     if (!Array.isArray(recipeIds) || recipeIds.length === 0) {
       return new Response(JSON.stringify({ error: 'Recipe IDs required' }), {
         status: 400,
@@ -31,6 +31,15 @@ export const POST: APIRoute = async ({ request, params }) => {
     // Add each recipe
     for (const recipeId of recipeIds) {
       db.addRecipeToShoppingList(id, recipeId);
+      const desiredServingsRaw = recipeServingsById && typeof recipeServingsById === 'object'
+        ? (recipeServingsById as Record<string, unknown>)[recipeId]
+        : undefined;
+      const desiredServings = typeof desiredServingsRaw === 'number'
+        ? desiredServingsRaw
+        : Number.parseInt(String(desiredServingsRaw ?? ''), 10);
+      if (Number.isFinite(desiredServings) && desiredServings > 0) {
+        db.updateRecipeServingsInShoppingList(id, recipeId, desiredServings);
+      }
     }
 
     // Get updated shopping list

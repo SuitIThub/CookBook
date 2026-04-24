@@ -1,0 +1,316 @@
+<div
+  id="ai-settings-modal"
+  class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+  aria-modal="true"
+  aria-labelledby="ai-settings-title"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <h2 id="ai-settings-title" class="text-lg font-semibold text-gray-900 dark:text-white">KI-Einstellungen</h2>
+      <button
+        type="button"
+        id="ai-settings-close-btn"
+        class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        aria-label="Schließen"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="p-4 space-y-4">
+      <div>
+        <label for="ai-provider-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Service</label>
+        <select id="ai-provider-select" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+          <option value="ollama">Ollama (lokal)</option>
+          <option value="openrouter">OpenRouter</option>
+        </select>
+      </div>
+      <div id="ai-openrouter-key-wrap" class="hidden">
+        <label for="ai-openrouter-key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">OpenRouter API-Key</label>
+        <input
+          id="ai-openrouter-key"
+          type="text"
+          name="openrouter-api-key"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          placeholder="sk-or-v1-..."
+          class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Wird nur lokal in deinem Browser gespeichert.</p>
+        <div id="ai-openrouter-test-wrap" class="mt-2 hidden">
+          <button
+            type="button"
+            id="ai-openrouter-test-btn"
+            class="text-xs px-2.5 py-1.5 rounded-md border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+          >
+            API-Key testen
+          </button>
+          <p id="ai-openrouter-test-status" class="mt-1 text-xs text-gray-500 dark:text-gray-400"></p>
+        </div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label for="ai-model-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Modell</label>
+          <button type="button" id="ai-model-refresh-btn" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Aktualisieren</button>
+        </div>
+        <select id="ai-model-select" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"></select>
+        <p id="ai-model-status" class="mt-1 text-xs text-gray-500 dark:text-gray-400"></p>
+        <div id="ai-openrouter-usage-wrap" class="mt-2 hidden rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20 p-2">
+          <p class="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 mb-1">OpenRouter Nutzung</p>
+          <p id="ai-openrouter-free-usage" class="text-[11px] text-indigo-800 dark:text-indigo-200"></p>
+          <p id="ai-openrouter-credit-usage" class="text-[11px] text-indigo-800 dark:text-indigo-200 mt-1"></p>
+        </div>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+      <button type="button" id="ai-settings-cancel-btn" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">Abbrechen</button>
+      <button type="button" id="ai-settings-save-btn" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // @ts-nocheck
+  (function () {
+    const STORAGE_KEY = 'cookbook.ai.settings';
+    const defaultSettings = { provider: 'ollama', model: '', openRouterApiKey: '' };
+    const openBtn = document.getElementById('ai-settings-open-btn');
+    const modal = document.getElementById('ai-settings-modal');
+    const closeBtn = document.getElementById('ai-settings-close-btn');
+    const cancelBtn = document.getElementById('ai-settings-cancel-btn');
+    const saveBtn = document.getElementById('ai-settings-save-btn');
+    const providerSelect = document.getElementById('ai-provider-select');
+    const modelSelect = document.getElementById('ai-model-select');
+    const refreshBtn = document.getElementById('ai-model-refresh-btn');
+    const keyWrap = document.getElementById('ai-openrouter-key-wrap');
+    const keyInput = document.getElementById('ai-openrouter-key');
+    const keyTestWrap = document.getElementById('ai-openrouter-test-wrap');
+    const keyTestBtn = document.getElementById('ai-openrouter-test-btn');
+    const keyTestStatus = document.getElementById('ai-openrouter-test-status');
+    const modelStatus = document.getElementById('ai-model-status');
+    const openRouterUsageWrap = document.getElementById('ai-openrouter-usage-wrap');
+    const openRouterFreeUsage = document.getElementById('ai-openrouter-free-usage');
+    const openRouterCreditUsage = document.getElementById('ai-openrouter-credit-usage');
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { ...defaultSettings };
+        return { ...defaultSettings, ...JSON.parse(raw) };
+      } catch {
+        return { ...defaultSettings };
+      }
+    }
+
+    function saveSettings(settings) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      document.dispatchEvent(new CustomEvent('ai-settings-updated', { detail: settings }));
+    }
+
+    function toggleOpenRouterTest(apiKey) {
+      if (!keyTestWrap || !keyTestStatus) return;
+      const hasKey = typeof apiKey === 'string' && apiKey.trim().length > 0;
+      keyTestWrap.classList.toggle('hidden', !hasKey);
+      if (!hasKey) keyTestStatus.textContent = '';
+    }
+
+    function formatResetTimestamp(isoValue, secondsValue) {
+      if (typeof isoValue === 'string' && isoValue) {
+        const date = new Date(isoValue);
+        if (!Number.isNaN(date.getTime())) return date.toLocaleString();
+      }
+      if (typeof secondsValue === 'number' && Number.isFinite(secondsValue) && secondsValue >= 0) {
+        return `in ${secondsValue}s`;
+      }
+      return 'unbekannt';
+    }
+
+    function renderOpenRouterUsage(provider, usage, access, usageError) {
+      if (!openRouterUsageWrap || !openRouterFreeUsage || !openRouterCreditUsage) return;
+      if (provider !== 'openrouter') {
+        openRouterUsageWrap.classList.add('hidden');
+        openRouterFreeUsage.textContent = '';
+        openRouterCreditUsage.textContent = '';
+        return;
+      }
+      openRouterUsageWrap.classList.remove('hidden');
+      if (!usage || typeof usage !== 'object') {
+        openRouterFreeUsage.textContent = 'Nutzungsdaten konnten nicht geladen werden.';
+        openRouterCreditUsage.textContent =
+          typeof usageError === 'string' && usageError
+            ? usageError
+            : 'Bitte spaeter erneut auf "Aktualisieren" klicken.';
+        return;
+      }
+      const freeLeft = typeof usage.freeRequestsRemaining === 'number' ? String(usage.freeRequestsRemaining) : 'unbekannt';
+      const freeReset = formatResetTimestamp(usage.freeRequestsResetAt, usage.freeRequestsResetInSeconds);
+      openRouterFreeUsage.textContent = `Free Requests uebrig: ${freeLeft} (Reset: ${freeReset})`;
+      if (access && access.userKeyValid) {
+        const used = typeof usage.creditsUsed === 'number' ? usage.creditsUsed.toFixed(4) : 'unbekannt';
+        const left =
+          typeof usage.creditsRemaining === 'number'
+            ? usage.creditsRemaining.toFixed(4)
+            : usage.creditsRemaining === null
+              ? 'unbegrenzt'
+              : 'unbekannt';
+        const limit =
+          typeof usage.creditsLimit === 'number'
+            ? usage.creditsLimit.toFixed(4)
+            : usage.creditsLimit === null
+              ? 'unbegrenzt'
+              : 'unbekannt';
+        const reset = usage.creditsReset || 'unbekannt';
+        openRouterCreditUsage.textContent = `Credits genutzt: ${used} | uebrig: ${left} / ${limit} (Reset: ${reset})`;
+      } else {
+        openRouterCreditUsage.textContent = 'Fuer Credit-Details bitte einen gueltigen eigenen API-Key verwenden.';
+      }
+    }
+
+    function showOpenRouterUsageLoading(provider) {
+      if (!openRouterUsageWrap || !openRouterFreeUsage || !openRouterCreditUsage) return;
+      if (provider !== 'openrouter') {
+        openRouterUsageWrap.classList.add('hidden');
+        return;
+      }
+      openRouterUsageWrap.classList.remove('hidden');
+      openRouterFreeUsage.textContent = 'Nutzungsdaten werden geladen...';
+      openRouterCreditUsage.textContent = '';
+    }
+
+    async function loadModels(provider, apiKey, selectedModel, options) {
+      if (!modelSelect || !modelStatus) return;
+      showOpenRouterUsageLoading(provider);
+      modelSelect.innerHTML = '<option value="">Lade Modelle…</option>';
+      modelSelect.disabled = true;
+      modelStatus.textContent = '';
+      try {
+        const headers = {};
+        if (provider === 'openrouter' && apiKey) headers['x-openrouter-api-key'] = apiKey;
+        const res = await fetch(`/api/ai/models?provider=${encodeURIComponent(provider)}`, { headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Modelle konnten nicht geladen werden');
+        const models = Array.isArray(data.models) ? data.models : [];
+        const openRouterAccess = data.openRouterAccess && typeof data.openRouterAccess === 'object' ? data.openRouterAccess : null;
+        const openRouterUsage = data.openRouterUsage && typeof data.openRouterUsage === 'object' ? data.openRouterUsage : null;
+        const openRouterUsageError = typeof data.openRouterUsageError === 'string' ? data.openRouterUsageError : '';
+        modelSelect.innerHTML = '';
+        if (models.length === 0) {
+          modelSelect.innerHTML = '<option value="">Keine Modelle gefunden</option>';
+          modelSelect.disabled = true;
+          modelStatus.textContent = 'Keine Modelle verfügbar.';
+          renderOpenRouterUsage(provider, openRouterUsage, openRouterAccess, openRouterUsageError);
+          return;
+        }
+        models.forEach((model) => {
+          const opt = document.createElement('option');
+          opt.value = model;
+          opt.textContent = model;
+          modelSelect.appendChild(opt);
+        });
+        const target = selectedModel && models.includes(selectedModel) ? selectedModel : models[0];
+        modelSelect.value = target;
+        modelSelect.disabled = false;
+        if (provider === 'openrouter' && openRouterAccess) {
+          if (openRouterAccess.userKeyValid) {
+            modelStatus.textContent = `${models.length} Modelle gefunden (voller Zugriff).`;
+            if (options?.keyTestTriggered && keyTestStatus) {
+              keyTestStatus.textContent = 'API-Key ist gueltig. Volle Modellauswahl aktiv.';
+            }
+          } else {
+            modelStatus.textContent = `${models.length} kostenlose Modelle gefunden (Env-Key/Fallback).`;
+            if (options?.keyTestTriggered && keyTestStatus) {
+              keyTestStatus.textContent = openRouterAccess.userKeyProvided
+                ? 'API-Key ist ungueltig. Es sind nur kostenlose Modelle verfuegbar.'
+                : 'Kein API-Key eingegeben. Es sind nur kostenlose Modelle verfuegbar.';
+            }
+          }
+        } else {
+          modelStatus.textContent = `${models.length} Modelle gefunden.`;
+        }
+        renderOpenRouterUsage(provider, openRouterUsage, openRouterAccess, openRouterUsageError);
+      } catch (e) {
+        modelSelect.innerHTML = '<option value="">Fehler beim Laden</option>';
+        modelSelect.disabled = true;
+        modelStatus.textContent = e instanceof Error ? e.message : 'Fehler beim Laden';
+        renderOpenRouterUsage(provider, null, null, e instanceof Error ? e.message : 'Fehler beim Laden');
+        if (options?.keyTestTriggered && keyTestStatus) {
+          keyTestStatus.textContent = e instanceof Error ? e.message : 'API-Key-Test fehlgeschlagen';
+        }
+      }
+    }
+
+    function toggleOpenRouterKey(provider) {
+      if (!keyWrap) return;
+      keyWrap.classList.toggle('hidden', provider !== 'openrouter');
+      if (provider !== 'openrouter' && keyTestStatus) keyTestStatus.textContent = '';
+      if (provider !== 'openrouter') renderOpenRouterUsage(provider, null, null, '');
+      if (provider === 'openrouter') showOpenRouterUsageLoading(provider);
+    }
+
+    async function openModal() {
+      if (!modal || !providerSelect || !keyInput) return;
+      const settings = loadSettings();
+      providerSelect.value = settings.provider;
+      keyInput.value = settings.openRouterApiKey || '';
+      toggleOpenRouterKey(settings.provider);
+      toggleOpenRouterTest(settings.openRouterApiKey || '');
+      await loadModels(settings.provider, settings.openRouterApiKey, settings.model, { keyTestTriggered: false });
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeModal() {
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    providerSelect && providerSelect.addEventListener('change', async () => {
+      const provider = providerSelect.value === 'openrouter' ? 'openrouter' : 'ollama';
+      const apiKey = keyInput ? keyInput.value.trim() : '';
+      toggleOpenRouterKey(provider);
+      toggleOpenRouterTest(apiKey);
+      await loadModels(provider, apiKey, '', { keyTestTriggered: false });
+    });
+
+    refreshBtn && refreshBtn.addEventListener('click', async () => {
+      if (!providerSelect || !keyInput || !modelSelect) return;
+      await loadModels(providerSelect.value, keyInput.value.trim(), modelSelect.value, { keyTestTriggered: false });
+    });
+
+    keyInput && keyInput.addEventListener('input', () => {
+      const apiKey = keyInput.value.trim();
+      toggleOpenRouterTest(apiKey);
+    });
+
+    keyTestBtn && keyTestBtn.addEventListener('click', async () => {
+      if (!providerSelect || !keyInput || !modelSelect || !keyTestStatus) return;
+      if (providerSelect.value !== 'openrouter') return;
+      keyTestStatus.textContent = 'API-Key wird getestet...';
+      await loadModels('openrouter', keyInput.value.trim(), modelSelect.value, { keyTestTriggered: true });
+    });
+
+    saveBtn && saveBtn.addEventListener('click', () => {
+      if (!providerSelect || !keyInput || !modelSelect) return;
+      const settings = {
+        provider: providerSelect.value === 'openrouter' ? 'openrouter' : 'ollama',
+        model: modelSelect.value || '',
+        openRouterApiKey: keyInput.value.trim(),
+      };
+      saveSettings(settings);
+      closeModal();
+    });
+
+    openBtn && openBtn.addEventListener('click', openModal);
+    closeBtn && closeBtn.addEventListener('click', closeModal);
+    cancelBtn && cancelBtn.addEventListener('click', closeModal);
+    modal && modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+  })();
+</script>
