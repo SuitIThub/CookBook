@@ -43,6 +43,25 @@ export interface AIRequestConfig {
   openRouterApiKey?: string;
 }
 
+export interface AIModelCacheCapability {
+  supported: boolean;
+  mode: 'automatic' | 'explicit' | 'unknown' | 'none';
+  note: string;
+}
+
+export interface AIUsageTelemetry {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  cachedTokens: number | null;
+  cacheWriteTokens: number | null;
+  cacheDiscount: number | null;
+}
+
+export interface AIStreamMeta {
+  usage: AIUsageTelemetry | null;
+}
+
 function getProvider(config?: AIRequestConfig): AIProvider {
   return config?.provider === 'openrouter' ? 'openrouter' : 'ollama';
 }
@@ -234,6 +253,57 @@ export async function listOpenRouterModelsWithOptions(
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+function startsWithAny(value: string, prefixes: string[]): boolean {
+  return prefixes.some((prefix) => value.startsWith(prefix));
+}
+
+export function getModelCacheCapability(provider: AIProvider, modelIdRaw: string): AIModelCacheCapability {
+  const modelId = modelIdRaw.trim().toLowerCase();
+  if (!modelId) {
+    return { supported: false, mode: 'unknown', note: 'Unbekanntes Modell.' };
+  }
+  if (provider === 'ollama') {
+    return {
+      supported: false,
+      mode: 'none',
+      note: 'Prompt-Caching ist fuer Ollama-Modelle hier nicht integriert.',
+    };
+  }
+  if (startsWithAny(modelId, ['anthropic/claude', 'claude-'])) {
+    return {
+      supported: true,
+      mode: 'explicit',
+      note: 'Caching ueber cache_control-Breakpoints bzw. automatische Claude-Caching-Routen.',
+    };
+  }
+  if (startsWithAny(modelId, ['openai/', 'gpt-', 'o1', 'o3', 'o4'])) {
+    return {
+      supported: true,
+      mode: 'automatic',
+      note: 'Automatisches Prompt-Caching fuer unterstuetzte OpenAI-Modelle.',
+    };
+  }
+  if (startsWithAny(modelId, ['google/', 'gemini-'])) {
+    return {
+      supported: true,
+      mode: 'explicit',
+      note: 'Gemini nutzt cache_control-Breakpoints fuer stabile Cache-Hits.',
+    };
+  }
+  if (startsWithAny(modelId, ['deepseek/', 'x-ai/', 'grok', 'moonshotai/', 'groq/'])) {
+    return {
+      supported: true,
+      mode: 'automatic',
+      note: 'Provider-seitiges Prompt-Caching wird fuer diese Modellfamilie unterstuetzt.',
+    };
+  }
+  return {
+    supported: false,
+    mode: 'unknown',
+    note: 'Caching-Unterstuetzung fuer dieses Modell ist unbekannt.',
+  };
 }
 
 /**
@@ -430,8 +500,12 @@ export async function* ollamaChatStream(
 }
 
 export async function* openRouterChatStream(
-  messages: { role: string; content: string }[],
-  config?: AIRequestConfig
+  messages: Array<{ role: string; content: unknown }>,
+  config?: AIRequestConfig,
+  options?: {
+    extraBody?: Record<string, unknown>;
+    onMeta?: (meta: AIStreamMeta) => void;
+  }
 ): AsyncGenerator<string, void, unknown> {
   const apiKey = config?.openRouterApiKey?.trim() || getOpenRouterEnvApiKey();
   if (!apiKey) {
@@ -447,6 +521,8 @@ export async function* openRouterChatStream(
       model: getModelForProvider({ ...config, provider: 'openrouter' }),
       messages,
       stream: true,
+      stream_options: { include_usage: true },
+      ...options?.extraBody,
     }),
   });
 
@@ -460,6 +536,7 @@ export async function* openRouterChatStream(
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let lastUsage: AIUsageTelemetry | null = null;
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -475,7 +552,28 @@ export async function* openRouterChatStream(
         try {
           const data = JSON.parse(payload) as {
             choices?: Array<{ delta?: { content?: string } }>;
+            usage?: {
+              prompt_tokens?: number;
+              completion_tokens?: number;
+              total_tokens?: number;
+              prompt_tokens_details?: {
+                cached_tokens?: number;
+                cache_write_tokens?: number;
+              };
+              cache_discount?: number;
+            };
           };
+          if (data.usage && typeof data.usage === 'object') {
+            const details = data.usage.prompt_tokens_details;
+            lastUsage = {
+              promptTokens: typeof data.usage.prompt_tokens === 'number' ? data.usage.prompt_tokens : null,
+              completionTokens: typeof data.usage.completion_tokens === 'number' ? data.usage.completion_tokens : null,
+              totalTokens: typeof data.usage.total_tokens === 'number' ? data.usage.total_tokens : null,
+              cachedTokens: typeof details?.cached_tokens === 'number' ? details.cached_tokens : null,
+              cacheWriteTokens: typeof details?.cache_write_tokens === 'number' ? details.cache_write_tokens : null,
+              cacheDiscount: typeof data.usage.cache_discount === 'number' ? data.usage.cache_discount : null,
+            };
+          }
           const content = data.choices?.[0]?.delta?.content ?? '';
           if (content) yield content;
         } catch {
@@ -484,16 +582,21 @@ export async function* openRouterChatStream(
       }
     }
   } finally {
+    options?.onMeta?.({ usage: lastUsage });
     reader.releaseLock();
   }
 }
 
 export async function* aiChatStream(
-  messages: { role: string; content: string }[],
-  config?: AIRequestConfig
+  messages: Array<{ role: string; content: unknown }>,
+  config?: AIRequestConfig,
+  options?: {
+    extraBody?: Record<string, unknown>;
+    onMeta?: (meta: AIStreamMeta) => void;
+  }
 ): AsyncGenerator<string, void, unknown> {
   if (getProvider(config) === 'openrouter') {
-    yield* openRouterChatStream(messages, config);
+    yield* openRouterChatStream(messages, config, options);
     return;
   }
   yield* ollamaChatStream(messages);

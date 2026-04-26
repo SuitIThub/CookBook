@@ -89,6 +89,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         </div>
       </div>
       <p id="recipe-ai-chat-model-status" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400"></p>
+      <p id="recipe-ai-chat-cache-hint" class="mt-1 text-[11px] text-indigo-600 dark:text-indigo-300"></p>
+      <p id="recipe-ai-chat-cache-impact" class="mt-1 text-[11px] text-amber-600 dark:text-amber-300"></p>
       <div class="mt-3 flex items-center gap-2">
         <div id="recipe-ai-chat-tabs" class="flex-1 min-w-0 flex gap-1 overflow-x-auto pb-1">
           <!-- chat tabs rendered by script -->
@@ -209,6 +211,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     const aiModelSelect = document.getElementById('recipe-ai-chat-model-select');
     const aiModelRefreshBtn = document.getElementById('recipe-ai-chat-model-refresh-btn');
     const aiModelStatus = document.getElementById('recipe-ai-chat-model-status');
+    const aiCacheHint = document.getElementById('recipe-ai-chat-cache-hint');
+    const aiCacheImpact = document.getElementById('recipe-ai-chat-cache-impact');
     const chatTabsEl = document.getElementById('recipe-ai-chat-tabs');
     const newChatTabBtn = document.getElementById('recipe-ai-chat-new-tab-btn');
 
@@ -237,6 +241,45 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     const DEBUG_ENABLED = new URLSearchParams(window.location.search).get('debug') === '1';
     let allRecipesCache = null;
     const CHAT_VH_VAR = '--recipe-ai-chat-vh';
+    const modelMetaById = new Map();
+
+    function getActiveTab() {
+      return chatTabs.find((t) => t.id === activeChatTabId) || null;
+    }
+
+    function isTabModelLocked(tab) {
+      return Boolean(tab && Array.isArray(tab.messages) && tab.messages.length > 0);
+    }
+
+    function setCacheImpact(message) {
+      if (!aiCacheImpact) return;
+      aiCacheImpact.textContent = message || '';
+    }
+
+    function getModelCacheMeta(modelId) {
+      const meta = modelMetaById.get(modelId);
+      if (meta && typeof meta === 'object') return meta;
+      return { cacheSupported: false, cacheMode: 'unknown', cacheNote: 'Keine Cache-Infos verfügbar.' };
+    }
+
+    function updateCacheHint() {
+      if (!aiCacheHint) return;
+      const selected = aiModelSelect && aiModelSelect.value ? aiModelSelect.value : activeChatModel;
+      const meta = getModelCacheMeta(selected);
+      const lockSuffix = (() => {
+        const tab = getActiveTab();
+        if (isTabModelLocked(tab)) return ' Modellwechsel in diesem Chat deaktiviert.';
+        return '';
+      })();
+      if (meta.cacheSupported) {
+        const modeText = meta.cacheMode === 'explicit' ? 'Explizites Cache-Control' : 'Automatisches Caching';
+        aiCacheHint.textContent = `Cache: ${modeText}. ${meta.cacheNote}${lockSuffix}`;
+      } else if (meta.cacheMode === 'none') {
+        aiCacheHint.textContent = `Cache: Nicht verfügbar. ${meta.cacheNote}${lockSuffix}`;
+      } else {
+        aiCacheHint.textContent = `Cache: Unbekannt. ${meta.cacheNote}${lockSuffix}`;
+      }
+    }
 
     function withDebugParam(targetUrl) {
       if (!DEBUG_ENABLED) return targetUrl;
@@ -288,6 +331,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         title: 'Neuer Chat',
         aiTitleGenerated: false,
         messages: [],
+        provider: activeChatProvider || 'ollama',
+        model: activeChatModel || '',
         createdAt: now,
         updatedAt: now,
         lastViewedAt: now,
@@ -316,6 +361,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (idx < 0) return;
       const tab = chatTabs[idx];
       tab.messages = normalizeChatMessages(messages);
+      if (!tab.provider) tab.provider = activeChatProvider || 'ollama';
+      if (!tab.model) tab.model = activeChatModel || '';
       if (!tab.title || tab.title === 'Neuer Chat') {
         tab.title = deriveTabTitle(tab.messages);
       }
@@ -374,10 +421,15 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (!tab) return;
       activeChatTabId = tab.id;
       tab.lastViewedAt = nowIso();
+      if (!tab.provider) tab.provider = activeChatProvider || 'ollama';
+      if (!tab.model) tab.model = activeChatModel || '';
+      activeChatProvider = tab.provider;
+      activeChatModel = tab.model || '';
       messages = normalizeChatMessages(tab.messages);
       persistChatTabs();
       renderChatTabs();
       renderMessages();
+      syncHeaderModelChooser();
     }
 
     function removeChatTab(tabId) {
@@ -393,13 +445,21 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     }
 
     function createChatTab() {
+      const previousProvider = activeChatProvider;
+      const previousModel = activeChatModel;
       const tab = makeDefaultTab();
+      tab.provider = previousProvider || tab.provider || 'ollama';
+      tab.model = previousModel || tab.model || '';
       chatTabs.unshift(tab);
       activeChatTabId = tab.id;
+      activeChatProvider = tab.provider;
+      activeChatModel = tab.model;
       messages = [];
+      setCacheImpact('Neuer Chat gestartet: Cache wird neu aufgebaut.');
       persistChatTabs();
       renderChatTabs();
       renderMessages();
+      void syncHeaderModelChooser();
       if (input) input.focus();
     }
 
@@ -413,7 +473,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'truncate max-w-[150px]';
-        btn.textContent = tab.title || 'Neuer Chat';
+        btn.textContent = `${tab.title || 'Neuer Chat'}${isTabModelLocked(tab) ? ' 🔒' : ''}`;
         btn.addEventListener('click', () => selectChatTab(tab.id));
         item.appendChild(btn);
         if (chatTabs.length > 1) {
@@ -449,6 +509,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           title: typeof tab.title === 'string' && tab.title.trim() ? tab.title.trim() : 'Neuer Chat',
           aiTitleGenerated: tab.aiTitleGenerated === true,
           messages: normalizeChatMessages(tab.messages),
+          provider: tab.provider === 'openrouter' ? 'openrouter' : 'ollama',
+          model: typeof tab.model === 'string' ? tab.model : '',
           createdAt: typeof tab.createdAt === 'string' ? tab.createdAt : nowIso(),
           updatedAt: typeof tab.updatedAt === 'string' ? tab.updatedAt : nowIso(),
           lastViewedAt: typeof tab.lastViewedAt === 'string' ? tab.lastViewedAt : nowIso(),
@@ -461,6 +523,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         chatTabs = [makeDefaultTab()];
       }
       activeChatTabId = chatTabs[0].id;
+      activeChatProvider = chatTabs[0].provider || activeChatProvider;
+      activeChatModel = chatTabs[0].model || activeChatModel;
       messages = normalizeChatMessages(chatTabs[0].messages);
       persistChatTabs();
       renderChatTabs();
@@ -514,6 +578,16 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Modelle konnten nicht geladen werden');
         const models = Array.isArray(data.models) ? data.models : [];
+        const modelDetails = Array.isArray(data.modelDetails) ? data.modelDetails : [];
+        modelMetaById.clear();
+        modelDetails.forEach((detail) => {
+          if (!detail || typeof detail !== 'object' || typeof detail.id !== 'string') return;
+          modelMetaById.set(detail.id, {
+            cacheSupported: detail.cacheSupported === true,
+            cacheMode: typeof detail.cacheMode === 'string' ? detail.cacheMode : 'unknown',
+            cacheNote: typeof detail.cacheNote === 'string' ? detail.cacheNote : '',
+          });
+        });
         const openRouterAccess = data.openRouterAccess && typeof data.openRouterAccess === 'object'
           ? data.openRouterAccess
           : null;
@@ -525,9 +599,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           return '';
         }
         models.forEach((model) => {
+          const meta = getModelCacheMeta(model);
           const opt = document.createElement('option');
           opt.value = model;
-          opt.textContent = model;
+          const marker = meta.cacheSupported
+            ? (meta.cacheMode === 'explicit' ? ' [Cache*]' : ' [Cache]')
+            : '';
+          opt.textContent = `${model}${marker}`;
           aiModelSelect.appendChild(opt);
         });
         const target = selectedModel && models.includes(selectedModel) ? selectedModel : models[0];
@@ -538,11 +616,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         } else {
           aiModelStatus.textContent = `${models.length} Modelle verfügbar.`;
         }
+        updateCacheHint();
         return target;
       } catch (e) {
         aiModelSelect.innerHTML = '<option value="">Fehler beim Laden</option>';
         aiModelSelect.disabled = true;
         aiModelStatus.textContent = e instanceof Error ? e.message : 'Fehler beim Laden';
+        updateCacheHint();
         return '';
       }
     }
@@ -550,11 +630,22 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     async function syncHeaderModelChooser() {
       if (!aiProviderSelect || !aiModelSelect) return;
       const settings = getDefaultAIConfig();
-      const provider = settings.provider;
+      const activeTab = getActiveTab();
+      const provider = activeTab?.provider || activeChatProvider || settings.provider;
       aiProviderSelect.value = provider;
-      const selectedModel = await loadModelsForHeader(provider, settings.openRouterApiKey, settings.model);
+      const preferredModel = activeTab?.model || activeChatModel || settings.model;
+      const selectedModel = await loadModelsForHeader(provider, settings.openRouterApiKey, preferredModel);
       activeChatProvider = provider;
       activeChatModel = selectedModel || '';
+      if (activeTab) {
+        activeTab.provider = activeChatProvider;
+        activeTab.model = activeChatModel;
+      }
+      const isLocked = isTabModelLocked(activeTab);
+      aiProviderSelect.disabled = isLocked;
+      aiModelSelect.disabled = isLocked || !selectedModel;
+      if (aiModelRefreshBtn) aiModelRefreshBtn.disabled = isLocked;
+      updateCacheHint();
     }
 
     function getPrimaryRecipeId() {
@@ -700,18 +791,19 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (!Array.isArray(messages) || messageIndex == null) return;
       // Find the last user message before this assistant message
       let userText = '';
+      let userIdx = -1;
       for (let i = messageIndex - 1; i >= 0; i--) {
         const m = messages[i];
         if (m && m.role === 'user' && typeof m.content === 'string') {
           userText = m.content;
+          userIdx = i;
           break;
         }
       }
       if (!userText) return;
-      if (input) {
-        input.value = userText;
-        sendMessage();
-      }
+      const baseHistory = userIdx > 0 ? messages.slice(0, userIdx) : [];
+      setCacheImpact('Antwort neu generieren: Der Chat-Verlauf ab dieser Stelle wird ersetzt (Cache neu aufgebaut).');
+      sendMessage({ textOverride: userText, historyOverride: baseHistory, regenerate: true });
     }
 
     function getMarked() {
@@ -1230,8 +1322,10 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    async function sendMessage() {
-      const text = (input && input.value) ? input.value.trim() : '';
+    async function sendMessage(options = {}) {
+      const text = typeof options.textOverride === 'string'
+        ? options.textOverride.trim()
+        : (input && input.value) ? input.value.trim() : '';
       if (!text || !sendBtn) return;
 
       if (isGenerating) return;
@@ -1241,12 +1335,20 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       const sendLabel = sendBtn.querySelector('.recipe-ai-chat-send-label');
       if (sendLabel) sendLabel.textContent = 'Abbrechen';
       sendBtn.title = 'Generierung abbrechen';
+      const baseHistory = Array.isArray(options.historyOverride)
+        ? normalizeChatMessages(options.historyOverride)
+        : normalizeChatMessages(messages);
+      const activeTab = getActiveTab();
+      if (activeTab) {
+        activeTab.provider = activeChatProvider;
+        activeTab.model = activeChatModel;
+      }
       const userEl = renderMessage('user', text);
       userEl.setAttribute('data-ai-msg', '');
       if (placeholder) placeholder.classList.add('hidden');
       messagesContainer.appendChild(userEl);
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      input.value = '';
+      if (!options.textOverride && input) input.value = '';
 
       const assistantWrap = document.createElement('div');
       assistantWrap.className = 'flex flex-col items-start justify-start';
@@ -1263,6 +1365,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       let accumulated = '';
       let streamError = null;
       let donePushed = false;
+      let usageMeta = null;
+      let cacheMeta = null;
 
       try {
         const primaryId = getPrimaryRecipeId();
@@ -1274,7 +1378,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
             recipeId: primaryId,
             recipeIds,
             chatId: activeChatTabId,
-            history: messages,
+            history: baseHistory,
             message: text,
             ...getAISettings(),
             provider: activeChatProvider,
@@ -1312,11 +1416,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
                 renderAssistantContent(bubble, thinkingHost, accumulated);
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
               }
-                if (data.done && typeof data.fullMessage === 'string' && !donePushed) {
+              if (data.cache && typeof data.cache === 'object') cacheMeta = data.cache;
+              if (data.usage && typeof data.usage === 'object') usageMeta = data.usage;
+              if (data.done && typeof data.fullMessage === 'string' && !donePushed) {
                 accumulated = data.fullMessage;
                 renderAssistantContent(bubble, thinkingHost, accumulated);
-                messages.push({ role: 'user', content: text });
-                messages.push({ role: 'assistant', content: accumulated });
+                messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: accumulated }];
                 touchActiveTab();
                 donePushed = true;
                 appendAssistantToolUi(assistantWrap, accumulated);
@@ -1331,11 +1436,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           try {
             const data = JSON.parse(line);
             if (data.error) { streamError = data.error; break; }
+            if (data.cache && typeof data.cache === 'object') cacheMeta = data.cache;
+            if (data.usage && typeof data.usage === 'object') usageMeta = data.usage;
             if (data.done && typeof data.fullMessage === 'string' && !donePushed) {
               accumulated = data.fullMessage;
               renderAssistantContent(bubble, thinkingHost, accumulated);
-              messages.push({ role: 'user', content: text });
-              messages.push({ role: 'assistant', content: accumulated });
+              messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: accumulated }];
               touchActiveTab();
               donePushed = true;
               appendAssistantToolUi(assistantWrap, accumulated);
@@ -1347,26 +1453,34 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         if (streamError) {
           bubble.textContent = 'Fehler: ' + streamError;
           thinkingHost.innerHTML = '';
-          messages.push({ role: 'user', content: text });
-          messages.push({ role: 'assistant', content: 'Fehler: ' + streamError });
+          messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: 'Fehler: ' + streamError }];
           touchActiveTab();
           appendRegenerateButton(assistantWrap, messages.length - 1);
         } else if (!donePushed) {
           if (accumulated) {
             renderAssistantContent(bubble, thinkingHost, accumulated);
-            messages.push({ role: 'user', content: text });
-            messages.push({ role: 'assistant', content: accumulated });
+            messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: accumulated }];
             touchActiveTab();
             appendAssistantToolUi(assistantWrap, accumulated);
             appendVariantButtonIfNeeded(assistantWrap, bubble, accumulated, messages.length - 1);
             appendRegenerateButton(assistantWrap, messages.length - 1);
           } else {
             bubble.textContent = 'Keine Antwort erhalten.';
-            messages.push({ role: 'user', content: text });
-            messages.push({ role: 'assistant', content: 'Keine Antwort erhalten.' });
+            messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: 'Keine Antwort erhalten.' }];
             touchActiveTab();
             appendRegenerateButton(assistantWrap, messages.length - 1);
           }
+        }
+        if (cacheMeta && usageMeta && typeof usageMeta.cachedTokens === 'number') {
+          const cached = usageMeta.cachedTokens || 0;
+          const write = typeof usageMeta.cacheWriteTokens === 'number' ? usageMeta.cacheWriteTokens : 0;
+          const discount = typeof usageMeta.cacheDiscount === 'number' ? usageMeta.cacheDiscount : null;
+          const discountText = discount != null ? `, Rabatt: ${discount.toFixed(6)}` : '';
+          setCacheImpact(`Cache-Metrik: read=${cached} / write=${write}${discountText}`);
+        } else if (options.regenerate) {
+          setCacheImpact('Antwort neu generiert: Folgeanfragen nutzen nun den neuen Verlauf als Cache-Basis.');
+        } else {
+          setCacheImpact('');
         }
         if (DEBUG_ENABLED) {
           console.log('[AI DEBUG full assistant raw]', accumulated);
@@ -1382,8 +1496,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
             bubble.textContent = finalContent;
             thinkingHost.innerHTML = '';
           }
-          messages.push({ role: 'user', content: text });
-          messages.push({ role: 'assistant', content: finalContent });
+          messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: finalContent }];
           touchActiveTab();
           appendAssistantToolUi(assistantWrap, finalContent);
           appendVariantButtonIfNeeded(assistantWrap, bubble, finalContent, messages.length - 1);
@@ -1391,8 +1504,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         } else {
           bubble.textContent = e instanceof Error ? e.message : 'Netzwerkfehler. Bitte erneut versuchen.';
           thinkingHost.innerHTML = '';
-          messages.push({ role: 'user', content: text });
-          messages.push({ role: 'assistant', content: bubble.textContent });
+          messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: bubble.textContent }];
           touchActiveTab();
           appendRegenerateButton(assistantWrap, messages.length - 1);
         }
@@ -1415,10 +1527,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (idx >= 0) {
         chatTabs[idx].title = 'Neuer Chat';
         chatTabs[idx].aiTitleGenerated = false;
+        chatTabs[idx].messages = [];
       }
       touchActiveTab();
       renderMessages();
       if (placeholder) placeholder.classList.remove('hidden');
+      setCacheImpact('Chat gelöscht: Cache wird für diesen Tab neu aufgebaut.');
+      syncHeaderModelChooser();
     }
 
     async function createVariantFromMessage(messageIndex) {
@@ -1516,6 +1631,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     deleteBtn && deleteBtn.addEventListener('click', deleteChat);
     newChatTabBtn && newChatTabBtn.addEventListener('click', createChatTab);
     aiProviderSelect && aiProviderSelect.addEventListener('change', async () => {
+      const activeTab = getActiveTab();
+      if (isTabModelLocked(activeTab)) {
+        setCacheImpact('Modellwechsel gesperrt: Dieser Chat hat bereits Verlauf und behält sein Modell für stabile Cache-Hits.');
+        syncHeaderModelChooser();
+        return;
+      }
       const settings = getDefaultAIConfig();
       const provider = aiProviderSelect.value === 'openrouter' ? 'openrouter' : 'ollama';
       const memory = getChatModelMemory();
@@ -1523,18 +1644,38 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       const model = await loadModelsForHeader(provider, settings.openRouterApiKey, preferredModel);
       activeChatProvider = provider;
       activeChatModel = model || '';
+      if (activeTab) {
+        activeTab.provider = activeChatProvider;
+        activeTab.model = activeChatModel;
+      }
       if (provider !== settings.provider && activeChatModel) {
         setChatModelMemory({ ...memory, [provider]: activeChatModel });
       }
+      setCacheImpact('Modell geändert: Der nächste Prompt startet einen neuen Cache-Pfad.');
+      updateCacheHint();
+      persistChatTabs();
     });
     aiModelSelect && aiModelSelect.addEventListener('change', () => {
+      const activeTab = getActiveTab();
+      if (isTabModelLocked(activeTab)) {
+        setCacheImpact('Modellwechsel gesperrt: Dieser Chat hat bereits Verlauf und behält sein Modell für stabile Cache-Hits.');
+        syncHeaderModelChooser();
+        return;
+      }
       const settings = getDefaultAIConfig();
       const selectedModel = aiModelSelect.value || '';
       activeChatModel = selectedModel;
+      if (activeTab) {
+        activeTab.provider = activeChatProvider;
+        activeTab.model = activeChatModel;
+      }
       if (activeChatProvider !== settings.provider && selectedModel) {
         const memory = getChatModelMemory();
         setChatModelMemory({ ...memory, [activeChatProvider]: selectedModel });
       }
+      setCacheImpact('Modell geändert: Der nächste Prompt startet einen neuen Cache-Pfad.');
+      updateCacheHint();
+      persistChatTabs();
     });
     aiModelRefreshBtn && aiModelRefreshBtn.addEventListener('click', async () => {
       const settings = getDefaultAIConfig();
@@ -1546,10 +1687,16 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       );
       activeChatProvider = provider;
       activeChatModel = selectedModel || '';
+      const activeTab = getActiveTab();
+      if (activeTab && !isTabModelLocked(activeTab)) {
+        activeTab.provider = activeChatProvider;
+        activeTab.model = activeChatModel;
+      }
       if (provider !== settings.provider && activeChatModel) {
         const memory = getChatModelMemory();
         setChatModelMemory({ ...memory, [provider]: activeChatModel });
       }
+      updateCacheHint();
     });
     document.addEventListener('ai-settings-updated', () => {
       if (!modal || modal.classList.contains('hidden')) return;

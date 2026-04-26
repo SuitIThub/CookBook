@@ -1,6 +1,12 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database';
-import { aiChatStream, type AIRequestConfig, type ChatMessage } from '../../../lib/ai';
+import {
+  aiChatStream,
+  getModelCacheCapability,
+  type AIRequestConfig,
+  type AIStreamMeta,
+  type ChatMessage,
+} from '../../../lib/ai';
 
 // In-memory cache: cacheKey -> messages (user/assistant only; recipe context is injected on send)
 const chatCache = new Map<string, ChatMessage[]>();
@@ -195,6 +201,19 @@ ${recipeMarkdown}`,
       ...cached,
       userMessage,
     ];
+    const messagesForOpenRouter: Array<{ role: string; content: unknown }> = messagesForOllama.map((msg, idx) => {
+      if (idx !== 0) return { role: msg.role, content: msg.content };
+      return {
+        role: msg.role,
+        content: [
+          {
+            type: 'text',
+            text: msg.content,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+      };
+    });
 
     const encoder = new TextEncoder();
     let fullContent = '';
@@ -204,17 +223,44 @@ ${recipeMarkdown}`,
       openRouterApiKey,
     };
 
+    const providerForRequest = aiConfig.provider === 'openrouter' ? 'openrouter' : 'ollama';
+    const resolvedModel = (typeof aiConfig.model === 'string' ? aiConfig.model.trim() : '') || '';
+    const cacheCapability = getModelCacheCapability(providerForRequest, resolvedModel);
+    const streamMeta: AIStreamMeta = { usage: null };
+    const extraBody: Record<string, unknown> = {};
+    if (providerForRequest === 'openrouter' && cacheCapability.supported && cacheCapability.mode === 'explicit') {
+      extraBody.cache_control = { type: 'ephemeral' };
+    }
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of aiChatStream(messagesForOllama, aiConfig)) {
+          for await (const chunk of aiChatStream(providerForRequest === 'openrouter' ? messagesForOpenRouter : messagesForOllama, aiConfig, {
+            extraBody,
+            onMeta: (meta) => {
+              streamMeta.usage = meta.usage;
+            },
+          })) {
             fullContent += chunk;
             controller.enqueue(encoder.encode(JSON.stringify({ delta: chunk }) + '\n'));
           }
           const assistantMessage: ChatMessage = { role: 'assistant', content: fullContent };
           const newCache = [...cached, userMessage, assistantMessage];
           setCachedMessages(cacheKey, newCache);
-          controller.enqueue(encoder.encode(JSON.stringify({ done: true, fullMessage: fullContent }) + '\n'));
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                done: true,
+                fullMessage: fullContent,
+                cache: {
+                  supported: cacheCapability.supported,
+                  mode: cacheCapability.mode,
+                  note: cacheCapability.note,
+                },
+                usage: streamMeta.usage,
+              }) + '\n'
+            )
+          );
         } catch (err) {
           console.error('AI chat stream error:', err);
           controller.enqueue(

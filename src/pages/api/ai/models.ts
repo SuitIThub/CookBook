@@ -4,6 +4,7 @@ import {
   listOpenRouterModelsWithOptions,
   validateOpenRouterApiKey,
   getOpenRouterKeyInfo,
+  getModelCacheCapability,
   type AIProvider,
 } from '../../../lib/ai';
 
@@ -17,6 +18,12 @@ export const GET: APIRoute = async ({ url, request }) => {
       undefined;
 
     let models: string[] = [];
+    let modelDetails: Array<{
+      id: string;
+      cacheSupported: boolean;
+      cacheMode: 'automatic' | 'explicit' | 'unknown' | 'none';
+      cacheNote: string;
+    }> = [];
     let openRouterUsage: {
       keyLabel: string | null;
       isFreeTier: boolean | null;
@@ -67,11 +74,21 @@ export const GET: APIRoute = async ({ url, request }) => {
     } else {
       models = await listOllamaModels();
     }
+    modelDetails = models.map((id) => {
+      const capability = getModelCacheCapability(provider, id);
+      return {
+        id,
+        cacheSupported: capability.supported,
+        cacheMode: capability.mode,
+        cacheNote: capability.note,
+      };
+    });
 
     return new Response(
       JSON.stringify({
         provider,
         models,
+        modelDetails,
         openRouterAccess,
         openRouterUsage,
         openRouterUsageError,
