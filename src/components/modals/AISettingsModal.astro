@@ -195,6 +195,12 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Modelle konnten nicht geladen werden');
         const models = Array.isArray(data.models) ? data.models : [];
+        const modelDetails = Array.isArray(data.modelDetails) ? data.modelDetails : [];
+        const modelMeta = new Map(
+          modelDetails
+            .filter((d) => d && typeof d === 'object' && typeof d.id === 'string')
+            .map((d) => [d.id, d])
+        );
         const openRouterAccess = data.openRouterAccess && typeof data.openRouterAccess === 'object' ? data.openRouterAccess : null;
         const openRouterUsage = data.openRouterUsage && typeof data.openRouterUsage === 'object' ? data.openRouterUsage : null;
         const openRouterUsageError = typeof data.openRouterUsageError === 'string' ? data.openRouterUsageError : '';
@@ -207,9 +213,13 @@
           return;
         }
         models.forEach((model) => {
+          const meta = modelMeta.get(model);
+          const marker = meta && meta.cacheSupported
+            ? (meta.cacheMode === 'explicit' ? ' [Cache*]' : ' [Cache]')
+            : '';
           const opt = document.createElement('option');
           opt.value = model;
-          opt.textContent = model;
+          opt.textContent = `${model}${marker}`;
           modelSelect.appendChild(opt);
         });
         const target = selectedModel && models.includes(selectedModel) ? selectedModel : models[0];
