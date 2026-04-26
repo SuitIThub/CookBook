@@ -390,10 +390,64 @@ export class CookbookDatabase {
     return updatedRecipe;
   }
 
-  deleteRecipe(id: string): boolean {
-    const stmt = this.db.prepare('DELETE FROM recipes WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+  /**
+   * Deletes a recipe row by id. For a published original with variants, promotes the first variant
+   * to root before deleting. Draft rows (`is_draft = 1`) are deleted without variant promotion.
+   */
+  deleteRecipe(id: string): { success: boolean; promotedOriginalRecipeId?: string } {
+    const runDelete = this.db.transaction((recipeId: string) => {
+      const recipeStmt = this.db.prepare(
+        'SELECT id, parent_recipe_id, is_draft FROM recipes WHERE id = ?'
+      );
+      const recipe = recipeStmt.get(recipeId) as
+        | { id: string; parent_recipe_id: string | null; is_draft: number }
+        | undefined;
+      if (!recipe) {
+        return { success: false };
+      }
+
+      let promotedOriginalRecipeId: string | undefined;
+
+      // Variant promotion only applies to published (non-draft) recipes.
+      if (!recipe.is_draft) {
+        // If the deleted recipe is an original, promote the next variant (if any) to new original.
+        if (!recipe.parent_recipe_id) {
+          const variantsStmt = this.db.prepare(`
+            SELECT id
+            FROM recipes
+            WHERE parent_recipe_id = ? AND is_draft = 0
+            ORDER BY created_at ASC
+          `);
+          const variants = variantsStmt.all(recipeId) as Array<{ id: string }>;
+
+          if (variants.length > 0) {
+            promotedOriginalRecipeId = variants[0].id;
+
+            // Promoted variant becomes the new original.
+            this.db
+              .prepare('UPDATE recipes SET parent_recipe_id = NULL, variant_name = NULL WHERE id = ?')
+              .run(promotedOriginalRecipeId);
+
+            // Remaining variants are attached to the new original.
+            if (variants.length > 1) {
+              const reparentStmt = this.db.prepare('UPDATE recipes SET parent_recipe_id = ? WHERE id = ?');
+              for (const variant of variants.slice(1)) {
+                reparentStmt.run(promotedOriginalRecipeId, variant.id);
+              }
+            }
+          }
+        }
+      }
+
+      const deleteStmt = this.db.prepare('DELETE FROM recipes WHERE id = ?');
+      const result = deleteStmt.run(recipeId);
+      if (result.changes === 0) {
+        return { success: false };
+      }
+      return { success: true, promotedOriginalRecipeId };
+    });
+
+    return runDelete(id);
   }
 
   // Shopping list operations
