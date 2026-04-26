@@ -23,12 +23,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
 
 <div
   id="recipe-ai-chat-modal"
-  class="hidden fixed inset-0 z-[90] flex items-stretch md:items-center justify-center bg-black/50 p-0 md:p-4"
+  class="hidden fixed inset-0 z-[90] flex items-stretch md:items-center justify-center p-0 md:p-4"
   style="z-index: 1000;"
   aria-modal="true"
   aria-labelledby="recipe-ai-chat-title"
 >
-  <div class="bg-white dark:bg-gray-800 rounded-none md:rounded-xl shadow-2xl w-screen h-screen md:w-full md:max-w-2xl md:h-[80vh] flex flex-col border-0 md:border border-gray-200 dark:border-gray-700">
+  <div class="recipe-ai-chat-overlay absolute inset-0 bg-black/50"></div>
+  <div class="recipe-ai-chat-panel bg-white dark:bg-gray-800 rounded-none md:rounded-xl shadow-2xl w-screen h-screen md:w-full md:max-w-2xl md:h-[80vh] flex flex-col border-0 md:border border-gray-200 dark:border-gray-700">
     <!-- Header -->
     <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
       <div class="flex items-center justify-between gap-3">
@@ -118,7 +119,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     </div>
 
     <!-- Input row: plus button + input + send -->
-    <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+  <div class="recipe-ai-chat-input-row p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
       <div class="flex gap-2 items-center">
         <button
           type="button"
@@ -157,11 +158,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
 <!-- Picker modal: add recipes to chat context -->
 <div
   id="recipe-ai-chat-picker-modal"
-  class="hidden fixed inset-0 z-[95] flex items-center justify-center bg-black/50 p-4"
+  class="hidden fixed inset-0 z-[95] flex items-center justify-center p-4"
   style="z-index: 1010;"
   aria-modal="true"
   aria-label="Rezepte zum Chat hinzufügen"
 >
+  <div class="recipe-ai-chat-overlay absolute inset-0 bg-black/50"></div>
   <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col border border-gray-200 dark:border-gray-700">
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
       <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Rezepte referenzieren</h3>
@@ -234,6 +236,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
     const recipeTitleCache = new Map();
     const DEBUG_ENABLED = new URLSearchParams(window.location.search).get('debug') === '1';
     let allRecipesCache = null;
+    const CHAT_VH_VAR = '--recipe-ai-chat-vh';
 
     function withDebugParam(targetUrl) {
       if (!DEBUG_ENABLED) return targetUrl;
@@ -244,6 +247,12 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       } catch {
         return targetUrl;
       }
+    }
+
+    function updateChatViewportHeightVar() {
+      const vv = window.visualViewport;
+      const height = vv && vv.height ? vv.height : window.innerHeight;
+      document.documentElement.style.setProperty(CHAT_VH_VAR, `${Math.round(height)}px`);
     }
 
     function makeTabId() {
@@ -1471,6 +1480,11 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       }
     }
 
+    function setChatModalScrollLock(locked) {
+      document.body.classList.toggle('overflow-hidden', locked);
+      document.documentElement.classList.toggle('overflow-hidden', locked);
+    }
+
     async function openModal() {
       if (!modal) return;
       const fab = document.getElementById('recipe-ai-chat-fab');
@@ -1479,8 +1493,10 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         ? initialReferencedRecipes.map((r) => ({ id: r.id, title: r.title || '', imageUrl: r.imageUrl }))
         : [];
       renderReferencedBar();
+      updateChatViewportHeightVar();
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+      setChatModalScrollLock(true);
       await syncHeaderModelChooser();
       initChatTabs();
       setTimeout(() => input && input.focus(), 100);
@@ -1490,6 +1506,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (!modal) return;
       modal.classList.add('hidden');
       modal.classList.remove('flex');
+      setChatModalScrollLock(false);
       const fab = document.getElementById('recipe-ai-chat-fab');
       if (fab) fab.classList.remove('hidden');
       document.dispatchEvent(new CustomEvent('recipe-ai-chat-closed'));
@@ -1561,6 +1578,70 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
       if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) closeModal();
     });
 
+    updateChatViewportHeightVar();
+    window.addEventListener('resize', updateChatViewportHeightVar);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(updateChatViewportHeightVar, 60);
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateChatViewportHeightVar);
+      window.visualViewport.addEventListener('scroll', updateChatViewportHeightVar);
+    }
+
     window.openRecipeAIChatModal = openModal;
   })();
 </script>
+
+<style>
+  #recipe-ai-chat-modal,
+  #recipe-ai-chat-picker-modal {
+    isolation: isolate;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    overscroll-behavior: contain;
+  }
+
+  #recipe-ai-chat-modal > div:last-child,
+  #recipe-ai-chat-picker-modal > div:last-child {
+    position: relative;
+    z-index: 1;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    will-change: transform, opacity;
+  }
+
+  .recipe-ai-chat-overlay {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  .recipe-ai-chat-panel {
+    height: var(--recipe-ai-chat-vh, 100dvh);
+    max-height: var(--recipe-ai-chat-vh, 100dvh);
+  }
+
+  .recipe-ai-chat-input-row {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (max-width: 768px), (pointer: coarse) {
+    #recipe-ai-chat-modal {
+      align-items: stretch;
+    }
+
+    .recipe-ai-chat-panel {
+      width: 100vw;
+      height: var(--recipe-ai-chat-vh, 100dvh);
+      max-height: var(--recipe-ai-chat-vh, 100dvh);
+      border-radius: 0;
+    }
+
+    .recipe-ai-chat-overlay {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+  }
+</style>
