@@ -118,8 +118,8 @@ export const DELETE: APIRoute = async ({ url, request }) => {
       // Finally, delete the original recipe (the one with recipeId)
       // This is the recipe that was created but never saved
       try {
-        const deleted = db.deleteRecipe(recipeId);
-        if (!deleted) {
+        const deleteResult = db.deleteRecipe(recipeId);
+        if (!deleteResult.success) {
           console.log('Recipe not found for deletion:', recipeId);
         }
       } catch (error) {

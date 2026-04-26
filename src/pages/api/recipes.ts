@@ -261,9 +261,9 @@ export const DELETE: APIRoute = async ({ request, url }) => {
           await cleanupRecipeImages(recipe.images || []);
           
           // Delete recipe from database
-          const deleted = db.deleteRecipe(recipeId);
+          const deleteResult = db.deleteRecipe(recipeId);
           
-          if (!deleted) {
+          if (!deleteResult.success) {
             results.errors.push(`Failed to delete recipe ${recipeId} from database`);
             continue;
           }
@@ -299,9 +299,9 @@ export const DELETE: APIRoute = async ({ request, url }) => {
     await cleanupRecipeImages(recipe.images || []);
 
     // Delete recipe from database
-    const deleted = db.deleteRecipe(id);
+    const deleteResult = db.deleteRecipe(id);
     
-    if (!deleted) {
+    if (!deleteResult.success) {
       return new Response(JSON.stringify({ error: 'Failed to delete recipe from database' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -312,7 +312,10 @@ export const DELETE: APIRoute = async ({ request, url }) => {
 
     return new Response(JSON.stringify({ 
       success: true,
-      deletedImages: recipe.images?.length || 0 
+      deletedImages: recipe.images?.length || 0,
+      ...(deleteResult.promotedOriginalRecipeId
+        ? { promotedOriginalRecipeId: deleteResult.promotedOriginalRecipeId }
+        : {})
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

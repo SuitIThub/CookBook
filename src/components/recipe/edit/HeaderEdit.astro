@@ -12,6 +12,24 @@ const { recipe } = Astro.props;
   <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Grundinformationen bearbeiten</h2>
   
   <div class="space-y-4">
+    {recipe.parentRecipeId && (
+      <div>
+        <label for="edit-variant-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Varianten-Tab Name
+        </label>
+        <input
+          type="text"
+          id="edit-variant-name"
+          value={recipe.variantName || ''}
+          placeholder="z.B. Vegan, Scharf, Ohne Zwiebeln"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Dieser Name wird im Varianten-Tab angezeigt.
+        </p>
+      </div>
+    )}
+
     <div>
       <label for="edit-title" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Titel</label>
       <input 

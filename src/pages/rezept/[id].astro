@@ -642,6 +642,7 @@ try {
           title: draft.title,
           subtitle: draft.subtitle,
           description: draft.description,
+          variantName: draft.variantName,
           metadata: draft.metadata,
           category: draft.category,
           tags: draft.tags,
@@ -654,6 +655,7 @@ try {
           title: originalRecipe.title,
           subtitle: originalRecipe.subtitle,
           description: originalRecipe.description,
+          variantName: originalRecipe.variantName,
           metadata: originalRecipe.metadata,
           category: originalRecipe.category,
           tags: originalRecipe.tags,
@@ -793,7 +795,16 @@ try {
           if (window.showSuccess) {
             await window.showSuccess('Rezept wurde erfolgreich gelöscht.');
           }
-          window.location.href = '/';
+          let nextUrl = '/rezepte';
+          try {
+            const data = await response.json();
+            if (data && typeof data.promotedOriginalRecipeId === 'string' && data.promotedOriginalRecipeId) {
+              nextUrl = `/rezept/${data.promotedOriginalRecipeId}`;
+            }
+          } catch {
+            // keep default /rezepte
+          }
+          window.location.href = nextUrl;
         } else {
           const error = await response.text();
           console.error('Server error:', error);
