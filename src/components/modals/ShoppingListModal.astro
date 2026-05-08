@@ -129,6 +129,7 @@ declare global {
             
             const button = document.createElement('button');
             button.className = 'w-full btn btn-secondary flex flex-col items-start p-3 hover:bg-gray-50 dark:hover:bg-gray-700';
+            button.dataset.listTitle = list.title;
             
             // Disable button if all recipes are already added
             if (allRecipesAdded) {
@@ -179,6 +180,20 @@ declare global {
             }
             
             existingLists.appendChild(button);
+          });
+          
+          // Highlight lists with today's date
+          const now = new Date();
+          const todayStr = [
+            String(now.getDate()).padStart(2, '0'),
+            String(now.getMonth() + 1).padStart(2, '0'),
+            now.getFullYear()
+          ].join('.');
+          existingLists.querySelectorAll('button[data-list-title]').forEach((btn) => {
+            const title = (btn as HTMLElement).dataset.listTitle || '';
+            if (title.includes(todayStr)) {
+              btn.classList.add('shopping-list-today');
+            }
           });
         }
       }
@@ -312,4 +327,15 @@ declare global {
     }
   });
 </script>
+
+<style is:global>
+  #existing-lists button.shopping-list-today {
+    border: 2px solid #f97316 !important;
+    background: linear-gradient(135deg, rgb(255 247 237 / 0.9) 0%, rgb(255 237 213 / 0.7) 100%) !important;
+  }
+  .dark #existing-lists button.shopping-list-today {
+    background: linear-gradient(135deg, rgb(127 29 29 / 0.35) 0%, rgb(154 52 18 / 0.3) 100%) !important;
+    border-color: #fb923c !important;
+  }
+</style>
 
