@@ -1539,9 +1539,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         const labelHtml = sel.label
           ? `<div class="px-3 py-1 text-xs text-gray-500 dark:text-gray-400">${sel.label}</div>`
           : '';
-        menu.innerHTML = labelHtml + sel.options.map(o => `
-          <button type="button" class="alt-option-btn w-full text-left px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 ${o.id === currentOption ? 'font-semibold text-purple-600 dark:text-purple-400' : 'text-gray-800 dark:text-gray-200'}" data-option-id="${o.id}">${o.id === currentOption ? '✓ ' : ''}${o.name}</button>
-        `).join('');
+        menu.innerHTML = labelHtml + sel.options.map(o => {
+          const desc = o.description ? o.description.trim() : '';
+          const optLabel = desc ? `${o.name} (${desc})` : o.name;
+          return `
+          <button type="button" class="alt-option-btn w-full text-left px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 ${o.id === currentOption ? 'font-semibold text-purple-600 dark:text-purple-400' : 'text-gray-800 dark:text-gray-200'}" data-option-id="${o.id}">${o.id === currentOption ? '✓ ' : ''}${escapeHtml(optLabel)}</button>
+        `;
+        }).join('');
         document.body.appendChild(menu);
 
         const rect = btn.getBoundingClientRect();

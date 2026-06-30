@@ -125,7 +125,7 @@ export interface ShoppingListAlternativeSelection {
   groupId: string;
   label?: string;
   selectedOptionId: string;
-  options: { id: string; name: string }[];
+  options: { id: string; name: string; description?: string }[];
 }
 
 export interface ShoppingListRecipe {
