@@ -1,0 +1,245 @@
+---
+// Dynamically populates the alternative-group and dependency dropdowns in the
+// recipe editor based on the current DOM state, and keeps them in sync.
+---
+
+<script>
+  (function () {
+    const ING_CONTAINER = '#ingredients-edit-container';
+    const PREP_CONTAINER = '#preparation-edit-container';
+
+    function genId() {
+      try {
+        return crypto.randomUUID();
+      } catch (e) {
+        return 'grp-' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
+      }
+    }
+
+    // Collect alternative groups + options from the current ingredient DOM.
+    function collectAltState() {
+      const items = Array.from(document.querySelectorAll(`${ING_CONTAINER} .ingredient-edit-item`));
+      const groupOrder: string[] = [];
+      const groupLabels: Record<string, string> = {};
+      const options: { id: string; name: string; groupId: string }[] = [];
+
+      items.forEach((item) => {
+        const el = item as HTMLElement;
+        const sel = el.querySelector('.alt-group-select') as HTMLSelectElement | null;
+        let gid = sel && sel.value ? sel.value : (el.dataset.altGroup || '');
+        if (gid === '__new__') gid = el.dataset.altGroup || '';
+        if (!gid) return;
+        if (!groupOrder.includes(gid)) groupOrder.push(gid);
+        const labelInput = el.querySelector('.alt-label-input') as HTMLInputElement | null;
+        const lbl = labelInput && labelInput.value.trim();
+        if (lbl && !groupLabels[gid]) groupLabels[gid] = lbl;
+        const nameInput = el.querySelector('.ingredient-name-input') as HTMLInputElement | null;
+        options.push({
+          id: el.dataset.ingredientId || '',
+          name: (nameInput && nameInput.value.trim()) || '(Zutat)',
+          groupId: gid,
+        });
+      });
+
+      groupOrder.forEach((gid, i) => {
+        if (!groupLabels[gid]) groupLabels[gid] = 'Alternative ' + (i + 1);
+      });
+
+      return { groupOrder, groupLabels, options };
+    }
+
+    // Inject dependency controls into preparation steps/groups if missing,
+    // so server-rendered and dynamically added prep items behave consistently.
+    function ensurePrepControls() {
+      document.querySelectorAll(`${PREP_CONTAINER} .step-edit-item`).forEach((node) => {
+        const step = node as HTMLElement;
+        if (step.querySelector('.visible-when-select')) return;
+        const label = document.createElement('label');
+        label.className = 'step-dependency-control flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400';
+        label.innerHTML =
+          '<span>Nur anzeigen wenn</span>' +
+          '<select class="visible-when-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-green-500"><option value="">— immer —</option></select>';
+        step.appendChild(label);
+      });
+
+      document
+        .querySelectorAll(
+          `${PREP_CONTAINER} .preparation-group-edit:not(.default-group), ${PREP_CONTAINER} .nested-preparation-group-edit`,
+        )
+        .forEach((node) => {
+          const group = node as HTMLElement;
+          // Only consider the group's own control (direct child), not nested ones.
+          const existing = Array.from(group.children).some((c) =>
+            (c as HTMLElement).classList?.contains('group-dependency-control'),
+          );
+          if (existing) return;
+          const label = document.createElement('label');
+          label.className = 'group-dependency-control flex items-center gap-2 mb-3 text-xs text-gray-500 dark:text-gray-400';
+          label.innerHTML =
+            '<span>Nur anzeigen wenn</span>' +
+            '<select class="group-visible-when-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-green-500"><option value="">— immer —</option></select>';
+          const stepsList = Array.from(group.children).find((c) =>
+            (c as HTMLElement).classList?.contains('steps-list'),
+          );
+          if (stepsList) {
+            group.insertBefore(label, stepsList);
+          } else {
+            group.appendChild(label);
+          }
+        });
+    }
+
+    function refreshAltControls() {
+      ensurePrepControls();
+      const { groupOrder, groupLabels, options } = collectAltState();
+
+      // 1) Alternative-group selects (ingredient level only).
+      document.querySelectorAll(`${ING_CONTAINER} .alt-group-select`).forEach((node) => {
+        const sel = node as HTMLSelectElement;
+        const item = sel.closest('.ingredient-edit-item') as HTMLElement | null;
+        let desired = sel.value || (item && item.dataset.altGroup) || '';
+        if (desired === '__new__') desired = (item && item.dataset.altGroup) || '';
+
+        sel.innerHTML = '';
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = '— keine —';
+        sel.appendChild(none);
+        groupOrder.forEach((gid) => {
+          const o = document.createElement('option');
+          o.value = gid;
+          o.textContent = groupLabels[gid];
+          sel.appendChild(o);
+        });
+        const neu = document.createElement('option');
+        neu.value = '__new__';
+        neu.textContent = '＋ Neue Gruppe';
+        sel.appendChild(neu);
+
+        sel.value = desired && groupOrder.includes(desired) ? desired : '';
+        if (item) {
+          item.dataset.altGroup = sel.value;
+          const hasGroup = !!sel.value;
+          const defWrap = item.querySelector('.alt-default-wrap');
+          const lblWrap = item.querySelector('.alt-label-wrap');
+          if (defWrap) defWrap.classList.toggle('hidden', !hasGroup);
+          if (lblWrap) lblWrap.classList.toggle('hidden', !hasGroup);
+        }
+      });
+
+      // 2) Dependency selects (ingredient + step level) and group dependency selects.
+      const depSelects = document.querySelectorAll(
+        `${ING_CONTAINER} .visible-when-select, ${ING_CONTAINER} .group-visible-when-select, ` +
+        `${PREP_CONTAINER} .visible-when-select, ${PREP_CONTAINER} .group-visible-when-select`,
+      );
+      depSelects.forEach((node) => {
+        const sel = node as HTMLSelectElement;
+        const host = sel.closest('[data-visible-when]') as HTMLElement | null;
+        const ownItem = sel.closest('.ingredient-edit-item') as HTMLElement | null;
+        const excludeId = ownItem ? ownItem.dataset.ingredientId : undefined;
+        let desired = sel.value || (host && host.dataset.visibleWhen) || '';
+
+        sel.innerHTML = '';
+        const always = document.createElement('option');
+        always.value = '';
+        always.textContent = '— immer —';
+        sel.appendChild(always);
+        options.forEach((o) => {
+          if (excludeId && o.id === excludeId) return;
+          const opt = document.createElement('option');
+          opt.value = o.id;
+          const groupLabel = groupLabels[o.groupId];
+          opt.textContent = groupLabel ? `${o.name} (${groupLabel})` : o.name;
+          sel.appendChild(opt);
+        });
+
+        sel.value = desired && options.some((o) => o.id === desired) ? desired : '';
+        if (host) host.dataset.visibleWhen = sel.value;
+      });
+    }
+
+    (window as any).refreshAltControls = refreshAltControls;
+
+    // Event handling -------------------------------------------------------
+    let debounceTimer: number | null = null;
+    function debouncedRefresh() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(refreshAltControls, 150);
+    }
+
+    document.addEventListener('change', (e) => {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+
+      if (target.classList.contains('alt-group-select')) {
+        const sel = target as HTMLSelectElement;
+        const item = sel.closest('.ingredient-edit-item') as HTMLElement | null;
+        if (sel.value === '__new__' && item) {
+          item.dataset.altGroup = genId();
+        } else if (item) {
+          item.dataset.altGroup = sel.value;
+        }
+        refreshAltControls();
+      } else if (
+        target.classList.contains('visible-when-select') ||
+        target.classList.contains('group-visible-when-select')
+      ) {
+        const sel = target as HTMLSelectElement;
+        const host = sel.closest('[data-visible-when]') as HTMLElement | null;
+        if (host) host.dataset.visibleWhen = sel.value;
+      } else if (target.classList.contains('alt-default-checkbox')) {
+        const cb = target as HTMLInputElement;
+        if (cb.checked) {
+          const item = cb.closest('.ingredient-edit-item') as HTMLElement | null;
+          const gid = item && item.dataset.altGroup;
+          if (gid) {
+            // Ensure only one default per alternative group.
+            document.querySelectorAll(`${ING_CONTAINER} .ingredient-edit-item`).forEach((other) => {
+              const o = other as HTMLElement;
+              if (o !== item && o.dataset.altGroup === gid) {
+                const otherCb = o.querySelector('.alt-default-checkbox') as HTMLInputElement | null;
+                if (otherCb) otherCb.checked = false;
+              }
+            });
+          }
+        }
+      }
+    });
+
+    document.addEventListener('input', (e) => {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+      if (target.classList.contains('ingredient-name-input') || target.classList.contains('alt-label-input')) {
+        debouncedRefresh();
+      }
+    });
+
+    // Re-run when new ingredient/step/group elements are added.
+    function observe(containerId: string) {
+      const container = document.querySelector(containerId);
+      if (!container) return;
+      const observer = new MutationObserver((mutations) => {
+        let relevant = false;
+        mutations.forEach((m) => {
+          m.addedNodes.forEach((n) => {
+            if (n.nodeType === Node.ELEMENT_NODE) relevant = true;
+          });
+        });
+        if (relevant) debouncedRefresh();
+      });
+      observer.observe(container, { childList: true, subtree: true });
+    }
+
+    function init() {
+      refreshAltControls();
+      observe(ING_CONTAINER);
+      observe(PREP_CONTAINER);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  })();
+</script>

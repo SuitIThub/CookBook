@@ -23,17 +23,31 @@ export interface Quantity {
   unit: string;
 }
 
+// Condition that controls whether an item (ingredient, group, step) is shown.
+// The item is visible only when one of the referenced alternative options
+// (identified by the Ingredient.id of the alternative) is currently selected.
+export interface VisibilityCondition {
+  optionIds: string[];
+}
+
 export interface Ingredient {
   id: string;
   name: string;
   description?: string;
   quantities: Quantity[];
+  // Alternatives: ingredients sharing the same alternativeGroupId are mutually
+  // exclusive alternatives. Exactly one of them should be marked as default.
+  alternativeGroupId?: string;
+  isAlternativeDefault?: boolean;
+  alternativeGroupLabel?: string; // Optional label for the alternative set (e.g. "Mehl-Variante")
+  visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
 }
 
 export interface IngredientGroup {
   id: string;
   title?: string;
   ingredients: (Ingredient | IngredientGroup)[];
+  visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
 }
 
 export interface IntermediateIngredient {
@@ -55,12 +69,14 @@ export interface PreparationStep {
   intermediateIngredients: IntermediateIngredient[]; // New: intermediate ingredients for this step
   timeInSeconds?: number;
   timer?: number; // Timer duration in minutes
+  visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
 }
 
 export interface PreparationGroup {
   id: string;
   title?: string;
   steps: (PreparationStep | PreparationGroup)[];
+  visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
 }
 
 export interface RecipeImage {
@@ -100,6 +116,16 @@ export interface ShoppingListItem {
   recipeIngredientId?: string; // Optional: Original Ingredient ID aus dem Rezept
   manualGroupId?: string; // Optional: ID for manually grouped items
   note?: string; // Optional: rich text note for this product (HTML from TinyMCE)
+  alternativeGroupId?: string; // Optional: marks item as belonging to an alternative set
+  alternativeOptionId?: string; // Optional: the selected option (Ingredient.id) this item came from
+}
+
+// Persisted alternative selection for a recipe within a shopping list.
+export interface ShoppingListAlternativeSelection {
+  groupId: string;
+  label?: string;
+  selectedOptionId: string;
+  options: { id: string; name: string }[];
 }
 
 export interface ShoppingListRecipe {
@@ -109,6 +135,7 @@ export interface ShoppingListRecipe {
   currentServings?: number; // Optional: current number of servings (defaults to servings if not set)
   isCompleted: boolean; // Ob alle Zutaten des Rezepts markiert sind
   addedAt: Date;
+  alternativeSelections?: ShoppingListAlternativeSelection[]; // Optional: chosen alternatives per set
 }
 
 export interface ShoppingList {

@@ -109,20 +109,32 @@ export const POST: APIRoute = async ({ request }) => {
 
     // Process and save imported recipes
     const createdRecipes = [];
+    // Map old recipe IDs (from the file) to the newly generated IDs so that
+    // variant relationships (parentRecipeId) can be re-linked within this import batch.
+    const recipeIdMap = new Map<string, string>();
+    // Variants whose parent link still needs to be resolved after all recipes exist.
+    const pendingVariants: { recipe: any; oldParentId: string }[] = [];
     
     for (const recipeData of importedRecipes) {
       // Create mapping of old IDs to new IDs for both regular and intermediate ingredients
       const ingredientIdMap = new Map<string, string>();
       const intermediateIdMap = new Map<string, string>();
+      const altGroupIdMap = new Map<string, string>();
       
-      // Process ingredient groups and create ID mapping
-      const newIngredientGroups = mapIngredientsWithNewIds(recipeData.ingredientGroups || [], ingredientIdMap);
+      // Process ingredient groups and create ID mapping (also remaps alternative group ids)
+      const newIngredientGroups = mapIngredientsWithNewIds(recipeData.ingredientGroups || [], ingredientIdMap, altGroupIdMap);
+
+      // Second pass: remap visibleWhen.optionIds now that all ingredient IDs are known.
+      remapVisibleWhenInIngredients(newIngredientGroups, ingredientIdMap);
       
       // Process preparation groups and update linkedIngredients references
       const newPreparationGroups = mapPreparationWithUpdatedLinks(recipeData.preparationGroups || [], ingredientIdMap, intermediateIdMap);
       
       console.log(`Mapped ${ingredientIdMap.size} ingredient IDs and ${intermediateIdMap.size} intermediate ingredient IDs for recipe: ${recipeData.title}`);
       
+      const oldRecipeId = recipeData.id;
+      const oldParentId = recipeData.parentRecipeId;
+
       // Generate new ID to avoid conflicts
       const newRecipeData = {
         ...recipeData,
@@ -130,12 +142,37 @@ export const POST: APIRoute = async ({ request }) => {
         createdAt: undefined,
         updatedAt: undefined,
         ingredientGroups: newIngredientGroups,
-        preparationGroups: newPreparationGroups
+        preparationGroups: newPreparationGroups,
+        // Resolve the parent link in a second pass once all new IDs are known.
+        parentRecipeId: undefined
       };
       
       // Create the recipe
       const createdRecipe = db.createRecipe(newRecipeData);
+      if (oldRecipeId) {
+        recipeIdMap.set(oldRecipeId, createdRecipe.id);
+      }
+      if (oldParentId) {
+        pendingVariants.push({ recipe: createdRecipe, oldParentId });
+      }
       createdRecipes.push(createdRecipe);
+    }
+
+    // Re-link variants now that every imported recipe has a new ID.
+    for (const { recipe, oldParentId } of pendingVariants) {
+      const newParentId = recipeIdMap.get(oldParentId);
+      if (newParentId) {
+        // Parent was part of the same import: keep the variant relationship.
+        db.updateRecipe(recipe.id, { parentRecipeId: newParentId });
+        recipe.parentRecipeId = newParentId;
+      } else {
+        // Parent is not part of this import (e.g. a single variant was exported):
+        // promote the variant to a standalone recipe so it shows up in the list
+        // instead of getting stuck in a broken original/variant state.
+        db.updateRecipe(recipe.id, { parentRecipeId: undefined, variantName: undefined });
+        recipe.parentRecipeId = undefined;
+        recipe.variantName = undefined;
+      }
     }
 
     // Count total images processed
@@ -162,7 +199,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
 };
 
-function mapIngredientsWithNewIds(items: any[], idMap: Map<string, string>): any[] {
+function mapIngredientsWithNewIds(items: any[], idMap: Map<string, string>, altGroupIdMap: Map<string, string>): any[] {
   return items.map(item => {
     const oldId = item.id;
     const newId = uuidv4();
@@ -173,19 +210,51 @@ function mapIngredientsWithNewIds(items: any[], idMap: Map<string, string>): any
     }
     
     const newItem = { ...item, id: newId };
+
+    // Remap the alternative group id consistently across the recipe.
+    if (item.alternativeGroupId) {
+      let mapped = altGroupIdMap.get(item.alternativeGroupId);
+      if (!mapped) {
+        mapped = uuidv4();
+        altGroupIdMap.set(item.alternativeGroupId, mapped);
+      }
+      newItem.alternativeGroupId = mapped;
+    }
     
     // Recursively handle nested structures
     if (item.ingredients) {
-      newItem.ingredients = mapIngredientsWithNewIds(item.ingredients, idMap);
+      newItem.ingredients = mapIngredientsWithNewIds(item.ingredients, idMap, altGroupIdMap);
     }
     
     return newItem;
   });
 }
 
+// Remap visibleWhen.optionIds (which reference ingredient ids) to the new ids.
+function remapVisibleWhen(node: any, idMap: Map<string, string>): void {
+  if (node && node.visibleWhen && Array.isArray(node.visibleWhen.optionIds)) {
+    node.visibleWhen = {
+      ...node.visibleWhen,
+      optionIds: node.visibleWhen.optionIds.map((oid: string) => idMap.get(oid) || oid),
+    };
+  }
+}
+
+function remapVisibleWhenInIngredients(items: any[], idMap: Map<string, string>): void {
+  items.forEach((item) => {
+    remapVisibleWhen(item, idMap);
+    if (item.ingredients) {
+      remapVisibleWhenInIngredients(item.ingredients, idMap);
+    }
+  });
+}
+
 function mapPreparationWithUpdatedLinks(items: any[], ingredientIdMap: Map<string, string>, intermediateIdMap: Map<string, string>): any[] {
   return items.map(item => {
     const newItem = { ...item, id: uuidv4() };
+
+    // Remap visibleWhen dependencies (reference ingredient ids).
+    remapVisibleWhen(newItem, ingredientIdMap);
     
     // Handle preparation steps
     if (item.steps) {

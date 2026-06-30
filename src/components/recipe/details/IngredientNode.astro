@@ -1,0 +1,111 @@
+---
+import type { Ingredient, IngredientGroup } from '../../../types/recipe';
+import type { AlternativeGroupInfo, AlternativeSelection } from '../../../lib/alternatives';
+import { formatQuantity } from '../../../lib/units';
+import Self from './IngredientNode.astro';
+import { isNodeVisible, isVisibleWhenSatisfied } from '../../../lib/alternatives';
+
+interface Props {
+  item: Ingredient | IngredientGroup;
+  selection: AlternativeSelection;
+  optionToGroup: Map<string, string>;
+  groups: Map<string, AlternativeGroupInfo>;
+  depth?: number;
+}
+
+const { item, selection, optionToGroup, groups, depth = 0 } = Astro.props;
+
+function formatQuantityForDisplay(amount: number, unit: string): { amount: number; unit: string } {
+  if (!unit || unit.trim() === '') {
+    return { amount, unit: '' };
+  }
+  const formatted = formatQuantity(amount, unit);
+  return { amount: formatted.amount, unit: formatted.unit };
+}
+
+const isGroup = 'ingredients' in item;
+const visibleWhenAttr =
+  item.visibleWhen && item.visibleWhen.optionIds && item.visibleWhen.optionIds.length > 0
+    ? JSON.stringify(item.visibleWhen.optionIds)
+    : undefined;
+---
+
+{isGroup ? (
+  (() => {
+    const group = item as IngredientGroup;
+    const visible = isVisibleWhenSatisfied(group.visibleWhen, selection, optionToGroup);
+    return (
+      <li
+        class:list={["recipe-ing-node py-2", { hidden: !visible }]}
+        data-node-type="group"
+        data-group-id={group.id}
+        data-visible-when={visibleWhenAttr}
+      >
+        {group.title && (
+          <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2 text-sm">{group.title}</h4>
+        )}
+        <ul class="space-y-2 ml-4">
+          {(group.ingredients || []).map((child) => (
+            <Self item={child} selection={selection} optionToGroup={optionToGroup} groups={groups} depth={depth + 1} />
+          ))}
+        </ul>
+      </li>
+    );
+  })()
+) : (
+  (() => {
+    const ingredient = item as Ingredient;
+    const visible = isNodeVisible(ingredient, selection, optionToGroup);
+    const altGroupId = ingredient.alternativeGroupId;
+    const altInfo = altGroupId ? groups.get(altGroupId) : undefined;
+    return (
+      <li
+        class:list={[
+          "recipe-ingredient-row flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors",
+          { hidden: !visible },
+        ]}
+        data-ingredient-id={ingredient.id}
+        data-alternative-group={altGroupId}
+        data-option-id={altGroupId ? ingredient.id : undefined}
+        data-visible-when={visibleWhenAttr}
+      >
+        <div class="flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-medium text-gray-900 dark:text-white">{ingredient.name}</span>
+            {altInfo && altInfo.options.length > 1 && (
+              <select
+                class="alternative-select text-xs border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                data-alternative-group={altGroupId}
+                title="Alternative wählen"
+              >
+                {altInfo.options.map((opt) => (
+                  <option value={opt.id} selected={selection[altGroupId!] === opt.id}>{opt.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          {ingredient.description && (
+            <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{ingredient.description}</div>
+          )}
+        </div>
+        <div class="flex space-x-2">
+          {(ingredient.quantities || []).map((qty) => {
+            if (qty.amount > 0 || (qty.unit && qty.unit.trim() !== '')) {
+              const formatted = formatQuantityForDisplay(qty.amount, qty.unit);
+              return (
+                <span
+                  class="ingredient-amount text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
+                  data-original-amount={qty.amount}
+                  data-unit={qty.unit}
+                >
+                  <span class="amount-value">{formatted.amount}</span> {formatted.unit}
+                </span>
+              );
+            }
+            return null;
+          })}
+        </div>
+      </li>
+    );
+  })()
+)}

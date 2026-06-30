@@ -6,6 +6,7 @@ import IngredientsEdit from './IngredientsEdit.astro';
 import PreparationEdit from './PreparationEdit.astro';
 import IngredientLinkingScript from './IngredientLinkingScript.astro';
 import IngredientSuggestionScript from './IngredientSuggestionScript.astro';
+import AlternativeEditScript from './AlternativeEditScript.astro';
 import RecipeImageGallery from '../RecipeImageGallery.astro';
 
 interface Props {
@@ -29,6 +30,9 @@ const { recipe } = Astro.props;
   
   <!-- Include the ingredient suggestion functionality -->
   <IngredientSuggestionScript />
+
+  <!-- Alternative ingredients + dependency dropdown management -->
+  <AlternativeEditScript />
 </div>
 
 <script define:vars={{ recipe }}>
@@ -1123,7 +1127,7 @@ const { recipe } = Astro.props;
 
   function createIngredientEditElement(id, name, amount, unit, description = '') {
     return `
-      <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" data-ingredient-id="${id}">
+      <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id="${id}" data-alt-group="" data-visible-when="">
         <div class="space-y-3">
           <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
             <div class="flex-1 relative">
@@ -1165,6 +1169,31 @@ const { recipe } = Astro.props;
               class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
             />
           </div>
+          <details class="ingredient-alt-controls mt-2 border-t border-gray-200 dark:border-gray-600 pt-2">
+            <summary class="text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">Alternative & Abhängigkeit</summary>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <label class="flex flex-col gap-1">
+                <span class="text-gray-600 dark:text-gray-400">Alternativ-Gruppe</span>
+                <select class="alt-group-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-orange-500">
+                  <option value="">— keine —</option>
+                </select>
+              </label>
+              <label class="alt-default-wrap hidden flex-col gap-1">
+                <span class="text-gray-600 dark:text-gray-400">Standard-Alternative</span>
+                <span class="flex items-center gap-1"><input type="checkbox" class="alt-default-checkbox" /> <span class="text-gray-500 dark:text-gray-400">als Standard anzeigen</span></span>
+              </label>
+              <label class="alt-label-wrap hidden flex-col gap-1">
+                <span class="text-gray-600 dark:text-gray-400">Bezeichnung der Gruppe</span>
+                <input type="text" class="alt-label-input px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs" placeholder="z.B. Mehl-Variante" />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-gray-600 dark:text-gray-400">Nur anzeigen wenn</span>
+                <select class="visible-when-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-orange-500">
+                  <option value="">— immer —</option>
+                </select>
+              </label>
+            </div>
+          </details>
         </div>
       </div>
     `;
@@ -1196,7 +1225,7 @@ const { recipe } = Astro.props;
       : 'ingredient-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200';
     
     return `
-      <div class="${containerClass}" data-group-id="${id}">
+      <div class="${containerClass}" data-group-id="${id}" data-visible-when="">
         <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
           <input 
             type="text" 
@@ -1224,7 +1253,14 @@ const { recipe } = Astro.props;
             </button>
           </div>
         </div>
-        
+
+        <label class="group-dependency-control flex items-center gap-2 mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <span>Nur anzeigen wenn</span>
+          <select class="group-visible-when-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-orange-500">
+            <option value="">— immer —</option>
+          </select>
+        </label>
+
         <div class="ingredients-list space-y-3 ${isNested ? 'ml-2' : ''}">
         </div>
         
@@ -1334,7 +1370,7 @@ const { recipe } = Astro.props;
 
   function createStepEditElement(id, text, stepNumber) {
     return `
-      <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id="${id}">
+      <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id="${id}" data-visible-when="">
         <div class="flex items-start space-x-3">
           <div class="flex items-center space-x-2">
             <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">
@@ -1439,7 +1475,7 @@ const { recipe } = Astro.props;
       : 'preparation-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200';
     
     return `
-      <div class="${containerClass}" data-group-id="${id}">
+      <div class="${containerClass}" data-group-id="${id}" data-visible-when="">
         <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
           <input 
             type="text" 
@@ -1646,12 +1682,16 @@ const { recipe } = Astro.props;
               });
             }
             
-            items.push({
+            const stepObj = {
               id: stepId || generateId(),
               text: stepText || '',
               linkedIngredients: linkedIngredients,
               intermediateIngredients: intermediateIngredients
-            });
+            };
+            const stepDepSelect = child.querySelector('.visible-when-select');
+            const stepVw = stepDepSelect ? stepDepSelect.value : (child.dataset.visibleWhen || '');
+            if (stepVw) stepObj.visibleWhen = { optionIds: [stepVw] };
+            items.push(stepObj);
           }
         }
         // Check if it's a nested group
@@ -1665,11 +1705,15 @@ const { recipe } = Astro.props;
           
           // Only add nested group if it has items or a title
           if (nestedItems.length > 0 || nestedGroupTitle) {
-            items.push({
+            const nestedGroupObj = {
               id: nestedGroupId,
               title: nestedGroupTitle,
               steps: nestedItems
-            });
+            };
+            const nestedDepSelect = child.querySelector('.group-visible-when-select');
+            const nestedVw = nestedDepSelect ? nestedDepSelect.value : (child.dataset.visibleWhen || '');
+            if (nestedVw) nestedGroupObj.visibleWhen = { optionIds: [nestedVw] };
+            items.push(nestedGroupObj);
           }
         }
       });
@@ -1692,11 +1736,17 @@ const { recipe } = Astro.props;
       
       // Add group if it has items or a title
       if (items.length > 0 || (groupTitle && groupTitle.length > 0)) {
-        preparationGroups.push({
+        const prepGroupObj = {
           id: groupElement.dataset.groupId || generateId(),
           title: groupTitle,
           steps: items
-        });
+        };
+        if (!isDefaultGroup) {
+          const headerDepSelect = groupElement.querySelector('.group-visible-when-select');
+          const groupVw = headerDepSelect ? headerDepSelect.value : (groupElement.dataset.visibleWhen || '');
+          if (groupVw) prepGroupObj.visibleWhen = { optionIds: [groupVw] };
+        }
+        preparationGroups.push(prepGroupObj);
       }
     });
     
@@ -1951,7 +2001,7 @@ const { recipe } = Astro.props;
           
           // Only add ingredients with a name
           if (name) {
-            items.push({
+            const ingredientObj = {
               id: ingredientId || generateId(),
               name: name,
               description: description || undefined,
@@ -1959,7 +2009,31 @@ const { recipe } = Astro.props;
                 amount: amount,
                 unit: unit
               }]
-            });
+            };
+
+            // Alternative & dependency fields
+            const altGroupSelect = child.querySelector('.alt-group-select');
+            const altDefaultCheckbox = child.querySelector('.alt-default-checkbox');
+            const altLabelInput = child.querySelector('.alt-label-input');
+            const visibleWhenSelect = child.querySelector('.visible-when-select');
+
+            let altGroupId = altGroupSelect ? altGroupSelect.value : (child.dataset.altGroup || '');
+            if (altGroupId === '__new__') altGroupId = child.dataset.altGroup || '';
+            if (altGroupId) {
+              ingredientObj.alternativeGroupId = altGroupId;
+              if (altDefaultCheckbox && altDefaultCheckbox.checked) {
+                ingredientObj.isAlternativeDefault = true;
+              }
+              const lbl = altLabelInput?.value.trim();
+              if (lbl) ingredientObj.alternativeGroupLabel = lbl;
+            }
+
+            const vw = visibleWhenSelect ? visibleWhenSelect.value : (child.dataset.visibleWhen || '');
+            if (vw) {
+              ingredientObj.visibleWhen = { optionIds: [vw] };
+            }
+
+            items.push(ingredientObj);
           }
         }
         // Check if it's a nested group
@@ -1973,11 +2047,15 @@ const { recipe } = Astro.props;
           
           // Only add nested group if it has items or a title
           if (nestedItems.length > 0 || nestedGroupTitle) {
-            items.push({
+            const nestedGroupObj = {
               id: nestedGroupId,
               title: nestedGroupTitle,
               ingredients: nestedItems
-            });
+            };
+            const nestedDepSelect = child.querySelector('.group-visible-when-select');
+            const nestedVw = nestedDepSelect ? nestedDepSelect.value : (child.dataset.visibleWhen || '');
+            if (nestedVw) nestedGroupObj.visibleWhen = { optionIds: [nestedVw] };
+            items.push(nestedGroupObj);
           }
         }
       });
@@ -2000,11 +2078,17 @@ const { recipe } = Astro.props;
       
       // Only add groups that have items or a title
       if (items.length > 0 || (groupTitle && groupTitle.length > 0)) {
-        ingredientGroups.push({
+        const groupObj = {
           id: groupElement.dataset.groupId || generateId(),
           title: groupTitle,
           ingredients: items
-        });
+        };
+        if (!isDefaultGroup) {
+          const headerDepSelect = groupElement.querySelector('.group-visible-when-select');
+          const groupVw = headerDepSelect ? headerDepSelect.value : (groupElement.dataset.visibleWhen || '');
+          if (groupVw) groupObj.visibleWhen = { optionIds: [groupVw] };
+        }
+        ingredientGroups.push(groupObj);
       }
     });
     

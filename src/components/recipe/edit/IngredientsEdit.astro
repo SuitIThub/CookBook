@@ -1,5 +1,7 @@
 ---
 import type { Recipe, Ingredient } from '../../../types/recipe';
+import IngredientAltControls from './IngredientAltControls.astro';
+import GroupDependencyControl from './GroupDependencyControl.astro';
 
 interface Props {
   recipe: Recipe;
@@ -42,7 +44,7 @@ const { recipe } = Astro.props;
         {recipe.ingredientGroups.map((group) => 
           !group.title ? group.ingredients.map((ingredient) => (
             'name' in ingredient ? (
-              <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={(ingredient as Ingredient).id}>
+              <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={(ingredient as Ingredient).id} data-alt-group={(ingredient as Ingredient).alternativeGroupId} data-visible-when={(ingredient as Ingredient).visibleWhen?.optionIds?.[0]}>
                 <div class="space-y-3">
                   <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
                     <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
@@ -91,6 +93,7 @@ const { recipe } = Astro.props;
                       class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
                     />
                   </div>
+                  <IngredientAltControls ingredient={ingredient as Ingredient} />
                 </div>
               </div>
             ) : null
@@ -109,7 +112,7 @@ const { recipe } = Astro.props;
     <!-- Named ingredient groups -->
     {recipe.ingredientGroups.map((group, groupIndex) => 
       group.title ? (
-        <div class="ingredient-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-group-id={group.id}>
+        <div class="ingredient-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-group-id={group.id} data-visible-when={group.visibleWhen?.optionIds?.[0]}>
           <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
             <input 
               type="text" 
@@ -126,6 +129,7 @@ const { recipe } = Astro.props;
               </svg>
             </button>
           </div>
+          <GroupDependencyControl kind="ingredient" />
           
           <div class="ingredients-list space-y-3">
             {group.ingredients.map((item) => {
@@ -133,7 +137,7 @@ const { recipe } = Astro.props;
               if ('name' in item) {
                 const ingredient = item as Ingredient;
                 return (
-                  <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={ingredient.id}>
+                  <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={ingredient.id} data-alt-group={ingredient.alternativeGroupId} data-visible-when={ingredient.visibleWhen?.optionIds?.[0]}>
                     <div class="space-y-3">
                       <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
                         <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
@@ -182,6 +186,7 @@ const { recipe } = Astro.props;
                           class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
                         />
                       </div>
+                      <IngredientAltControls ingredient={ingredient} />
                     </div>
                   </div>
                 );
@@ -190,7 +195,7 @@ const { recipe } = Astro.props;
               else if ('ingredients' in item) {
                 const nestedGroup = item as any;
                 return (
-                  <div class="nested-ingredient-group-edit border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700/30 transition-colors duration-200 ml-4" data-group-id={nestedGroup.id}>
+                  <div class="nested-ingredient-group-edit border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700/30 transition-colors duration-200 ml-4" data-group-id={nestedGroup.id} data-visible-when={nestedGroup.visibleWhen?.optionIds?.[0]}>
                     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
                       <input 
                         type="text" 
@@ -207,13 +212,14 @@ const { recipe } = Astro.props;
                         </svg>
                       </button>
                     </div>
+                    <GroupDependencyControl kind="ingredient" />
                     
                     <div class="ingredients-list space-y-3 ml-2">
                       {(nestedGroup.ingredients || []).map((nestedItem: any) => {
                         if ('name' in nestedItem) {
                           const nestedIngredient = nestedItem as Ingredient;
                           return (
-                            <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={nestedIngredient.id}>
+                            <div class="ingredient-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-ingredient-id={nestedIngredient.id} data-alt-group={nestedIngredient.alternativeGroupId} data-visible-when={nestedIngredient.visibleWhen?.optionIds?.[0]}>
                               <div class="space-y-3">
                                 <div class="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0 sm:items-center">
                                   <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400 mr-2">
@@ -262,6 +268,7 @@ const { recipe } = Astro.props;
                                     class="ingredient-description-input w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm"
                                   />
                                 </div>
+                                <IngredientAltControls ingredient={nestedIngredient} />
                               </div>
                             </div>
                           );

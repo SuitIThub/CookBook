@@ -42,7 +42,7 @@ const { recipe } = Astro.props;
         {recipe.preparationGroups.map((group) => 
           !group.title ? group.steps.map((step, stepIndex) => (
             'text' in step ? (
-              <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 sm:p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id={(step as PreparationStep).id}>
+              <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 sm:p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id={(step as PreparationStep).id} data-visible-when={(step as PreparationStep).visibleWhen?.optionIds?.[0]}>
                 <div class="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-3">
                   <div class="flex items-center space-x-2 sm:flex-col sm:space-x-0 sm:space-y-2">
                     <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">
@@ -197,7 +197,7 @@ const { recipe } = Astro.props;
     <!-- Named preparation groups -->
     {recipe.preparationGroups.map((group, groupIndex) => 
       group.title ? (
-        <div class="preparation-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200">
+        <div class="preparation-group-edit border border-gray-300 dark:border-gray-600 rounded-lg p-3 sm:p-4 bg-gray-50 dark:bg-gray-700/50 transition-colors duration-200" data-group-id={group.id} data-visible-when={group.visibleWhen?.optionIds?.[0]}>
           <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
             <input 
               type="text" 
@@ -226,7 +226,7 @@ const { recipe } = Astro.props;
                   stepCounter++;
                   const currentStepNumber = stepCounter;
                   return (
-                  <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 sm:p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id={step.id}>
+                  <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 sm:p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id={step.id} data-visible-when={step.visibleWhen?.optionIds?.[0]}>
                     <div class="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-3">
                       <div class="flex items-center space-x-2 sm:flex-col sm:space-x-0 sm:space-y-2">
                         <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">
@@ -371,7 +371,7 @@ const { recipe } = Astro.props;
               else if ('steps' in item) {
                 const nestedGroup = item as any;
                 return (
-                  <div class="nested-preparation-group-edit border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700/30 transition-colors duration-200 ml-4" data-group-id={nestedGroup.id}>
+                  <div class="nested-preparation-group-edit border border-gray-200 dark:border-gray-600 rounded-md p-3 bg-gray-100 dark:bg-gray-700/30 transition-colors duration-200 ml-4" data-group-id={nestedGroup.id} data-visible-when={nestedGroup.visibleWhen?.optionIds?.[0]}>
                     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 space-y-2 sm:space-y-0">
                       <input 
                         type="text" 
@@ -399,7 +399,7 @@ const { recipe } = Astro.props;
                             nestedStepCounter++;
                             const currentNestedStepNumber = nestedStepCounter;
                             return (
-                              <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 sm:p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id={nestedStep.id}>
+                              <div class="step-edit-item border border-gray-200 dark:border-gray-600 rounded-md p-3 sm:p-4 bg-white dark:bg-gray-800 transition-colors duration-200" draggable="true" data-step-id={nestedStep.id} data-visible-when={nestedStep.visibleWhen?.optionIds?.[0]}>
                                 <div class="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-3">
                                   <div class="flex items-center space-x-2 sm:flex-col sm:space-x-0 sm:space-y-2">
                                     <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400">

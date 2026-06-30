@@ -476,6 +476,29 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
     </div>
   </div>
 
+  <!-- Warning when switching an alternative removes already-checked items -->
+  <div id="alt-switch-warning-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Abgehakte Zutaten gehen verloren</h2>
+        <button type="button" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-sm text-gray-700 dark:text-gray-300 mb-3">
+          Durch das Wechseln der Alternative fallen die folgenden bereits abgehakten Zutaten aus der Liste:
+        </p>
+        <ul id="alt-switch-warning-list" class="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 mb-4 max-h-60 overflow-y-auto">
+          <!-- Filled by script -->
+        </ul>
+        <div class="flex gap-2">
+          <button type="button" id="alt-switch-confirm-btn" class="btn btn-danger">Trotzdem wechseln</button>
+          <button type="button" id="alt-switch-cancel-btn" class="btn btn-secondary">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
   <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList, isPermanentList: shoppingList.isPermanent ?? false, permanentType: shoppingList.permanentType ?? 0, permanentListSummary: permanentListSummary, globalTemplateSummary: globalTemplateSummary }}>
     // Variables are already defined via define:vars
@@ -1302,6 +1325,29 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
           const addNotePlusBtn = `
             <button type="button" class="item-add-note-plus add-note-plus-btn w-6 h-6 flex-shrink-0 flex items-center justify-center rounded text-gray-500 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-lg leading-none md:opacity-0 md:group-hover:opacity-100" data-item-ids="${itemIds}" title="Notiz hinzufügen" aria-label="Notiz hinzufügen">+</button>
           `;
+
+          // Alternative-switch button (shown for items that belong to an alternative set)
+          let altSwitchBtn = '';
+          const altItem = group.items.find(it => it.alternativeGroupId && it.recipeId);
+          if (altItem) {
+            const altRecipe = (shoppingListData.recipes || []).find(r => r.id === altItem.recipeId);
+            const altSel = altRecipe && altRecipe.alternativeSelections
+              ? altRecipe.alternativeSelections.find(s => s.groupId === altItem.alternativeGroupId)
+              : null;
+            if (altSel && altSel.options && altSel.options.length > 1) {
+              altSwitchBtn = `
+                <button type="button" class="alternative-switch-btn w-5 h-5 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200 transition-colors flex-shrink-0"
+                        data-recipe-id="${altItem.recipeId}"
+                        data-alt-group-id="${altItem.alternativeGroupId}"
+                        data-current-option="${altItem.alternativeOptionId || ''}"
+                        title="Alternative wechseln">
+                  <svg class="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m4 6H4m0 0l4 4m-4-4l4-4"/>
+                  </svg>
+                </button>
+              `;
+            }
+          }
           
           // Additional units display (boxes below, aligned with first unit)
           const additionalUnitsDisplay = hasMultipleUnits ? `
@@ -1407,6 +1453,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
                     </p>
                   ` : ''}
                   <div class="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                    ${altSwitchBtn}
                     ${recipeIds ? `
                       <button class="recipe-highlight-btn w-5 h-5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors flex-shrink-0" 
                               data-recipe-ids="${recipeIds}" 
@@ -1446,6 +1493,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         attachRecipeHighlightListeners();
         attachGroupSelectionListeners();
         attachNoteListeners();
+        attachAlternativeSwitchListeners();
         
         // Restore highlights if any recipe was selected
         if (currentlyHighlightedRecipe) {
@@ -1453,6 +1501,147 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         }
       }
       
+      // --- Alternative switching (shopping list) ---
+      let openAltMenuEl = null;
+      function closeAltMenu() {
+        if (openAltMenuEl) {
+          openAltMenuEl.remove();
+          openAltMenuEl = null;
+          document.removeEventListener('click', onDocClickCloseAlt);
+        }
+      }
+      function onDocClickCloseAlt(e) {
+        if (openAltMenuEl && !openAltMenuEl.contains(e.target)) closeAltMenu();
+      }
+
+      function attachAlternativeSwitchListeners() {
+        document.querySelectorAll('.alternative-switch-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAlternativeMenu(btn);
+          });
+        });
+      }
+
+      function openAlternativeMenu(btn) {
+        closeAltMenu();
+        const recipeId = btn.getAttribute('data-recipe-id');
+        const groupId = btn.getAttribute('data-alt-group-id');
+        const currentOption = btn.getAttribute('data-current-option');
+        const recipe = (shoppingListData.recipes || []).find(r => r.id === recipeId);
+        const sel = recipe && recipe.alternativeSelections
+          ? recipe.alternativeSelections.find(s => s.groupId === groupId)
+          : null;
+        if (!sel || !sel.options) return;
+
+        const menu = document.createElement('div');
+        menu.className = 'fixed z-[200] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 text-sm min-w-[160px] max-w-[260px]';
+        const labelHtml = sel.label
+          ? `<div class="px-3 py-1 text-xs text-gray-500 dark:text-gray-400">${sel.label}</div>`
+          : '';
+        menu.innerHTML = labelHtml + sel.options.map(o => `
+          <button type="button" class="alt-option-btn w-full text-left px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 ${o.id === currentOption ? 'font-semibold text-purple-600 dark:text-purple-400' : 'text-gray-800 dark:text-gray-200'}" data-option-id="${o.id}">${o.id === currentOption ? '✓ ' : ''}${o.name}</button>
+        `).join('');
+        document.body.appendChild(menu);
+
+        const rect = btn.getBoundingClientRect();
+        menu.style.top = (rect.bottom + 4) + 'px';
+        menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+        openAltMenuEl = menu;
+
+        menu.querySelectorAll('.alt-option-btn').forEach(ob => {
+          ob.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const optionId = ob.getAttribute('data-option-id');
+            closeAltMenu();
+            if (optionId === currentOption) return;
+            await requestSwitchAlternative(recipeId, groupId, optionId);
+          });
+        });
+
+        setTimeout(() => document.addEventListener('click', onDocClickCloseAlt), 0);
+      }
+
+      // Warn before switching if already-checked items would be removed.
+      let pendingAltSwitch = null;
+
+      function showAltSwitchWarning(removed, onConfirm) {
+        const modal = document.getElementById('alt-switch-warning-modal');
+        const list = document.getElementById('alt-switch-warning-list');
+        if (!modal || !list) { onConfirm(); return; }
+        list.innerHTML = removed.map(r => {
+          const amount = r.quantity && (r.quantity.amount || r.quantity.amount === 0)
+            ? `${r.quantity.amount}${r.quantity.unit ? ' ' + r.quantity.unit : ''} `
+            : '';
+          return `<li>${escapeHtml(amount)} ${escapeHtml(r.name)}</li>`;
+        }).join('');
+        pendingAltSwitch = onConfirm;
+        modal.classList.remove('hidden');
+      }
+
+      function closeAltSwitchWarning() {
+        const modal = document.getElementById('alt-switch-warning-modal');
+        if (modal) modal.classList.add('hidden');
+        pendingAltSwitch = null;
+      }
+
+      (function setupAltSwitchWarningModal() {
+        const modal = document.getElementById('alt-switch-warning-modal');
+        if (!modal) return;
+        const confirmBtn = document.getElementById('alt-switch-confirm-btn');
+        const cancelBtn = document.getElementById('alt-switch-cancel-btn');
+        confirmBtn?.addEventListener('click', () => {
+          const cb = pendingAltSwitch;
+          closeAltSwitchWarning();
+          if (cb) cb();
+        });
+        cancelBtn?.addEventListener('click', () => closeAltSwitchWarning());
+        modal.querySelector('.modal-overlay')?.addEventListener('click', () => closeAltSwitchWarning());
+        modal.querySelector('.modal-close')?.addEventListener('click', () => closeAltSwitchWarning());
+      })();
+
+      async function requestSwitchAlternative(recipeId, groupId, optionId) {
+        try {
+          const params = new URLSearchParams({ groupId, optionId });
+          const response = await fetch(`/api/shopping-lists/${shoppingListId}/recipes/${recipeId}/alternative?${params.toString()}`);
+          if (response.ok) {
+            const preview = await response.json();
+            const removed = (preview && preview.removedChecked) || [];
+            if (removed.length > 0) {
+              showAltSwitchWarning(removed, () => { switchAlternative(recipeId, groupId, optionId); });
+              return;
+            }
+          }
+        } catch (e) {
+          console.error('Error previewing alternative switch', e);
+        }
+        // No checked items lost (or preview failed) -> switch directly.
+        await switchAlternative(recipeId, groupId, optionId);
+      }
+
+      async function switchAlternative(recipeId, groupId, optionId) {
+        try {
+          const response = await fetch(`/api/shopping-lists/${shoppingListId}/recipes/${recipeId}/alternative`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupId, optionId })
+          });
+          if (response.ok) {
+            const updatedList = await response.json();
+            shoppingListData.items = updatedList.items;
+            shoppingListData.recipes = updatedList.recipes;
+            renderShoppingItems();
+            updateHeaderCounters();
+          } else {
+            const err = await response.json().catch(() => ({}));
+            alert(err.error || 'Fehler beim Wechseln der Alternative');
+          }
+        } catch (e) {
+          console.error('Error switching alternative', e);
+          alert('Fehler beim Wechseln der Alternative');
+        }
+      }
+
       // Function to attach group selection listeners
       function attachGroupSelectionListeners() {
         document.querySelectorAll('.group-selection-checkbox').forEach(checkbox => {

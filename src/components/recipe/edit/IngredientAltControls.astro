@@ -1,0 +1,41 @@
+---
+import type { Ingredient } from '../../../types/recipe';
+
+interface Props {
+  ingredient: Ingredient;
+}
+
+const { ingredient } = Astro.props;
+const hasGroup = !!ingredient.alternativeGroupId;
+const inputClass =
+  'px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-orange-500';
+---
+
+<details class="ingredient-alt-controls mt-2 border-t border-gray-200 dark:border-gray-600 pt-2" open={hasGroup || !!ingredient.visibleWhen}>
+  <summary class="text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">Alternative & Abhängigkeit</summary>
+  <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+    <label class="flex flex-col gap-1">
+      <span class="text-gray-600 dark:text-gray-400">Alternativ-Gruppe</span>
+      <select class={`alt-group-select ${inputClass}`}>
+        <option value="">— keine —</option>
+      </select>
+    </label>
+    <label class={`alt-default-wrap flex-col gap-1 ${hasGroup ? 'flex' : 'hidden'}`}>
+      <span class="text-gray-600 dark:text-gray-400">Standard-Alternative</span>
+      <span class="flex items-center gap-1">
+        <input type="checkbox" class="alt-default-checkbox" checked={!!ingredient.isAlternativeDefault} />
+        <span class="text-gray-500 dark:text-gray-400">als Standard anzeigen</span>
+      </span>
+    </label>
+    <label class={`alt-label-wrap flex-col gap-1 ${hasGroup ? 'flex' : 'hidden'}`}>
+      <span class="text-gray-600 dark:text-gray-400">Bezeichnung der Gruppe</span>
+      <input type="text" class={`alt-label-input ${inputClass}`} value={ingredient.alternativeGroupLabel || ''} placeholder="z.B. Mehl-Variante" />
+    </label>
+    <label class="flex flex-col gap-1">
+      <span class="text-gray-600 dark:text-gray-400">Nur anzeigen wenn</span>
+      <select class={`visible-when-select ${inputClass}`}>
+        <option value="">— immer —</option>
+      </select>
+    </label>
+  </div>
+</details>

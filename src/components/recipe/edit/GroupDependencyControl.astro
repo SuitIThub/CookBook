@@ -1,0 +1,15 @@
+---
+// Small dependency control ("Nur anzeigen wenn ...") for ingredient/preparation groups.
+interface Props {
+  kind?: 'ingredient' | 'preparation';
+}
+const { kind = 'ingredient' } = Astro.props;
+const ring = kind === 'preparation' ? 'focus:ring-green-500' : 'focus:ring-orange-500';
+---
+
+<label class="group-dependency-control flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
+  <span>Nur anzeigen wenn</span>
+  <select class={`group-visible-when-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 ${ring}`}>
+    <option value="">— immer —</option>
+  </select>
+</label>
