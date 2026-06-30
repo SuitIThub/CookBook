@@ -13,6 +13,7 @@ import type {
 export interface AlternativeOption {
   id: string;
   name: string;
+  description?: string;
 }
 
 export interface AlternativeGroupInfo {
@@ -314,14 +315,25 @@ export function buildShoppingAlternativeSelections(
   recipe: Recipe,
   selection?: AlternativeSelection,
 ): { groupId: string; label?: string; selectedOptionId: string; options: AlternativeOption[] }[] {
-  const sel = selection || getDefaultSelection(recipe);
+  const sel = resolveSelection(recipe, selection || getDefaultSelection(recipe));
+  const optionToGroup = getOptionToGroupMap(recipe);
+  const optionMeta = getAlternativeOptionMeta(recipe);
   const result: { groupId: string; label?: string; selectedOptionId: string; options: AlternativeOption[] }[] = [];
   for (const [groupId, info] of getAlternativeGroups(recipe)) {
+    // Only expose options whose own dependency is satisfied under the current
+    // selection, and enrich them with the description for a distinguishable label.
+    const options: AlternativeOption[] = info.options
+      .filter((opt) => isVisibleWhenSatisfied(optionMeta.get(opt.id)?.visibleWhen, sel, optionToGroup))
+      .map((opt) => ({
+        id: opt.id,
+        name: opt.name,
+        description: optionMeta.get(opt.id)?.description,
+      }));
     result.push({
       groupId,
       label: info.label,
       selectedOptionId: sel[groupId] || info.defaultOptionId,
-      options: info.options,
+      options,
     });
   }
   return result;
