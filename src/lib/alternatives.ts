@@ -95,6 +95,94 @@ export function getOptionToGroupMap(recipe: Recipe): Map<string, string> {
   return map;
 }
 
+export interface AlternativeOptionMeta {
+  groupId: string;
+  name: string;
+  description?: string;
+  visibleWhen?: VisibilityCondition;
+}
+
+/**
+ * Per-option metadata (group, name, description and its own visibleWhen
+ * dependency) for every alternative ingredient in the recipe.
+ */
+export function getAlternativeOptionMeta(recipe: Recipe): Map<string, AlternativeOptionMeta> {
+  const map = new Map<string, AlternativeOptionMeta>();
+  const walk = (items: (Ingredient | IngredientGroup)[] | undefined): void => {
+    for (const item of items || []) {
+      if (isIngredientGroup(item)) {
+        walk(item.ingredients);
+        continue;
+      }
+      const ing = item as Ingredient;
+      if (ing.alternativeGroupId) {
+        map.set(ing.id, {
+          groupId: ing.alternativeGroupId,
+          name: ing.name,
+          description: ing.description,
+          visibleWhen: ing.visibleWhen,
+        });
+      }
+    }
+  };
+  for (const group of recipe.ingredientGroups || []) {
+    walk(group.ingredients);
+  }
+  return map;
+}
+
+/**
+ * Resolve a selection so that every alternative group's selected option is
+ * actually visible under the current selection (respecting each option's own
+ * `visibleWhen` dependency). Handles cascades: switching one group may hide the
+ * selected option of another group, which is then re-pointed to a visible one.
+ * The previous sub-choice is preserved best-effort by matching name+description
+ * (e.g. keeping "Beutel" vs "loose" when the governing alternative changes).
+ */
+export function resolveSelection(recipe: Recipe, selection: AlternativeSelection): AlternativeSelection {
+  const groups = getAlternativeGroups(recipe);
+  const optionToGroup = getOptionToGroupMap(recipe);
+  const optionMeta = getAlternativeOptionMeta(recipe);
+  const result: AlternativeSelection = { ...selection };
+
+  const optionVisible = (optionId: string, sel: AlternativeSelection): boolean => {
+    const meta = optionMeta.get(optionId);
+    if (!meta) return false;
+    return isVisibleWhenSatisfied(meta.visibleWhen, sel, optionToGroup);
+  };
+
+  // Iterate to a fixpoint because groups can depend on each other.
+  for (let iter = 0; iter < 20; iter++) {
+    let changed = false;
+    for (const [groupId, info] of groups) {
+      const current = result[groupId];
+      if (current && optionVisible(current, result)) continue;
+
+      const visibleOptions = info.options.filter((o) => optionVisible(o.id, result));
+      if (visibleOptions.length === 0) continue; // group fully hidden -> leave selection as-is
+
+      const currentMeta = current ? optionMeta.get(current) : undefined;
+      let pick: AlternativeOption | undefined;
+      if (currentMeta) {
+        pick = visibleOptions.find((o) => {
+          const m = optionMeta.get(o.id);
+          return m && m.name === currentMeta.name && (m.description || '') === (currentMeta.description || '');
+        });
+      }
+      if (!pick) {
+        pick = visibleOptions.find((o) => o.id === info.defaultOptionId) || visibleOptions[0];
+      }
+      if (pick && result[groupId] !== pick.id) {
+        result[groupId] = pick.id;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
+  return result;
+}
+
 /** The default selection: for each alternative group, the default option id. */
 export function getDefaultSelection(recipe: Recipe): AlternativeSelection {
   const selection: AlternativeSelection = {};
@@ -174,7 +262,7 @@ export function mergeSelection(recipe: Recipe, override?: AlternativeSelection |
  */
 export function filterRecipeBySelection(recipe: Recipe, selection?: AlternativeSelection): Recipe {
   const optionToGroup = getOptionToGroupMap(recipe);
-  const sel = selection || getDefaultSelection(recipe);
+  const sel = resolveSelection(recipe, selection || getDefaultSelection(recipe));
 
   const filterIngredients = (
     items: (Ingredient | IngredientGroup)[] | undefined,

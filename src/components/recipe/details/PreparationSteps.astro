@@ -1,6 +1,6 @@
 ---
 import type { Recipe, PreparationStep } from '../../../types/recipe';
-import { getOptionToGroupMap, getDefaultSelection, isVisibleWhenSatisfied } from '../../../lib/alternatives';
+import { getOptionToGroupMap, getDefaultSelection, resolveSelection, isVisibleWhenSatisfied } from '../../../lib/alternatives';
 
 interface Props {
   recipe: Recipe;
@@ -13,7 +13,7 @@ const preparationGroups = recipe?.preparationGroups || [];
 
 // Alternatives context for dependency-based visibility of steps/groups.
 const optionToGroup = getOptionToGroupMap(recipe);
-const defaultSelection = getDefaultSelection(recipe);
+const defaultSelection = resolveSelection(recipe, getDefaultSelection(recipe));
 
 function visibleWhenAttr(node: any): string | undefined {
   const ids = node?.visibleWhen?.optionIds;
