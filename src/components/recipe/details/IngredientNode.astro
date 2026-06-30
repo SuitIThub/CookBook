@@ -1,6 +1,6 @@
 ---
 import type { Ingredient, IngredientGroup } from '../../../types/recipe';
-import type { AlternativeGroupInfo, AlternativeSelection } from '../../../lib/alternatives';
+import type { AlternativeGroupInfo, AlternativeSelection, AlternativeOptionMeta } from '../../../lib/alternatives';
 import { formatQuantity } from '../../../lib/units';
 import Self from './IngredientNode.astro';
 import { isNodeVisible, isVisibleWhenSatisfied } from '../../../lib/alternatives';
@@ -10,10 +10,19 @@ interface Props {
   selection: AlternativeSelection;
   optionToGroup: Map<string, string>;
   groups: Map<string, AlternativeGroupInfo>;
+  optionMeta: Map<string, AlternativeOptionMeta>;
   depth?: number;
 }
 
-const { item, selection, optionToGroup, groups, depth = 0 } = Astro.props;
+const { item, selection, optionToGroup, groups, optionMeta, depth = 0 } = Astro.props;
+
+// Build a user-facing label for an alternative option (name + description when present).
+function optionLabel(optionId: string, fallbackName: string): string {
+  const meta = optionMeta.get(optionId);
+  const name = meta?.name ?? fallbackName;
+  const desc = meta?.description?.trim();
+  return desc ? `${name} (${desc})` : name;
+}
 
 function formatQuantityForDisplay(amount: number, unit: string): { amount: number; unit: string } {
   if (!unit || unit.trim() === '') {
@@ -46,7 +55,7 @@ const visibleWhenAttr =
         )}
         <ul class="space-y-2 ml-4">
           {(group.ingredients || []).map((child) => (
-            <Self item={child} selection={selection} optionToGroup={optionToGroup} groups={groups} depth={depth + 1} />
+            <Self item={child} selection={selection} optionToGroup={optionToGroup} groups={groups} optionMeta={optionMeta} depth={depth + 1} />
           ))}
         </ul>
       </li>
@@ -58,6 +67,12 @@ const visibleWhenAttr =
     const visible = isNodeVisible(ingredient, selection, optionToGroup);
     const altGroupId = ingredient.alternativeGroupId;
     const altInfo = altGroupId ? groups.get(altGroupId) : undefined;
+    // Only offer options whose own dependency is currently satisfied.
+    const visibleOptions = altInfo
+      ? altInfo.options.filter((opt) =>
+          isVisibleWhenSatisfied(optionMeta.get(opt.id)?.visibleWhen, selection, optionToGroup),
+        )
+      : [];
     return (
       <li
         class:list={[
@@ -67,19 +82,21 @@ const visibleWhenAttr =
         data-ingredient-id={ingredient.id}
         data-alternative-group={altGroupId}
         data-option-id={altGroupId ? ingredient.id : undefined}
+        data-option-name={altGroupId ? ingredient.name : undefined}
+        data-option-desc={altGroupId ? (ingredient.description || '') : undefined}
         data-visible-when={visibleWhenAttr}
       >
         <div class="flex-1">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-medium text-gray-900 dark:text-white">{ingredient.name}</span>
-            {altInfo && altInfo.options.length > 1 && (
+            {altInfo && visibleOptions.length > 1 && (
               <select
                 class="alternative-select text-xs border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
                 data-alternative-group={altGroupId}
                 title="Alternative wählen"
               >
-                {altInfo.options.map((opt) => (
-                  <option value={opt.id} selected={selection[altGroupId!] === opt.id}>{opt.name}</option>
+                {visibleOptions.map((opt) => (
+                  <option value={opt.id} selected={selection[altGroupId!] === opt.id}>{optionLabel(opt.id, opt.name)}</option>
                 ))}
               </select>
             )}

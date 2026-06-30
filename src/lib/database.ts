@@ -8,6 +8,7 @@ import {
   filterRecipeBySelection,
   buildShoppingAlternativeSelections,
   mergeSelection,
+  resolveSelection,
   type AlternativeSelection,
 } from './alternatives';
 
@@ -637,8 +638,8 @@ export class CookbookDatabase {
       ? `${recipe.title} - ${recipe.variantName}`
       : recipe.title;
 
-    // Determine the active alternative selection (defaults) and the alternatives metadata.
-    const selection = getDefaultSelection(recipe);
+    // Determine the active alternative selection (resolved defaults) and the alternatives metadata.
+    const selection = resolveSelection(recipe, getDefaultSelection(recipe));
     const alternativeSelections = buildShoppingAlternativeSelections(recipe, selection);
 
     // Add recipe to list
@@ -1144,7 +1145,7 @@ export class CookbookDatabase {
       override[s.groupId] = s.selectedOptionId;
     });
     override[groupId] = optionId;
-    const selection = mergeSelection(recipe, override);
+    const selection = resolveSelection(recipe, mergeSelection(recipe, override));
 
     // Preserve checked state best-effort, keyed by the source ingredient id.
     const checkedByIngredient = new Map<string, boolean>();

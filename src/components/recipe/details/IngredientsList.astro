@@ -4,7 +4,9 @@ import IngredientNode from './IngredientNode.astro';
 import {
   getAlternativeGroups,
   getOptionToGroupMap,
+  getAlternativeOptionMeta,
   getDefaultSelection,
+  resolveSelection,
   isVisibleWhenSatisfied,
 } from '../../../lib/alternatives';
 
@@ -36,7 +38,8 @@ const hasAnyIngredients = hasAnyIngredientsRecursive(ingredientGroups);
 // Alternatives context
 const groups = getAlternativeGroups(recipe);
 const optionToGroup = getOptionToGroupMap(recipe);
-const selection = getDefaultSelection(recipe);
+const optionMeta = getAlternativeOptionMeta(recipe);
+const selection = resolveSelection(recipe, getDefaultSelection(recipe));
 const hasAlternatives = groups.size > 0;
 ---
 
@@ -70,7 +73,7 @@ const hasAlternatives = groups.size > 0;
             data-visible-when={group.visibleWhen && group.visibleWhen.optionIds && group.visibleWhen.optionIds.length > 0 ? JSON.stringify(group.visibleWhen.optionIds) : undefined}
           >
             {(group.ingredients || []).map((item) => (
-              <IngredientNode item={item} selection={selection} optionToGroup={optionToGroup} groups={groups} depth={0} />
+              <IngredientNode item={item} selection={selection} optionToGroup={optionToGroup} groups={groups} optionMeta={optionMeta} depth={0} />
             ))}
           </ul>
         ))}
@@ -88,7 +91,7 @@ const hasAlternatives = groups.size > 0;
             </h3>
             <ul class="space-y-2">
               {(group.ingredients || []).map((item) => (
-                <IngredientNode item={item} selection={selection} optionToGroup={optionToGroup} groups={groups} depth={0} />
+                <IngredientNode item={item} selection={selection} optionToGroup={optionToGroup} groups={groups} optionMeta={optionMeta} depth={0} />
               ))}
             </ul>
           </div>
@@ -104,33 +107,15 @@ const hasAlternatives = groups.size > 0;
     const container = document.getElementById('ingredients-display');
     if (!container) return;
 
-    // optionId -> groupId, built from the rendered alternative selects/rows.
-    const optionToGroup = new Map<string, string>();
-    document.querySelectorAll<HTMLElement>('[data-alternative-group][data-option-id]').forEach((el) => {
-      const groupId = el.getAttribute('data-alternative-group');
-      const optionId = el.getAttribute('data-option-id');
-      if (groupId && optionId) optionToGroup.set(optionId, groupId);
-    });
-
-    // Initialize selection from server-provided default.
-    let selection: Record<string, string> = {};
-    try {
-      selection = JSON.parse(container.getAttribute('data-default-selection') || '{}');
-    } catch (e) {
-      selection = {};
+    interface OptionInfo {
+      id: string;
+      groupId: string;
+      name: string;
+      desc: string;
+      visibleWhen: string[] | null;
     }
 
-    function visibleWhenSatisfied(optionIds: string[] | null): boolean {
-      if (!optionIds || optionIds.length === 0) return true;
-      for (const oid of optionIds) {
-        const gid = optionToGroup.get(oid);
-        if (!gid) return true; // referenced option no longer exists -> dependency void
-        if (selection[gid] === oid) return true;
-      }
-      return false;
-    }
-
-    function parseVisibleWhen(el: Element): string[] | null {
+    function parseVisibleWhenAttr(el: Element): string[] | null {
       const raw = el.getAttribute('data-visible-when');
       if (!raw) return null;
       try {
@@ -141,27 +126,128 @@ const hasAlternatives = groups.size > 0;
       }
     }
 
+    // Build per-option metadata + the optionId -> groupId map from the rendered rows.
+    const optionToGroup = new Map<string, string>();
+    const groupOptions = new Map<string, OptionInfo[]>();
+    document.querySelectorAll<HTMLElement>('[data-alternative-group][data-option-id]').forEach((el) => {
+      const groupId = el.getAttribute('data-alternative-group');
+      const optionId = el.getAttribute('data-option-id');
+      if (!groupId || !optionId) return;
+      optionToGroup.set(optionId, groupId);
+      const info: OptionInfo = {
+        id: optionId,
+        groupId,
+        name: el.getAttribute('data-option-name') || '',
+        desc: el.getAttribute('data-option-desc') || '',
+        visibleWhen: parseVisibleWhenAttr(el),
+      };
+      const list = groupOptions.get(groupId) || [];
+      list.push(info);
+      groupOptions.set(groupId, list);
+    });
+
+    // Initialize selection from server-provided (already resolved) default.
+    let selection: Record<string, string> = {};
+    try {
+      selection = JSON.parse(container.getAttribute('data-default-selection') || '{}');
+    } catch (e) {
+      selection = {};
+    }
+
+    function visibleWhenSatisfied(optionIds: string[] | null, sel: Record<string, string>): boolean {
+      if (!optionIds || optionIds.length === 0) return true;
+      for (const oid of optionIds) {
+        const gid = optionToGroup.get(oid);
+        if (!gid) return true; // referenced option no longer exists -> dependency void
+        if (sel[gid] === oid) return true;
+      }
+      return false;
+    }
+
+    function optionVisible(opt: OptionInfo, sel: Record<string, string>): boolean {
+      return visibleWhenSatisfied(opt.visibleWhen, sel);
+    }
+
+    function optionLabel(opt: OptionInfo): string {
+      const desc = opt.desc.trim();
+      return desc ? `${opt.name} (${desc})` : opt.name;
+    }
+
+    // Resolve the selection so every group points at a currently-visible option,
+    // cascading across interdependent groups (mirrors server-side resolveSelection).
+    function resolveSelection(sel: Record<string, string>): Record<string, string> {
+      const result = { ...sel };
+      for (let iter = 0; iter < 20; iter++) {
+        let changed = false;
+        for (const [groupId, opts] of groupOptions) {
+          const current = result[groupId];
+          const currentOpt = current ? opts.find((o) => o.id === current) : undefined;
+          if (currentOpt && optionVisible(currentOpt, result)) continue;
+
+          const visibleOpts = opts.filter((o) => optionVisible(o, result));
+          if (visibleOpts.length === 0) continue;
+
+          let pick: OptionInfo | undefined;
+          if (currentOpt) {
+            pick = visibleOpts.find((o) => o.name === currentOpt.name && o.desc === currentOpt.desc);
+          }
+          if (!pick) {
+            pick = visibleOpts[0];
+          }
+          if (pick && result[groupId] !== pick.id) {
+            result[groupId] = pick.id;
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+      return result;
+    }
+
     function applyVisibility() {
       // Alternative ingredient rows: only the selected option of each group is shown.
       document.querySelectorAll<HTMLElement>('[data-alternative-group][data-option-id]').forEach((el) => {
         const groupId = el.getAttribute('data-alternative-group')!;
         const optionId = el.getAttribute('data-option-id')!;
         const isSelectedOption = selection[groupId] === optionId;
-        const dependencyOk = visibleWhenSatisfied(parseVisibleWhen(el));
+        const dependencyOk = visibleWhenSatisfied(parseVisibleWhenAttr(el), selection);
         el.classList.toggle('hidden', !(isSelectedOption && dependencyOk));
       });
 
       // Plain dependency-bound nodes (no alternative membership): ingredients, groups, steps.
       document.querySelectorAll<HTMLElement>('[data-visible-when]').forEach((el) => {
         if (el.hasAttribute('data-alternative-group')) return; // handled above
-        const dependencyOk = visibleWhenSatisfied(parseVisibleWhen(el));
+        const dependencyOk = visibleWhenSatisfied(parseVisibleWhenAttr(el), selection);
         el.classList.toggle('hidden', !dependencyOk);
       });
 
-      // Keep all alternative selects in sync with the current selection.
+      // Rebuild each alternative select from the options currently visible for its group.
       document.querySelectorAll<HTMLSelectElement>('select.alternative-select').forEach((sel) => {
         const groupId = sel.getAttribute('data-alternative-group');
-        if (groupId && selection[groupId] != null) sel.value = selection[groupId];
+        if (!groupId) return;
+        const opts = groupOptions.get(groupId) || [];
+        const visibleOpts = opts.filter((o) => optionVisible(o, selection));
+
+        // A switch only makes sense when there is more than one visible option.
+        if (visibleOpts.length <= 1) {
+          sel.classList.add('hidden');
+          return;
+        }
+        sel.classList.remove('hidden');
+
+        const desired = selection[groupId];
+        const currentlyRendered = Array.from(sel.options).map((o) => o.value).join('|');
+        const wanted = visibleOpts.map((o) => o.id).join('|');
+        if (currentlyRendered !== wanted) {
+          sel.innerHTML = '';
+          for (const opt of visibleOpts) {
+            const optionEl = document.createElement('option');
+            optionEl.value = opt.id;
+            optionEl.textContent = optionLabel(opt);
+            sel.appendChild(optionEl);
+          }
+        }
+        if (desired != null) sel.value = desired;
       });
     }
 
@@ -172,6 +258,8 @@ const hasAlternatives = groups.size > 0;
       if (!groupId) return;
       const optionId = sel.value;
       selection[groupId] = optionId;
+      // Cascade: switching this group may hide another group's selected option.
+      selection = resolveSelection(selection);
       applyVisibility();
       document.dispatchEvent(
         new CustomEvent('alternative-selection-changed', {
@@ -185,7 +273,8 @@ const hasAlternatives = groups.size > 0;
     // Expose current selection for other scripts (e.g. persistence in the page).
     (window as any).getAlternativeSelection = () => ({ ...selection });
 
-    // Initial pass (mostly a no-op since server already rendered defaults).
+    // Resolve once on load (handles inconsistent stored defaults) and render.
+    selection = resolveSelection(selection);
     applyVisibility();
   })();
 </script>
