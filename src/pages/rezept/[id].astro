@@ -245,6 +245,56 @@ try {
       });
     });
 
+    // Persist alternative selection changes to the recipe (updates isAlternativeDefault).
+    (function () {
+      let saveTimeout = null;
+
+      function applyToItems(items, selection) {
+        return (items || []).map((item) => {
+          if (item && Array.isArray(item.ingredients)) {
+            return { ...item, ingredients: applyToItems(item.ingredients, selection) };
+          }
+          if (item && item.alternativeGroupId) {
+            const sel = selection[item.alternativeGroupId];
+            if (sel !== undefined) {
+              return { ...item, isAlternativeDefault: item.id === sel };
+            }
+          }
+          return item;
+        });
+      }
+
+      function applySelectionToGroups(groups, selection) {
+        return (groups || []).map((group) => {
+          if (group && Array.isArray(group.ingredients)) {
+            return { ...group, ingredients: applyToItems(group.ingredients, selection) };
+          }
+          return group;
+        });
+      }
+
+      async function persist(selection) {
+        try {
+          const updatedGroups = applySelectionToGroups(recipe.ingredientGroups || [], selection);
+          recipe.ingredientGroups = updatedGroups; // keep local copy in sync
+          await fetch(`/api/recipes?id=${recipe.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ingredientGroups: updatedGroups }),
+          });
+        } catch (e) {
+          console.error('Failed to persist alternative selection', e);
+        }
+      }
+
+      document.addEventListener('alternative-selection-changed', (e) => {
+        const selection = e.detail && e.detail.selection;
+        if (!selection) return;
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => persist(selection), 600);
+      });
+    })();
+
     // Portion scaling functionality
     const currentServingsElement = document.getElementById('current-servings');
     const decreaseButton = document.getElementById('decrease-servings');

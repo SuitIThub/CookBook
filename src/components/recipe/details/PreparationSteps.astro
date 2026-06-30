@@ -1,5 +1,6 @@
 ---
 import type { Recipe, PreparationStep } from '../../../types/recipe';
+import { getOptionToGroupMap, getDefaultSelection, isVisibleWhenSatisfied } from '../../../lib/alternatives';
 
 interface Props {
   recipe: Recipe;
@@ -9,6 +10,19 @@ const { recipe } = Astro.props;
 
 // Safety check: ensure preparationGroups exists and handle empty arrays
 const preparationGroups = recipe?.preparationGroups || [];
+
+// Alternatives context for dependency-based visibility of steps/groups.
+const optionToGroup = getOptionToGroupMap(recipe);
+const defaultSelection = getDefaultSelection(recipe);
+
+function visibleWhenAttr(node: any): string | undefined {
+  const ids = node?.visibleWhen?.optionIds;
+  return Array.isArray(ids) && ids.length > 0 ? JSON.stringify(ids) : undefined;
+}
+
+function isHiddenByDefault(node: any): boolean {
+  return !isVisibleWhenSatisfied(node?.visibleWhen, defaultSelection, optionToGroup);
+}
 
 // Recursive function to check if there are any steps (including nested groups)
 function hasAnyStepsRecursive(groups: any[]): boolean {
@@ -270,7 +284,11 @@ function calculateGlobalStepIndexRecursive(preparationGroups: any[], targetGroup
             );
             
             return (
-              <li class="flex space-x-4" id={`step-${stepId}`}>
+              <li
+                class:list={["flex space-x-4 recipe-prep-node", { hidden: isHiddenByDefault(step) }]}
+                id={`step-${stepId}`}
+                data-visible-when={visibleWhenAttr(step)}
+              >
                 <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
                   {stepIndex + 1}
                 </div>
@@ -359,7 +377,10 @@ function calculateGlobalStepIndexRecursive(preparationGroups: any[], targetGroup
                 // Create a new counter for the nested group so numbering restarts at 1
                 const nestedStepCounter = { value: 0 };
                 return (
-                  <li class="py-2">
+                  <li
+                    class:list={["py-2 recipe-prep-node", { hidden: isHiddenByDefault(nestedGroup) }]}
+                    data-visible-when={visibleWhenAttr(nestedGroup)}
+                  >
                     {nestedGroup.title && (
                       <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2 text-sm ml-12">
                         {nestedGroup.title}
@@ -376,7 +397,10 @@ function calculateGlobalStepIndexRecursive(preparationGroups: any[], targetGroup
           };
           
           return (
-            <ol class="space-y-4">
+            <ol
+              class:list={["space-y-4 recipe-prep-node", { hidden: isHiddenByDefault(group) }]}
+              data-visible-when={visibleWhenAttr(group)}
+            >
               {renderItems(group.steps || [], false, stepCounter)}
             </ol>
           );
@@ -403,7 +427,11 @@ function calculateGlobalStepIndexRecursive(preparationGroups: any[], targetGroup
           );
           
           return (
-            <li class="flex space-x-4" id={`step-${stepId}`}>
+            <li
+              class:list={["flex space-x-4 recipe-prep-node", { hidden: isHiddenByDefault(step) }]}
+              id={`step-${stepId}`}
+              data-visible-when={visibleWhenAttr(step)}
+            >
               <div class="flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
                 {stepIndex + 1}
               </div>
@@ -492,7 +520,10 @@ function calculateGlobalStepIndexRecursive(preparationGroups: any[], targetGroup
               // Create a new counter for the nested group so numbering restarts at 1
               const nestedStepCounter = { value: 0 };
               return (
-                <li class="py-2">
+                <li
+                  class:list={["py-2 recipe-prep-node", { hidden: isHiddenByDefault(nestedGroup) }]}
+                  data-visible-when={visibleWhenAttr(nestedGroup)}
+                >
                   {nestedGroup.title && (
                     <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2 text-sm ml-12">
                       {nestedGroup.title}
@@ -509,7 +540,10 @@ function calculateGlobalStepIndexRecursive(preparationGroups: any[], targetGroup
         };
         
         return (
-          <div>
+          <div
+            class:list={["recipe-prep-node", { hidden: isHiddenByDefault(group) }]}
+            data-visible-when={visibleWhenAttr(group)}
+          >
             <h3 class="font-semibold text-gray-800 dark:text-gray-200 mb-3 border-b border-gray-200 dark:border-gray-600 pb-1">
               {group.title}
             </h3>

@@ -856,11 +856,47 @@ if (!shoppingList) {
       // Recipe management for edit mode
       let availableRecipes = [];
 
-      // Helper functions for recipe data structure
+      // Helper functions for recipe data structure.
+      // Only returns ingredients of the active alternative selection (default per set)
+      // and items whose visibleWhen dependency is satisfied.
       function getRecipeIngredients(recipe) {
         const ingredients = [];
-        
+
+        // Build alternative context (option -> group, default selection).
+        const optionToGroup = {};
+        const selection = {};
+        const hasRealDefault = {};
+        function scan(items) {
+          (items || []).forEach(item => {
+            if (item.ingredients) { scan(item.ingredients); return; }
+            if (item.alternativeGroupId) {
+              optionToGroup[item.id] = item.alternativeGroupId;
+              if (!(item.alternativeGroupId in selection)) selection[item.alternativeGroupId] = item.id;
+              if (item.isAlternativeDefault && !hasRealDefault[item.alternativeGroupId]) {
+                selection[item.alternativeGroupId] = item.id;
+                hasRealDefault[item.alternativeGroupId] = true;
+              }
+            }
+          });
+        }
+        (recipe.ingredientGroups || []).forEach(g => scan(g.ingredients));
+
+        function visibleWhenOk(vw) {
+          if (!vw || !vw.optionIds || vw.optionIds.length === 0) return true;
+          for (const oid of vw.optionIds) {
+            const gid = optionToGroup[oid];
+            if (!gid) return true;
+            if (selection[gid] === oid) return true;
+          }
+          return false;
+        }
+        function nodeVisible(item) {
+          if (item.alternativeGroupId && selection[item.alternativeGroupId] !== item.id) return false;
+          return visibleWhenOk(item.visibleWhen);
+        }
+
         function extractIngredientsFromGroup(group) {
+          if (group.visibleWhen && !visibleWhenOk(group.visibleWhen)) return;
           if (group.ingredients) {
             group.ingredients.forEach(item => {
               if (item.ingredients) {
@@ -868,7 +904,7 @@ if (!shoppingList) {
                 extractIngredientsFromGroup(item);
               } else if (item.name) {
                 // It's an ingredient
-                ingredients.push(item);
+                if (nodeVisible(item)) ingredients.push(item);
               }
             });
           }

@@ -104,6 +104,7 @@ Ingredients are organized in a hierarchical structure using groups. Groups can c
   id: string;                                    // Unique identifier
   title?: string;                                // Optional: Group title
   ingredients: (Ingredient | IngredientGroup)[]; // Array of ingredients or nested groups
+  visibleWhen?: VisibilityCondition;             // Optional: only show this group for a selected alternative
 }
 ```
 
@@ -115,6 +116,23 @@ Ingredients are organized in a hierarchical structure using groups. Groups can c
   name: string;            // Ingredient name
   description?: string;    // Optional: Additional description
   quantities: Quantity[];  // Array of quantity options
+  alternativeGroupId?: string;     // Optional: ingredients sharing this id are mutually exclusive alternatives
+  isAlternativeDefault?: boolean;  // Optional: marks the default option within its alternative group
+  alternativeGroupLabel?: string;  // Optional: display label for the alternative set
+  visibleWhen?: VisibilityCondition; // Optional: only show this ingredient for a selected alternative
+}
+```
+
+#### VisibilityCondition Object
+
+Controls whether an item (ingredient, ingredient group, preparation step or preparation group)
+is shown. The item is visible only when one of the referenced alternative options is currently
+selected. An `optionId` is the `id` of an alternative `Ingredient`. If a referenced option no
+longer exists, the dependency is treated as void (the item stays visible).
+
+```typescript
+{
+  optionIds: string[]; // Ingredient ids of the alternative options that activate this item
 }
 ```
 
@@ -138,6 +156,7 @@ Preparation steps are organized in a hierarchical structure using groups. Groups
   id: string;                              // Unique identifier
   title?: string;                          // Optional: Group title
   steps: (PreparationStep | PreparationGroup)[]; // Array of steps or nested groups
+  visibleWhen?: VisibilityCondition;       // Optional: only show this group for a selected alternative
 }
 ```
 
@@ -151,6 +170,7 @@ Preparation steps are organized in a hierarchical structure using groups. Groups
   intermediateIngredients: IntermediateIngredient[]; // Intermediate ingredients created in this step
   timeInSeconds?: number;                  // Optional: Time for this step in seconds
   timer?: number;                          // Optional: Timer duration in minutes
+  visibleWhen?: VisibilityCondition;       // Optional: only show this step for a selected alternative
 }
 ```
 

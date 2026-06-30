@@ -2,12 +2,14 @@
 import type { Recipe, PreparationStep, PreparationGroup, IngredientGroup, Ingredient, LinkedIngredient } from '../../../types/recipe';
 import MultiTimerManager from '../../timer/MultiTimerManager.astro';
 import { formatQuantity } from '../../../lib/units';
+import { filterRecipeBySelection } from '../../../lib/alternatives';
 
 interface Props {
   recipe: Recipe;
 }
 
-const { recipe } = Astro.props;
+// Only show the currently selected alternative (and its dependent items) while cooking.
+const recipe = filterRecipeBySelection(Astro.props.recipe);
 
 // Helper function to format quantity for display
 function formatQuantityForDisplay(amount: number, unit: string): { amount: number; unit: string } {

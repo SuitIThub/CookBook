@@ -2,6 +2,14 @@ import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import type { Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe, Quantity } from '../types/recipe';
 import { eventBus, EVENTS } from './events';
+import {
+  getDefaultSelection,
+  getAlternativeGroups,
+  filterRecipeBySelection,
+  buildShoppingAlternativeSelections,
+  mergeSelection,
+  type AlternativeSelection,
+} from './alternatives';
 
 export class CookbookDatabase {
   private db: Database.Database;
@@ -629,6 +637,10 @@ export class CookbookDatabase {
       ? `${recipe.title} - ${recipe.variantName}`
       : recipe.title;
 
+    // Determine the active alternative selection (defaults) and the alternatives metadata.
+    const selection = getDefaultSelection(recipe);
+    const alternativeSelections = buildShoppingAlternativeSelections(recipe, selection);
+
     // Add recipe to list
     const shoppingListRecipe: ShoppingListRecipe = {
       id: recipe.id,
@@ -636,10 +648,14 @@ export class CookbookDatabase {
       servings: recipe.metadata.servings,
       currentServings: recipe.metadata.servings,
       isCompleted: false,
-      addedAt: new Date()
+      addedAt: new Date(),
+      alternativeSelections: alternativeSelections.length > 0 ? alternativeSelections : undefined
     };
 
     shoppingList.recipes.push(shoppingListRecipe);
+
+    // Only include ingredients of the active alternative + satisfied dependencies.
+    const filteredRecipe = filterRecipeBySelection(recipe, selection);
 
     // Extract and add ingredients
     const extractIngredients = (groups: any[]): void => {
@@ -662,6 +678,10 @@ export class CookbookDatabase {
                   recipeId: recipe.id,
                   recipeIngredientId: item.id
                 };
+                if (item.alternativeGroupId) {
+                  shoppingItem.alternativeGroupId = item.alternativeGroupId;
+                  shoppingItem.alternativeOptionId = item.id;
+                }
                 shoppingList.items.push(shoppingItem);
               });
             }
@@ -670,7 +690,7 @@ export class CookbookDatabase {
       });
     };
 
-    extractIngredients(recipe.ingredientGroups);
+    extractIngredients(filteredRecipe.ingredientGroups);
 
     // Save updated shopping list
     const stmt = this.db.prepare(`
@@ -1091,6 +1111,184 @@ export class CookbookDatabase {
     eventBus.emit(EVENTS.SHOPPING_LIST_UPDATED, { listId });
 
     return shoppingList;
+  }
+
+  /**
+   * Switch the selected alternative for a recipe already on a shopping list.
+   * Removes the recipe's old items and re-extracts them for the new selection,
+   * preserving the current portion scaling and (best-effort) the checked state.
+   */
+  updateRecipeAlternativeInShoppingList(
+    listId: string,
+    recipeId: string,
+    groupId: string,
+    optionId: string
+  ): ShoppingList | null {
+    const shoppingList = this.getShoppingList(listId);
+    if (!shoppingList) return null;
+
+    const slRecipe = shoppingList.recipes.find(r => r.id === recipeId);
+    if (!slRecipe) return null;
+
+    const recipe = this.getRecipe(recipeId);
+    if (!recipe) return null;
+
+    // Validate the requested group/option.
+    const groups = getAlternativeGroups(recipe);
+    const info = groups.get(groupId);
+    if (!info || !info.options.some(o => o.id === optionId)) return null;
+
+    // Build the new selection from the previously stored one + the requested change.
+    const override: AlternativeSelection = {};
+    (slRecipe.alternativeSelections || []).forEach(s => {
+      override[s.groupId] = s.selectedOptionId;
+    });
+    override[groupId] = optionId;
+    const selection = mergeSelection(recipe, override);
+
+    // Preserve checked state best-effort, keyed by the source ingredient id.
+    const checkedByIngredient = new Map<string, boolean>();
+    shoppingList.items.forEach(it => {
+      if (it.recipeId === recipeId && it.recipeIngredientId && it.isChecked) {
+        checkedByIngredient.set(it.recipeIngredientId, true);
+      }
+    });
+
+    // Remove the recipe's existing items.
+    shoppingList.items = shoppingList.items.filter(it => it.recipeId !== recipeId);
+
+    // Re-extract with the new selection and the current portion scaling.
+    const baseServings = slRecipe.servings || recipe.metadata.servings || 1;
+    const currentServings = slRecipe.currentServings || baseServings;
+    const scalingFactor = baseServings ? currentServings / baseServings : 1;
+    const filteredRecipe = filterRecipeBySelection(recipe, selection);
+
+    const extractIngredients = (groupsArr: any[]): void => {
+      groupsArr.forEach(group => {
+        if (group.ingredients) {
+          group.ingredients.forEach((item: any) => {
+            if (item.ingredients) {
+              extractIngredients([item]);
+            } else if (item.name && item.quantities && item.quantities.length > 0) {
+              item.quantities.forEach((quantity: Quantity) => {
+                const originalQuantity = { ...quantity };
+                const shoppingItem: ShoppingListItem = {
+                  id: uuidv4(),
+                  name: item.name,
+                  description: item.description,
+                  quantity: {
+                    amount: parseFloat((originalQuantity.amount * scalingFactor).toFixed(2)),
+                    unit: originalQuantity.unit
+                  },
+                  originalQuantity,
+                  isChecked: checkedByIngredient.get(item.id) || false,
+                  recipeId: recipe.id,
+                  recipeIngredientId: item.id
+                };
+                if (item.alternativeGroupId) {
+                  shoppingItem.alternativeGroupId = item.alternativeGroupId;
+                  shoppingItem.alternativeOptionId = item.id;
+                }
+                shoppingList.items.push(shoppingItem);
+              });
+            }
+          });
+        }
+      });
+    };
+
+    extractIngredients(filteredRecipe.ingredientGroups);
+
+    // Persist the new selection on the shopping-list recipe.
+    slRecipe.alternativeSelections = buildShoppingAlternativeSelections(recipe, selection);
+
+    const stmt = this.db.prepare(`
+      UPDATE shopping_lists 
+      SET items = ?, recipes = ?, updated_at = ?
+      WHERE id = ?
+    `);
+
+    stmt.run(
+      JSON.stringify(shoppingList.items),
+      JSON.stringify(shoppingList.recipes),
+      new Date().toISOString(),
+      listId
+    );
+
+    eventBus.emit(EVENTS.SHOPPING_LIST_UPDATED, { listId });
+
+    return shoppingList;
+  }
+
+  /**
+   * Preview which already-checked items would be removed when switching a recipe's
+   * alternative in a shopping list. Does not modify the list.
+   * Returns the checked items whose source ingredient is no longer present after the switch.
+   */
+  previewRecipeAlternativeChange(
+    listId: string,
+    recipeId: string,
+    groupId: string,
+    optionId: string
+  ): { removedChecked: { name: string; quantity?: Quantity }[] } | null {
+    const shoppingList = this.getShoppingList(listId);
+    if (!shoppingList) return null;
+
+    const slRecipe = shoppingList.recipes.find(r => r.id === recipeId);
+    if (!slRecipe) return null;
+
+    const recipe = this.getRecipe(recipeId);
+    if (!recipe) return null;
+
+    const groups = getAlternativeGroups(recipe);
+    const info = groups.get(groupId);
+    if (!info || !info.options.some(o => o.id === optionId)) return null;
+
+    // Compute the resulting selection.
+    const override: AlternativeSelection = {};
+    (slRecipe.alternativeSelections || []).forEach(s => {
+      override[s.groupId] = s.selectedOptionId;
+    });
+    override[groupId] = optionId;
+    const selection = mergeSelection(recipe, override);
+
+    // Collect the ingredient ids that survive the switch.
+    const filteredRecipe = filterRecipeBySelection(recipe, selection);
+    const survivingIds = new Set<string>();
+    const collectIds = (groupsArr: any[]): void => {
+      groupsArr.forEach(group => {
+        if (group.ingredients) {
+          group.ingredients.forEach((item: any) => {
+            if (item.ingredients) {
+              collectIds([item]);
+            } else if (item.name && item.quantities && item.quantities.length > 0) {
+              survivingIds.add(item.id);
+            }
+          });
+        }
+      });
+    };
+    collectIds(filteredRecipe.ingredientGroups);
+
+    // Find currently-checked items of this recipe that would be removed.
+    const seen = new Set<string>();
+    const removedChecked: { name: string; quantity?: Quantity }[] = [];
+    shoppingList.items.forEach(it => {
+      if (
+        it.recipeId === recipeId &&
+        it.isChecked &&
+        it.recipeIngredientId &&
+        !survivingIds.has(it.recipeIngredientId)
+      ) {
+        const key = it.recipeIngredientId;
+        if (!seen.has(key)) {
+          seen.add(key);
+          removedChecked.push({ name: it.name, quantity: it.quantity });
+        }
+      }
+    });
+
+    return { removedChecked };
   }
 
   /**
