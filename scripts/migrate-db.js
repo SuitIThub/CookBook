@@ -96,6 +96,17 @@ const EXPECTED_SCHEMA = {
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }
       ]
+    },
+    alias_settings: {
+      // Composite primary key (alias, key). Per-alias/per-key client settings
+      // synced across devices; updated_at is a client ms timestamp (LWW merge).
+      primaryKey: ['alias', 'key'],
+      columns: [
+        { name: 'alias', type: 'TEXT', nullable: false },
+        { name: 'key', type: 'TEXT', nullable: false },
+        { name: 'value', type: 'TEXT', nullable: true },
+        { name: 'updated_at', type: 'INTEGER', nullable: false }
+      ]
     }
   },
   directories: [
@@ -206,7 +217,7 @@ try {
 }
 
 function createTable(db, tableName, tableSchema) {
-  const columns = tableSchema.columns.map(col => {
+  const definitions = tableSchema.columns.map(col => {
     let definition = `${col.name} ${col.type}`;
     
     if (col.primaryKey) definition += ' PRIMARY KEY';
@@ -215,11 +226,16 @@ function createTable(db, tableName, tableSchema) {
     if (col.defaultValue) definition += ` DEFAULT ${col.defaultValue}`;
     
     return definition;
-  }).join(',\n    ');
+  });
+
+  // Table-level composite primary key, e.g. PRIMARY KEY (alias, key)
+  if (Array.isArray(tableSchema.primaryKey) && tableSchema.primaryKey.length > 0) {
+    definitions.push(`PRIMARY KEY (${tableSchema.primaryKey.join(', ')})`);
+  }
 
   const createSQL = `
     CREATE TABLE ${tableName} (
-      ${columns}
+      ${definitions.join(',\n    ')}
     )
   `;
 
