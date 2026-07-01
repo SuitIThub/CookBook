@@ -152,6 +152,19 @@ export class CookbookDatabase {
         FOREIGN KEY (draft_recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
       )
     `);
+
+    // Alias settings table - per-alias, per-key client settings synced across devices.
+    // updated_at stores a client timestamp (ms) used for last-write-wins merging.
+    // value is stored as TEXT (JSON/string); NULL means the setting was cleared.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS alias_settings (
+        alias TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (alias, key)
+      )
+    `);
   }
 
   // Recipe CRUD operations
@@ -1669,6 +1682,54 @@ export class CookbookDatabase {
       title: row.title,
       lastUpdated: new Date(row.last_updated)
     }));
+  }
+
+  // ===== Alias settings (cross-device sync) =====
+
+  getAliasSettings(alias: string): Array<{ key: string; value: string | null; updatedAt: number }> {
+    const stmt = this.db.prepare(
+      'SELECT key, value, updated_at FROM alias_settings WHERE alias = ?'
+    );
+    const rows = stmt.all(alias) as Array<{ key: string; value: string | null; updated_at: number }>;
+    return rows.map((row) => ({
+      key: row.key,
+      value: row.value,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  /**
+   * Upsert a single alias setting using last-write-wins semantics.
+   * The incoming change is only applied if its timestamp is newer than the
+   * stored one. Returns whether the change was applied plus the resulting row.
+   */
+  upsertAliasSetting(
+    alias: string,
+    key: string,
+    value: string | null,
+    updatedAt: number
+  ): { applied: boolean; value: string | null; updatedAt: number } {
+    const existingStmt = this.db.prepare(
+      'SELECT value, updated_at FROM alias_settings WHERE alias = ? AND key = ?'
+    );
+    const existing = existingStmt.get(alias, key) as
+      | { value: string | null; updated_at: number }
+      | undefined;
+
+    if (existing && existing.updated_at >= updatedAt) {
+      return { applied: false, value: existing.value, updatedAt: existing.updated_at };
+    }
+
+    const upsertStmt = this.db.prepare(`
+      INSERT INTO alias_settings (alias, key, value, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(alias, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `);
+    upsertStmt.run(alias, key, value, updatedAt);
+
+    eventBus.emit(EVENTS.ALIAS_SETTINGS_UPDATED, { alias, key, value, updatedAt });
+
+    return { applied: true, value, updatedAt };
   }
 
   close(): void {

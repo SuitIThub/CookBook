@@ -1,0 +1,351 @@
+---
+// Alias / settings-sync modal.
+// An "alias" is a lightweight, password-less user identity stored in
+// localStorage. All devices that use the same alias share their settings
+// (theme, data-saver mode and AI settings) with each other via the server.
+// This component renders the modal UI and boots the sync engine, so it must
+// be included on every page (it lives in both layouts).
+---
+
+<div
+  id="alias-settings-modal"
+  class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+  aria-modal="true"
+  aria-labelledby="alias-settings-title"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-gray-700">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <h2 id="alias-settings-title" class="text-lg font-semibold text-gray-900 dark:text-white">Alias &amp; Synchronisierung</h2>
+      <button
+        type="button"
+        id="alias-settings-close-btn"
+        class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        aria-label="Schließen"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="p-4 space-y-4">
+      <p class="text-sm text-gray-600 dark:text-gray-300">
+        Vergib einen Alias (z.&nbsp;B. deinen Namen). Alle Geräte mit demselben Alias
+        teilen automatisch ihre Einstellungen: <strong>Design</strong> (Hell/Dunkel),
+        <strong>Datenspar-Modus</strong> und <strong>KI-Einstellungen</strong>.
+      </p>
+      <div>
+        <label for="alias-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Alias</label>
+        <input
+          id="alias-input"
+          type="text"
+          name="cookbook-alias"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          placeholder="z. B. familie-mueller"
+          maxlength="128"
+          class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Kein Passwort nötig – wer denselben Alias kennt, teilt die Einstellungen.
+        </p>
+      </div>
+      <div id="alias-status" class="text-sm text-gray-500 dark:text-gray-400"></div>
+    </div>
+    <div class="flex justify-between gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+      <button
+        type="button"
+        id="alias-clear-btn"
+        class="px-4 py-2 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+      >
+        Trennen
+      </button>
+      <div class="flex gap-2">
+        <button type="button" id="alias-cancel-btn" class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">Abbrechen</button>
+        <button type="button" id="alias-save-btn" class="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium">Speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  (function () {
+    // ------- Sync engine (installed once per page session) -------
+    if (!window.__cookbookAliasSync) {
+      var ALIAS_KEY = 'cookbook.alias';
+      var META_KEY = 'cookbook.alias.meta';
+      var SYNC_KEYS = ['theme', 'lowBandwidth', 'cookbook.ai.settings', 'cookbook.recipes.layout'];
+
+      var origSetItem = Storage.prototype.setItem;
+      var origRemoveItem = Storage.prototype.removeItem;
+
+      function rawSet(k, v) { try { origSetItem.call(localStorage, k, v); } catch (e) {} }
+      function rawRemove(k) { try { origRemoveItem.call(localStorage, k); } catch (e) {} }
+      function rawGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+      var applyingRemote = false;
+      var pending = {};
+      var pushTimer = null;
+      var es = null;
+      var uiRefreshers = [];
+
+      function getAlias() { return rawGet(ALIAS_KEY) || ''; }
+      function getMeta() { try { return JSON.parse(rawGet(META_KEY) || '{}'); } catch (e) { return {}; } }
+      function saveMeta(m) { rawSet(META_KEY, JSON.stringify(m)); }
+
+      // Intercept writes to synced keys so any part of the app that changes a
+      // setting (theme toggle, data-saver, AI settings) triggers a push.
+      localStorage.setItem = function (k, v) {
+        origSetItem.call(this, k, v);
+        if (!applyingRemote && SYNC_KEYS.indexOf(k) !== -1) onLocalChange(k);
+      };
+      localStorage.removeItem = function (k) {
+        origRemoveItem.call(this, k);
+        if (!applyingRemote && SYNC_KEYS.indexOf(k) !== -1) onLocalChange(k);
+      };
+
+      function onLocalChange(key) {
+        var meta = getMeta();
+        meta[key] = Date.now();
+        saveMeta(meta);
+        if (!getAlias()) return;
+        pending[key] = true;
+        schedulePush();
+      }
+
+      function schedulePush() {
+        if (pushTimer) clearTimeout(pushTimer);
+        pushTimer = setTimeout(function () {
+          pushTimer = null;
+          flushPending();
+        }, 400);
+      }
+
+      function pushSettings(settings) {
+        var alias = getAlias();
+        if (!alias || !settings.length) return Promise.resolve();
+        return fetch('/api/alias-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alias: alias, settings: settings }),
+        }).catch(function () {});
+      }
+
+      function flushPending() {
+        var alias = getAlias();
+        if (!alias) { pending = {}; return Promise.resolve(); }
+        var meta = getMeta();
+        var settings = [];
+        Object.keys(pending).forEach(function (key) {
+          settings.push({ key: key, value: rawGet(key), updatedAt: meta[key] || Date.now() });
+        });
+        pending = {};
+        return pushSettings(settings);
+      }
+
+      function applyKeyEffect(key, value) {
+        if (key === 'theme') {
+          var isDark = value === 'dark';
+          var root = document.documentElement;
+          root.classList.remove('light', 'dark');
+          root.classList.toggle('dark', isDark);
+          root.classList.add(isDark ? 'dark' : 'light');
+          if (isDark) {
+            root.style.backgroundColor = '#111827';
+            root.style.color = '#f9fafb';
+          } else {
+            root.style.backgroundColor = '#f9fafb';
+            root.style.color = '#111827';
+          }
+        } else if (key === 'lowBandwidth') {
+          var enabled = value === '1';
+          document.documentElement.classList.toggle('low-bandwidth', enabled);
+          if (typeof window.cookbookApplyLowBandwidthMedia === 'function') {
+            try { window.cookbookApplyLowBandwidthMedia(); } catch (e) {}
+          }
+        } else if (key === 'cookbook.ai.settings') {
+          try {
+            var detail = value ? JSON.parse(value) : null;
+            document.dispatchEvent(new CustomEvent('ai-settings-updated', { detail: detail }));
+          } catch (e) {}
+        } else if (key === 'cookbook.recipes.layout') {
+          try {
+            var layout = value ? JSON.parse(value) : null;
+            document.dispatchEvent(new CustomEvent('cookbook:recipe-layout-changed', { detail: layout }));
+          } catch (e) {}
+        }
+      }
+
+      // Apply remote settings locally when they are newer than what we have.
+      function applyRemote(settings) {
+        if (!Array.isArray(settings)) return;
+        var meta = getMeta();
+        var changed = false;
+        settings.forEach(function (item) {
+          if (!item || SYNC_KEYS.indexOf(item.key) === -1) return;
+          var incomingTs = Number(item.updatedAt) || 0;
+          var localTs = meta[item.key] || 0;
+          if (incomingTs <= localTs) return;
+
+          applyingRemote = true;
+          if (item.value === null || item.value === undefined) rawRemove(item.key);
+          else rawSet(item.key, String(item.value));
+          applyingRemote = false;
+
+          meta[item.key] = incomingTs;
+          changed = true;
+          applyKeyEffect(item.key, item.value == null ? null : String(item.value));
+        });
+        if (changed) {
+          saveMeta(meta);
+          refreshUI();
+        }
+      }
+
+      function pull() {
+        var alias = getAlias();
+        if (!alias) return;
+        fetch('/api/alias-settings?alias=' + encodeURIComponent(alias))
+          .then(function (r) { return r.json(); })
+          .then(function (data) { if (data && data.settings) applyRemote(data.settings); })
+          .catch(function () {});
+      }
+
+      function connect() {
+        disconnect();
+        var alias = getAlias();
+        if (!alias || typeof EventSource === 'undefined') return;
+        try {
+          es = new EventSource('/api/alias-settings/stream?alias=' + encodeURIComponent(alias));
+          es.onmessage = function (ev) {
+            try {
+              var msg = JSON.parse(ev.data);
+              if (msg && msg.type === 'update' && msg.setting) applyRemote([msg.setting]);
+            } catch (e) {}
+          };
+        } catch (e) {}
+      }
+
+      function disconnect() {
+        if (es) { try { es.close(); } catch (e) {} es = null; }
+      }
+
+      function setAlias(newAlias) {
+        newAlias = (newAlias || '').trim().slice(0, 128);
+        var prev = getAlias();
+
+        if (!newAlias) {
+          rawRemove(ALIAS_KEY);
+          disconnect();
+          refreshUI();
+          return;
+        }
+
+        rawSet(ALIAS_KEY, newAlias);
+
+        if (newAlias !== prev) {
+          // Newly joined alias: share this device's current settings first,
+          // then pull so the server-side last-write-wins merge decides.
+          var meta = getMeta();
+          var now = Date.now();
+          var settings = [];
+          SYNC_KEYS.forEach(function (key) {
+            var v = rawGet(key);
+            if (v !== null) {
+              meta[key] = now;
+              settings.push({ key: key, value: v, updatedAt: now });
+            }
+          });
+          saveMeta(meta);
+          pushSettings(settings).then(function () { pull(); });
+          connect();
+        } else {
+          connect();
+          pull();
+        }
+        refreshUI();
+      }
+
+      function refreshUI() {
+        uiRefreshers.forEach(function (fn) { try { fn(); } catch (e) {} });
+      }
+
+      window.__cookbookAliasSync = {
+        getAlias: getAlias,
+        setAlias: setAlias,
+        pull: pull,
+        _registerUiRefresher: function (fn) { uiRefreshers.push(fn); },
+        _refreshUI: refreshUI,
+      };
+
+      // Boot: if an alias is already configured, connect and pull immediately.
+      if (getAlias()) { connect(); pull(); }
+    }
+
+    // ------- Modal wiring (runs on every page load) -------
+    (function () {
+      var sync = window.__cookbookAliasSync;
+      var modal = document.getElementById('alias-settings-modal');
+      if (!modal || modal.__aliasWired) return;
+      modal.__aliasWired = true;
+
+      var input = document.getElementById('alias-input');
+      var status = document.getElementById('alias-status');
+      var saveBtn = document.getElementById('alias-save-btn');
+      var clearBtn = document.getElementById('alias-clear-btn');
+      var closeBtn = document.getElementById('alias-settings-close-btn');
+      var cancelBtn = document.getElementById('alias-cancel-btn');
+
+      function updateStatus() {
+        var alias = sync.getAlias();
+        if (status) {
+          status.textContent = alias
+            ? 'Aktiv – synchronisiert als "' + alias + '".'
+            : 'Kein Alias gesetzt. Einstellungen bleiben nur auf diesem Gerät.';
+        }
+        if (clearBtn) clearBtn.style.display = alias ? '' : 'none';
+      }
+      sync._registerUiRefresher(updateStatus);
+
+      function open() {
+        if (input) input.value = sync.getAlias();
+        updateStatus();
+        modal.classList.remove('hidden');
+        if (input) setTimeout(function () { input.focus(); }, 0);
+      }
+      function close() { modal.classList.add('hidden'); }
+
+      window.openAliasSettings = open;
+
+      if (closeBtn) closeBtn.addEventListener('click', close);
+      if (cancelBtn) cancelBtn.addEventListener('click', close);
+      modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+
+      if (saveBtn) saveBtn.addEventListener('click', function () {
+        sync.setAlias(input ? input.value : '');
+        close();
+      });
+      if (clearBtn) clearBtn.addEventListener('click', function () {
+        sync.setAlias('');
+        if (input) input.value = '';
+        updateStatus();
+      });
+      if (input) input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { sync.setAlias(input.value); close(); }
+      });
+
+      document.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t && typeof t.closest === 'function' && t.closest('[data-open-alias-settings]')) {
+          e.preventDefault();
+          open();
+        }
+      });
+
+      updateStatus();
+    })();
+  })();
+</script>

@@ -3,6 +3,7 @@ export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import SearchBar from '../components/recipe_list/SearchBar.astro';
 import RecipeCard from '../components/recipe_list/RecipeCard.astro';
+import RecipeViewControls from '../components/recipe_list/RecipeViewControls.astro';
 import RecipeListHeader from '../components/recipe_list/RecipeListHeader.astro';
 import EmptyState from '../components/recipe_list/EmptyState.astro';
 import RecipeAIChatModal from '../components/modals/RecipeAIChatModal.astro';
@@ -67,14 +68,34 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
       initialSearchQuery={searchQuery}
       initialCategory={selectedCategory}
     />
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-8">
-      {recipes.map(recipe => (
-        <RecipeCard recipe={recipe} />
-      ))}
+
+    <RecipeViewControls categories={categories} />
+
+    <div id="recipe-collection" class="mt-8">
+      <div id="recipe-cards-root" class="recipe-cards-container view-grid">
+        {recipes.map(recipe => (
+          <RecipeCard recipe={recipe} />
+        ))}
+      </div>
     </div>
 
     {recipes.length === 0 && <EmptyState />}
+
+    <script is:inline>
+      // Anti-flash: apply the persisted view (grid/list) before first paint.
+      (function () {
+        try {
+          var raw = localStorage.getItem('cookbook.recipes.layout');
+          if (!raw) return;
+          var layout = JSON.parse(raw);
+          var root = document.getElementById('recipe-cards-root');
+          if (root && layout && layout.view === 'list') {
+            root.classList.remove('view-grid');
+            root.classList.add('view-list');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </div>
 </Layout>
 

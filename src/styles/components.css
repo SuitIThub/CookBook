@@ -927,3 +927,165 @@ html.low-bandwidth .recipe-header-overlap {
 html.low-bandwidth .recipe-page-image-gallery {
   display: none !important;
 }
+
+/* ==========================================================================
+   Recipe overview: view modes (grid / list) and category grouping
+   ========================================================================== */
+
+/* Card container layout (used on #recipe-collection and on each group panel) */
+.recipe-cards-container.view-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+@media (min-width: 768px) {
+  .recipe-cards-container.view-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .recipe-cards-container.view-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .recipe-cards-container.view-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.recipe-cards-container.view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Elements that only appear in one of the two views */
+.rc-list-only {
+  display: none;
+}
+.view-list .rc-grid-only {
+  display: none;
+}
+.view-list .rc-list-only {
+  display: block;
+}
+
+/* List row: image on the left, content (two rows) on the right */
+.view-list .recipe-card {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+/* Keep filtering (.hidden) working in list view despite the flex rule above */
+.view-list .recipe-card.hidden {
+  display: none;
+}
+.view-list .rc-image {
+  flex: 0 0 auto;
+  width: 7rem;
+}
+.view-list .rc-image .recipe-image-carousel,
+.view-list .rc-image .recipe-image-placeholder {
+  height: 100%;
+}
+.view-list .rc-image .h-48 {
+  height: 100% !important;
+}
+.view-list .rc-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Compact thumbnail: hide carousel controls in the list view */
+.view-list .rc-image .carousel-prev,
+.view-list .rc-image .carousel-next,
+.view-list .rc-image .carousel-dot {
+  display: none;
+}
+
+.view-list .card-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title variant"
+    "tags arrow";
+  align-items: center;
+  column-gap: 0.75rem;
+  row-gap: 0.25rem;
+}
+.view-list .rc-title-block {
+  grid-area: title;
+  margin-bottom: 0;
+  min-width: 0;
+}
+.view-list .rc-title-block .heading-tertiary {
+  @apply text-base truncate;
+}
+.view-list .rc-title-block .text-muted {
+  @apply truncate;
+}
+.view-list .rc-variant-label {
+  grid-area: variant;
+  justify-self: end;
+  @apply text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 whitespace-nowrap;
+}
+.view-list .rc-tags {
+  grid-area: tags;
+  margin-bottom: 0;
+}
+.view-list .rc-open-arrow {
+  grid-area: arrow;
+  justify-self: end;
+  @apply text-gray-400 dark:text-gray-500;
+}
+
+/* Variant rows only expand in selection mode in the list view */
+.view-list .rc-variants {
+  display: none;
+}
+.view-list .recipe-card.selection-mode .rc-variants {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+/* Selection checkbox overlays the thumbnail's top-left corner in the list view */
+.view-list .selection-indicator {
+  top: 0.5rem;
+  left: 0.5rem;
+  transform: none;
+}
+
+/* Category grouping (collapsible + tabs) */
+.recipe-category-group {
+  @apply mb-6;
+}
+.recipe-category-header {
+  @apply flex items-center justify-between w-full px-3 py-2 mb-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold cursor-pointer select-none;
+}
+.recipe-category-header .rc-group-chevron {
+  @apply transition-transform duration-200;
+}
+.recipe-category-group.collapsed .rc-group-chevron {
+  transform: rotate(-90deg);
+}
+.recipe-category-group.collapsed .recipe-cards-container {
+  display: none;
+}
+.recipe-category-group.rc-empty-hidden {
+  display: none;
+}
+
+.recipe-tabs-bar {
+  @apply flex flex-wrap gap-2 mb-6 border-b border-gray-200 dark:border-gray-700 pb-2;
+}
+.recipe-tab-btn {
+  @apply px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+}
+.recipe-tab-btn.active {
+  @apply bg-orange-500 text-white hover:bg-orange-600;
+}
+.recipe-tab-panel[hidden] {
+  display: none;
+}
