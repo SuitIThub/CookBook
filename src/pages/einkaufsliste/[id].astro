@@ -3099,17 +3099,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       const selectAllRecipes = document.getElementById('select-all-recipes');
       const addSelectedRecipesBtn = document.getElementById('add-selected-recipes');
 
-      // Open recipe modal and load recipes
+      // Add recipes via the recipe overview in selection mode (instead of a modal).
       addRecipeBtn?.addEventListener('click', () => {
-        // Reset selection state when opening the modal
-        selectedRecipeIds.clear();
-        if (selectAllRecipes) {
-          selectAllRecipes.checked = false;
-          selectAllRecipes.indeterminate = false;
-        }
-
-        addRecipeModal?.classList.remove('hidden');
-        loadRecipes();
+        window.location.href = `/rezepte?addToList=${encodeURIComponent(shoppingListId)}`;
       });
 
       // Close recipe modal

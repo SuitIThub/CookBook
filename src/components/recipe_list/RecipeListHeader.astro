@@ -88,6 +88,22 @@ declare global {
     </button>
   </div>
 
+  <!-- Add-to-shopping-list Actions (shown when arriving from a shopping list) -->
+  <div id="add-to-list-actions" class="hidden flex flex-wrap gap-2">
+    <button id="cancel-add-to-list" class="btn btn-secondary flex items-center space-x-2 flex-1 md:flex-none justify-center">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+      <span>Abbrechen</span>
+    </button>
+    <button id="confirm-add-to-list" class="btn btn-primary flex items-center space-x-2 flex-1 md:flex-none justify-center">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      </svg>
+      <span>Zur Einkaufsliste hinzufügen</span>
+    </button>
+  </div>
+
   <!-- Regular Actions -->
   <div id="regular-actions" class="flex flex-wrap gap-2">
     <!-- Selection Mode Button (Mobile) -->
@@ -173,6 +189,17 @@ declare global {
   const selectedCountText = selectedCount?.querySelector('span');
   const cancelSelectionBtn = document.getElementById('cancel-selection');
   const selectionModeBtn = document.getElementById('selection-mode-btn');
+
+  // "Add to shopping list" flow: arriving from a shopping list via ?addToList=<id>.
+  const addToListActions = document.getElementById('add-to-list-actions');
+  const confirmAddToListBtn = document.getElementById('confirm-add-to-list') as HTMLButtonElement | null;
+  const cancelAddToListBtn = document.getElementById('cancel-add-to-list');
+  let addToListId: string | null = null;
+  try {
+    addToListId = new URLSearchParams(window.location.search).get('addToList');
+  } catch (e) {
+    addToListId = null;
+  }
   
   // Bulk action buttons
   const bulkDeleteBtn = document.getElementById('bulk-delete');
@@ -202,45 +229,27 @@ declare global {
     e.stopPropagation();
   });
 
-  // Handle recipe card clicks in selection mode
-  document.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    
-    // Don't handle clicks on the checkbox itself - let the change event handle it
-    if (target.classList.contains('recipe-select-checkbox') || 
-        target.closest('.selection-indicator')) {
-      return;
-    }
-    
-    const recipeCard = target.closest('.recipe-card');
-    if (!recipeCard || !isSelectionMode) return;
-
-    // For cards with multiple variant checkboxes, rely on clicking the checkboxes themselves
-    const checkboxes = recipeCard.querySelectorAll<HTMLInputElement>('.recipe-select-checkbox');
-    if (checkboxes.length !== 1) {
-      return;
-    }
-
-    const checkbox = checkboxes[0];
-    const recipeId = checkbox.dataset.recipeId;
-    if (!recipeId) return;
-
-    // Toggle single checkbox (recipes without variants)
-    checkbox.checked = !checkbox.checked;
-
-    if (checkbox.checked) {
-      selectedRecipes.add(recipeId);
-    } else {
-      selectedRecipes.delete(recipeId);
-    }
-
-    updateCardSelection(recipeCard);
-    updateUI();
-  });
+  // Note: toggling a card's selection by clicking/tapping its body is handled
+  // in RecipeCard.astro (which also covers touch). It dispatches a `change`
+  // event on the checkbox, which the `change` listener below turns into
+  // selection-state updates. Handling it here as well would double-toggle.
 
   // Update UI based on selection state
   function updateUI() {
     const count = selectedRecipes.size;
+
+    // Dedicated "add to shopping list" flow: keep selection mode active and only
+    // show the confirm/cancel bar (never fall back to the regular/bulk actions).
+    if (addToListId) {
+      regularActions?.classList.add('hidden');
+      bulkActions?.classList.add('hidden');
+      addToListActions?.classList.remove('hidden');
+      selectedCount?.classList.remove('hidden');
+      if (selectedCountText) {
+        selectedCountText.textContent = `${count} ausgewählt`;
+      }
+      return;
+    }
     
     // If no recipes are selected and we're in selection mode, exit selection mode
     if (count === 0 && isSelectionMode) {
@@ -302,6 +311,65 @@ declare global {
 
   // Cancel selection button click
   cancelSelectionBtn?.addEventListener('click', cancelSelection);
+
+  // --- Add-to-shopping-list flow ---
+  function enterAddToListMode() {
+    if (!addToListId) return;
+    isSelectionMode = true;
+    document.querySelectorAll('.recipe-card').forEach(card => {
+      card.classList.add('selection-mode');
+    });
+    updateUI();
+  }
+
+  cancelAddToListBtn?.addEventListener('click', () => {
+    if (!addToListId) return;
+    window.location.href = `/einkaufsliste/${addToListId}`;
+  });
+
+  confirmAddToListBtn?.addEventListener('click', async () => {
+    if (!addToListId) return;
+
+    const checkedBoxes = document.querySelectorAll<HTMLInputElement>('.recipe-select-checkbox:checked');
+    const ids = Array.from(checkedBoxes)
+      .map(cb => cb.dataset.recipeId)
+      .filter((id): id is string => Boolean(id));
+
+    // Nothing selected → just go back to the list.
+    if (ids.length === 0) {
+      window.location.href = `/einkaufsliste/${addToListId}`;
+      return;
+    }
+
+    if (confirmAddToListBtn) confirmAddToListBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/shopping-lists/${addToListId}/recipes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeIds: ids })
+      });
+      if (!res.ok) throw new Error('Fehler beim Hinzufügen zur Einkaufsliste');
+      window.location.href = `/einkaufsliste/${addToListId}`;
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen zur Einkaufsliste:', error);
+      if (window.showError) {
+        window.showError('Die Rezepte konnten nicht zur Einkaufsliste hinzugefügt werden.');
+      } else {
+        alert('Die Rezepte konnten nicht zur Einkaufsliste hinzugefügt werden.');
+      }
+      if (confirmAddToListBtn) confirmAddToListBtn.disabled = false;
+    }
+  });
+
+  if (addToListId) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', enterAddToListMode);
+    } else {
+      enterAddToListMode();
+    }
+    // Re-assert selection mode after the view controls rebuild the card DOM.
+    document.addEventListener('cookbook:recipe-layout-changed', enterAddToListMode);
+  }
 
   // Handle checkbox changes (for desktop)
   document.addEventListener('change', (e) => {

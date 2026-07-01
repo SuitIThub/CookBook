@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kochbuch-v3';
+const CACHE_NAME = 'kochbuch-v4';
 const urlsToCache = [
   '/favicon.svg',
   '/manifest.json'
@@ -58,22 +58,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // For static assets (JS, CSS, images, etc.), use cache-first strategy
+  // For static assets (JS, CSS, images, etc.), use network-first so updated
+  // styles/scripts are picked up immediately; fall back to cache when offline.
   event.respondWith(
-    caches.match(request)
+    fetch(request)
       .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(request).then((response) => {
-          // Cache static assets for offline access
-          if (response.ok) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseToCache);
-            });
-          }
-          return response;
-        });
+        if (response && response.ok) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache);
+          });
+        }
+        return response;
       })
+      .catch(() => caches.match(request))
   );
 });
 

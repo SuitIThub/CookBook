@@ -1,0 +1,441 @@
+---
+// Toolbar + client controller for the recipe overview view modes.
+// - View: grid (cards) or list (rows)
+// - Category mode: none / collapsible groups / tabs
+// Preferences are stored in localStorage under `cookbook.recipes.layout` and
+// synced across devices via the alias (see AliasSettingsModal.astro).
+interface Props {
+  categories: string[];
+}
+const { categories } = Astro.props;
+---
+
+<div id="recipe-view-controls" class="flex flex-wrap items-center gap-3 mt-6" data-categories={JSON.stringify(categories)}>
+  <!-- View switch -->
+  <div class="rvc-group" role="group" aria-label="Ansicht">
+    <button type="button" class="rvc-seg" data-view="grid" aria-label="Kachelansicht" title="Kacheln">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+      </svg>
+      <span>Kacheln</span>
+    </button>
+    <button type="button" class="rvc-seg" data-view="list" aria-label="Listenansicht" title="Liste">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+      <span>Liste</span>
+    </button>
+  </div>
+
+  <!-- Category grouping mode -->
+  <div class="rvc-group" role="group" aria-label="Kategorien">
+    <button type="button" class="rvc-seg" data-catmode="none" title="Keine Aufteilung">Keine</button>
+    <button type="button" class="rvc-seg" data-catmode="collapsible" title="Einklappbare Gruppen">Gruppen</button>
+    <button type="button" class="rvc-seg" data-catmode="tabs" title="Tabseiten">Tabs</button>
+  </div>
+</div>
+
+<style>
+  .rvc-group {
+    @apply inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-0.5;
+  }
+  .rvc-seg {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 transition-colors;
+  }
+  .rvc-seg:hover {
+    @apply bg-gray-100 dark:bg-gray-700;
+  }
+  .rvc-seg.active {
+    @apply bg-orange-500 text-white;
+  }
+  .rvc-seg.active:hover {
+    @apply bg-orange-600;
+  }
+</style>
+
+<script>
+  // @ts-nocheck
+  (function () {
+    const LAYOUT_KEY = 'cookbook.recipes.layout';
+    const COLLAPSED_KEY = 'cookbook.recipes.collapsed';
+    const ACTIVE_TAB_KEY = 'cookbook.recipes.activeTab';
+    const ALL_TAB = '__all__';
+    const EMPTY_CAT = '__uncat__'; // tab id for recipes without a category
+    const DEFAULT_LAYOUT = { view: 'grid', categoryMode: 'none' };
+
+    // Map between a real category value ('' = uncategorized) and its tab id.
+    function tabIdForCat(cat) {
+      return cat === '' ? EMPTY_CAT : cat;
+    }
+    function catForTabId(id) {
+      return id === EMPTY_CAT ? '' : id;
+    }
+
+    let items = null; // [{ card, menu, category }]
+    let lastMode = null;
+
+    function readLayout() {
+      try {
+        const raw = localStorage.getItem(LAYOUT_KEY);
+        if (!raw) return { ...DEFAULT_LAYOUT };
+        const parsed = JSON.parse(raw);
+        return {
+          view: parsed && parsed.view === 'list' ? 'list' : 'grid',
+          categoryMode: ['none', 'collapsible', 'tabs'].includes(parsed && parsed.categoryMode)
+            ? parsed.categoryMode
+            : 'none',
+        };
+      } catch (e) {
+        return { ...DEFAULT_LAYOUT };
+      }
+    }
+
+    function writeLayout(layout) {
+      try {
+        localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+      } catch (e) {}
+    }
+
+    function getCollapsed() {
+      try {
+        return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]'));
+      } catch (e) {
+        return new Set();
+      }
+    }
+    function saveCollapsed(set) {
+      try {
+        localStorage.setItem(COLLAPSED_KEY, JSON.stringify(Array.from(set)));
+      } catch (e) {}
+    }
+
+    function getActiveTab() {
+      try {
+        return localStorage.getItem(ACTIVE_TAB_KEY) || ALL_TAB;
+      } catch (e) {
+        return ALL_TAB;
+      }
+    }
+    function saveActiveTab(cat) {
+      try {
+        localStorage.setItem(ACTIVE_TAB_KEY, cat);
+      } catch (e) {}
+    }
+
+    // Ensure [data-content] (titles, tags, …) is decoded before any filtering
+    // runs, so SearchBar captures non-empty "original" tag markup.
+    function decodeContent() {
+      document
+        .querySelectorAll('[data-content]:not([data-decoded])')
+        .forEach((el) => {
+          const content = el.getAttribute('data-content');
+          if (content != null) {
+            const ta = document.createElement('textarea');
+            ta.innerHTML = content;
+            el.textContent = ta.value;
+            el.setAttribute('data-decoded', 'true');
+          }
+        });
+    }
+
+    function getCollection() {
+      return document.getElementById('recipe-collection');
+    }
+    function getCategoryFilter() {
+      return document.getElementById('category-filter');
+    }
+    function getControls() {
+      return document.getElementById('recipe-view-controls');
+    }
+
+    function catLabel(cat) {
+      return cat ? cat : 'Ohne Kategorie';
+    }
+
+    function makeContainer(view) {
+      const d = document.createElement('div');
+      d.className = 'recipe-cards-container ' + (view === 'list' ? 'view-list' : 'view-grid');
+      return d;
+    }
+
+    // Capture the flat, ordered list of recipe cards (and their menu portals) once.
+    function captureItems() {
+      if (items) return;
+      const collection = getCollection();
+      if (!collection) {
+        items = [];
+        return;
+      }
+      items = [];
+      collection.querySelectorAll('.recipe-card[data-recipe-id]').forEach((card) => {
+        let menu = card.nextElementSibling;
+        menu = menu && menu.classList && menu.classList.contains('recipe-menu') ? menu : null;
+        items.push({ card, menu, category: card.getAttribute('data-category') || '' });
+      });
+    }
+
+    function appendItem(container, it) {
+      container.appendChild(it.card);
+      if (it.menu) container.appendChild(it.menu);
+    }
+
+    function groupByCategory() {
+      const map = new Map();
+      items.forEach((it) => {
+        if (!map.has(it.category)) map.set(it.category, []);
+        map.get(it.category).push(it);
+      });
+      // Sort: non-empty categories alphabetically, "Ohne Kategorie" (empty) last.
+      const keys = Array.from(map.keys()).sort((a, b) => {
+        if (a === '') return 1;
+        if (b === '') return -1;
+        return a.localeCompare(b, 'de');
+      });
+      const sorted = new Map();
+      keys.forEach((k) => sorted.set(k, map.get(k)));
+      return sorted;
+    }
+
+    function clearCollection() {
+      const collection = getCollection();
+      if (collection) collection.innerHTML = '';
+      return collection;
+    }
+
+    function buildNone(view) {
+      const collection = clearCollection();
+      if (!collection) return;
+      const cont = makeContainer(view);
+      items.forEach((it) => appendItem(cont, it));
+      collection.appendChild(cont);
+    }
+
+    function buildGrouped(view) {
+      const collection = clearCollection();
+      if (!collection) return;
+      const groups = groupByCategory();
+      const collapsed = getCollapsed();
+
+      groups.forEach((its, cat) => {
+        const group = document.createElement('div');
+        group.className = 'recipe-category-group';
+        group.dataset.category = cat;
+        if (collapsed.has(cat)) group.classList.add('collapsed');
+
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'recipe-category-header';
+
+        const left = document.createElement('span');
+        left.textContent = catLabel(cat);
+        const count = document.createElement('span');
+        count.className = 'rc-group-count ml-2 text-sm font-normal text-gray-500 dark:text-gray-400';
+        count.textContent = '(' + its.length + ')';
+        left.appendChild(count);
+
+        const chev = document.createElement('span');
+        chev.className = 'rc-group-chevron';
+        chev.innerHTML =
+          '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>';
+
+        header.appendChild(left);
+        header.appendChild(chev);
+        header.addEventListener('click', () => toggleCollapse(group, cat));
+
+        const cont = makeContainer(view);
+        its.forEach((it) => appendItem(cont, it));
+
+        group.appendChild(header);
+        group.appendChild(cont);
+        collection.appendChild(group);
+      });
+    }
+
+    function toggleCollapse(group, cat) {
+      const collapsed = getCollapsed();
+      if (group.classList.toggle('collapsed')) collapsed.add(cat);
+      else collapsed.delete(cat);
+      saveCollapsed(collapsed);
+    }
+
+    function buildTabs(view) {
+      const collection = clearCollection();
+      if (!collection) return;
+      const groups = groupByCategory();
+
+      const bar = document.createElement('div');
+      bar.className = 'recipe-tabs-bar';
+
+      const active = normalizeActiveTab(getActiveTab(), groups);
+
+      const makeTab = (cat, label) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'recipe-tab-btn';
+        btn.dataset.cat = cat;
+        btn.textContent = label;
+        if (cat === active) btn.classList.add('active');
+        btn.addEventListener('click', () => setActiveTab(cat));
+        return btn;
+      };
+
+      bar.appendChild(makeTab(ALL_TAB, 'Alle'));
+      groups.forEach((its, cat) => {
+        bar.appendChild(makeTab(tabIdForCat(cat), catLabel(cat) + ' (' + its.length + ')'));
+      });
+
+      const cont = makeContainer(view);
+      items.forEach((it) => appendItem(cont, it));
+
+      collection.appendChild(bar);
+      collection.appendChild(cont);
+
+      applyTabToFilter(active);
+    }
+
+    function normalizeActiveTab(id, groups) {
+      if (id === ALL_TAB) return ALL_TAB;
+      return groups.has(catForTabId(id)) ? id : ALL_TAB;
+    }
+
+    // When the "Ohne Kategorie" tab is active, hide any card that has a category
+    // (the category dropdown cannot express "uncategorized only").
+    function hideCategorizedIfUncat(id) {
+      if (id !== EMPTY_CAT) return;
+      const collection = getCollection();
+      if (!collection) return;
+      collection.querySelectorAll('.recipe-card').forEach((card) => {
+        if ((card.getAttribute('data-category') || '') !== '') {
+          card.classList.add('hidden');
+        }
+      });
+    }
+
+    function applyTabToFilter(id) {
+      const cf = getCategoryFilter();
+      const cat = catForTabId(id);
+      if (cf) {
+        // Real categories go through the dropdown; ALL and uncategorized use ''.
+        cf.value = id === ALL_TAB || cat === '' ? '' : cat;
+        if (window.filterRecipes) window.filterRecipes();
+      }
+      hideCategorizedIfUncat(id);
+      document.querySelectorAll('.recipe-tab-btn').forEach((b) => {
+        b.classList.toggle('active', b.dataset.cat === id);
+      });
+    }
+
+    function setActiveTab(id) {
+      saveActiveTab(id);
+      applyTabToFilter(id);
+    }
+
+    function resetCategoryFilter() {
+      const cf = getCategoryFilter();
+      if (cf && cf.value) {
+        cf.value = '';
+        if (window.filterRecipes) window.filterRecipes();
+      }
+    }
+
+    function setDropdownVisible(visible) {
+      const cf = getCategoryFilter();
+      const wrap = cf ? cf.closest('div') : null;
+      if (wrap) wrap.classList.toggle('hidden', !visible);
+    }
+
+    function updateButtons(layout) {
+      const controls = getControls();
+      if (!controls) return;
+      controls.querySelectorAll('[data-view]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.view === layout.view);
+      });
+      controls.querySelectorAll('[data-catmode]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.catmode === layout.categoryMode);
+      });
+    }
+
+    function render(layout) {
+      decodeContent();
+      captureItems();
+      if (!items) return;
+      updateButtons(layout);
+      const view = layout.view === 'list' ? 'list' : 'grid';
+      const mode = layout.categoryMode;
+
+      if (mode === 'tabs') {
+        setDropdownVisible(false);
+        buildTabs(view);
+      } else {
+        setDropdownVisible(true);
+        if (lastMode === 'tabs') resetCategoryFilter();
+        if (mode === 'collapsible') buildGrouped(view);
+        else buildNone(view);
+      }
+      lastMode = mode;
+
+      // Re-apply the current search/category filter to the freshly built DOM.
+      if (window.filterRecipes) window.filterRecipes();
+      if (window.onRecipesFiltered) window.onRecipesFiltered();
+    }
+
+    // Update category group counts / hide empty groups after filtering.
+    window.onRecipesFiltered = function () {
+      const layout = readLayout();
+      if (layout.categoryMode === 'tabs') {
+        // Keep the "Ohne Kategorie" tab restricted to uncategorized recipes
+        // even after a search re-runs the filter.
+        hideCategorizedIfUncat(getActiveTab());
+        return;
+      }
+      if (layout.categoryMode !== 'collapsible') return;
+      document.querySelectorAll('.recipe-category-group').forEach((group) => {
+        const visible = group.querySelectorAll('.recipe-card:not(.hidden)').length;
+        const countEl = group.querySelector('.rc-group-count');
+        if (countEl) countEl.textContent = '(' + visible + ')';
+        group.classList.toggle('rc-empty-hidden', visible === 0);
+      });
+    };
+
+    function wireControls() {
+      const controls = getControls();
+      if (!controls || controls.dataset.wired === 'yes') return;
+      controls.dataset.wired = 'yes';
+
+      controls.querySelectorAll('[data-view]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const layout = readLayout();
+          layout.view = btn.dataset.view;
+          writeLayout(layout);
+          render(layout);
+        });
+      });
+      controls.querySelectorAll('[data-catmode]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const layout = readLayout();
+          layout.categoryMode = btn.dataset.catmode;
+          writeLayout(layout);
+          render(layout);
+        });
+      });
+    }
+
+    function init() {
+      if (!getCollection()) return;
+      captureItems();
+      wireControls();
+      render(readLayout());
+    }
+
+    // React to layout changes pushed from other devices via the alias sync.
+    document.addEventListener('cookbook:recipe-layout-changed', () => {
+      render(readLayout());
+    });
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  })();
+</script>

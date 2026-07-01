@@ -46,4 +46,5 @@ export const EVENTS = {
   GLOBAL_TIMER_CREATED: 'global-timer-created',
   GLOBAL_TIMER_UPDATED: 'global-timer-updated',
   GLOBAL_TIMER_DELETED: 'global-timer-deleted',
+  ALIAS_SETTINGS_UPDATED: 'alias-settings-updated',
 } as const; 

@@ -380,6 +380,11 @@ const { categories, initialSearchQuery = '', initialCategory = '' } = Astro.prop
     if (recipeCountElement) {
       recipeCountElement.textContent = visibleCount.toString();
     }
+
+    // Notify listeners (e.g. RecipeViewControls updates group counts / hides empty groups)
+    if ((window as any).onRecipesFiltered) {
+      (window as any).onRecipesFiltered();
+    }
   }
 
   // Update URL when search or category changes
