@@ -632,6 +632,89 @@ Mögliche Fehler:
 - `404`: Liste oder Rezept nicht gefunden
 - `500`: Fehler beim Aktualisieren der Liste
 
+#### Artikel zu einer Einkaufsliste hinzufügen
+
+```plaintext
+POST /api/shopping-lists/{id}/items
+```
+
+Fügt einer bestimmten Einkaufsliste einen einzelnen Artikel hinzu. Dies ist eine
+dedizierte REST-Alternative zur `add-item`-Aktion des `PUT`-Endpunkts.
+
+Request Body (das Item kann direkt oder unter `item` verschachtelt gesendet werden):
+```json
+{
+  "name": "Milch",
+  "description": "fettarm",
+  "quantity": { "amount": 1, "unit": "l" },
+  "note": "<p>Angebot bei ...</p>"
+}
+```
+
+Nur `name` ist erforderlich. Wird `quantity` angegeben, muss es einen numerischen
+`amount` und eine `unit` enthalten.
+
+Beispiel:
+```bash
+curl --request POST \
+  --url "https://example.com/api/shopping-lists/{id}/items" \
+  --header "Content-Type: application/json" \
+  --data '{ "name": "Milch", "quantity": { "amount": 1, "unit": "l" } }'
+```
+
+Bei Erfolg wird Status `201` und die aktualisierte Einkaufsliste zurückgegeben.
+
+Mögliche Fehler:
+- `400`: ID fehlt oder ungültige Item-Daten (z. B. fehlender Name)
+- `404`: Liste nicht gefunden
+- `500`: Fehler beim Hinzufügen des Artikels
+
+#### Sammeleinkaufsliste abrufen
+
+```plaintext
+GET /api/shopping-lists/permanent
+```
+
+Gibt die Sammeleinkaufsliste (Sammelliste) direkt zurück, ohne dass die ID der Liste
+bekannt sein muss.
+
+Beispiel:
+```bash
+curl --url "https://example.com/api/shopping-lists/permanent"
+```
+
+Bei Erfolg wird Status `200` und die vollständige Sammelliste zurückgegeben (gleiches
+Format wie `GET /api/shopping-lists?id={id}`).
+
+Mögliche Fehler:
+- `404`: Sammelliste nicht gefunden
+- `500`: Fehler beim Abrufen der Sammelliste
+
+#### Artikel zur Sammeleinkaufsliste hinzufügen
+
+```plaintext
+POST /api/shopping-lists/permanent/items
+```
+
+Fügt der Sammeleinkaufsliste (Sammelliste) einen einzelnen Artikel hinzu, ohne dass
+die ID der Liste bekannt sein muss. Body und Regeln sind identisch mit dem Endpunkt
+`POST /api/shopping-lists/{id}/items`.
+
+Beispiel:
+```bash
+curl --request POST \
+  --url "https://example.com/api/shopping-lists/permanent/items" \
+  --header "Content-Type: application/json" \
+  --data '{ "name": "Küchenrolle" }'
+```
+
+Bei Erfolg wird Status `201` und die aktualisierte Sammelliste zurückgegeben.
+
+Mögliche Fehler:
+- `400`: Ungültige Item-Daten (z. B. fehlender Name)
+- `404`: Sammelliste nicht gefunden
+- `500`: Fehler beim Hinzufügen des Artikels
+
 #### Einkaufsliste löschen
 
 ```plaintext
