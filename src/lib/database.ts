@@ -632,6 +632,21 @@ export class CookbookDatabase {
     return this.updateShoppingList(listId, { items: list.items });
   }
 
+  removeItemFromShoppingList(listId: string, itemId: string): ShoppingList | null {
+    const list = this.getShoppingList(listId);
+    if (!list) {
+      return null;
+    }
+
+    const filteredItems = list.items.filter(item => item.id !== itemId);
+    if (filteredItems.length === list.items.length) {
+      // Item nicht in der Liste vorhanden
+      return null;
+    }
+
+    return this.updateShoppingList(listId, { items: filteredItems });
+  }
+
   // Recipe management for shopping lists
   addRecipeToShoppingList(listId: string, recipeId: string): ShoppingList | null {
     const shoppingList = this.getShoppingList(listId);
