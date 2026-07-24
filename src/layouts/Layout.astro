@@ -42,13 +42,15 @@ const { title } = Astro.props;
         }
       } catch (e) {}
 
-      // data-layout: mobile (tall portrait) | tablet | desktop — mirrors src/lib/layoutMode.ts
+      // data-layout: mobile (phone-tall) | tablet | desktop — mirrors src/lib/layoutMode.ts
       function applyLayoutMode() {
         const w = window.innerWidth;
         const h = window.innerHeight;
         const aspect = h > 0 ? w / h : 0;
+        const shortSide = Math.min(w, h);
         let mode = 'mobile';
-        if (aspect > 0.75) {
+        // Mobile only when tall AND phone-sized (Fold main short side ≳ 600 → tablet)
+        if (!(aspect <= 0.75 && shortSide < 600)) {
           mode = w < 1280 ? 'tablet' : 'desktop';
         }
         document.documentElement.dataset.layout = mode;

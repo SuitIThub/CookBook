@@ -52,12 +52,18 @@ export default {
   },
   plugins: [
     function ({ addVariant }) {
-      // Layout modes by aspect ratio + viewport width (see src/lib/layoutMode.ts)
-      // Mutually exclusive via range syntax (aspect-ratio <= 0.75 vs > 0.75)
-      addVariant('mobile', '@media (aspect-ratio <= 3/4)');
-      addVariant('tablet', '@media (aspect-ratio > 3/4) and (width < 1280px)');
-      addVariant('desktop', '@media (aspect-ratio > 3/4) and (width >= 1280px)');
-      addVariant('not-mobile', '@media (aspect-ratio > 3/4)');
+      // Layout modes — keep in sync with src/lib/layoutMode.ts
+      // mobile: tall portrait AND phone-sized short side (width < 600 in tall mode)
+      // tablet/desktop: everything else (incl. Fold main ~0.9 aspect)
+      addVariant('mobile', '@media (aspect-ratio <= 3/4) and (width < 600px)');
+      // not-mobile = (aspect > 3/4) OR (width >= 600)
+      addVariant('not-mobile', '@media (aspect-ratio > 3/4), (width >= 600px)');
+      // tablet = not-mobile AND width < 1280
+      addVariant(
+        'tablet',
+        '@media (aspect-ratio > 3/4) and (width < 1280px), (width >= 600px) and (width < 1280px)'
+      );
+      addVariant('desktop', '@media (width >= 1280px)');
     },
   ],
 }
