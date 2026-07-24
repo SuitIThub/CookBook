@@ -87,7 +87,7 @@
 }
 
 .grid-two-cols {
-  @apply grid md:grid-cols-2 gap-6;
+  @apply grid grid-cols-1 not-mobile:grid-cols-2 gap-6;
 }
 
 .grid-four-cols {
