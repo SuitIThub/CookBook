@@ -143,7 +143,8 @@ try {
       <RecipeImageGallery recipe={recipe} mode="view" />
       
       <!-- Recipe Sections -->
-      <div class="grid md:grid-cols-2 gap-6">
+      <!-- Two columns on tablet+ (not-mobile); Fold CSS width is often < md (768) -->
+      <div class="grid-two-cols">
         <!-- Ingredients Section -->
         <IngredientsList recipe={recipe} />
 
