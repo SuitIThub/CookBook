@@ -15,7 +15,7 @@ const { title } = Astro.props;
 <!DOCTYPE html>
 <html lang="de" style="background-color: #111827; color: #f9fafb;">
   <script>
-    // Theme detection script (runs immediately to prevent flash)
+    // Theme + layout detection (runs immediately to prevent flash)
     (function() {
       const theme = localStorage.getItem('theme') || 
         (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -41,6 +41,23 @@ const { title } = Astro.props;
           document.documentElement.classList.add('low-bandwidth');
         }
       } catch (e) {}
+
+      // data-layout: mobile (tall portrait) | tablet | desktop — mirrors src/lib/layoutMode.ts
+      function applyLayoutMode() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const aspect = h > 0 ? w / h : 0;
+        let mode = 'mobile';
+        if (aspect > 0.75) {
+          mode = w < 1280 ? 'tablet' : 'desktop';
+        }
+        document.documentElement.dataset.layout = mode;
+      }
+      applyLayoutMode();
+      window.addEventListener('resize', applyLayoutMode);
+      window.addEventListener('orientationchange', function() {
+        setTimeout(applyLayoutMode, 100);
+      });
     })();
   </script>
   <head>
@@ -102,8 +119,8 @@ const { title } = Astro.props;
             </a>
           </div>
           
-          <!-- Desktop navigation -->
-          <div class="hidden portrait:hidden landscape:flex items-center space-x-4">
+          <!-- Desktop navigation (large landscape viewports only) -->
+          <div class="hidden desktop:flex items-center space-x-4">
             <a href="/rezepte" class="nav-link">
               Rezepte
             </a>
@@ -154,8 +171,8 @@ const { title } = Astro.props;
             </button>
           </div>
 
-          <!-- Mobile hamburger button -->
-          <div class="flex items-center space-x-2 portrait:flex landscape:hidden">
+          <!-- Mobile/tablet hamburger button -->
+          <div class="flex items-center space-x-2 desktop:hidden">
             <!-- Low-bandwidth (data saver) mobile -->
             <button
               type="button"
@@ -564,19 +581,19 @@ const { title } = Astro.props;
           });
         });
 
-        // Close mobile menu when screen orientation changes
-        const handleOrientationChange = () => {
+        // Close mobile menu when layout/viewport changes
+        const handleLayoutChange = () => {
           setTimeout(() => {
             if (!mobileMenu || !openIcon || !closeIcon) return;
-            // Always close menu and reset icons on orientation change
+            // Always close menu and reset icons on layout change
             mobileMenu.classList.add('hidden');
             openIcon.classList.remove('hidden');
             closeIcon.classList.add('hidden');
           }, 100);
         };
 
-        window.addEventListener('orientationchange', handleOrientationChange);
-        window.addEventListener('resize', handleOrientationChange);
+        window.addEventListener('orientationchange', handleLayoutChange);
+        window.addEventListener('resize', handleLayoutChange);
       }
 
       // Initialize modal functionality

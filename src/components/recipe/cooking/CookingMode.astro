@@ -327,6 +327,8 @@ const totalSteps = preparationGroups.reduce((sum, group) => sum + group.steps.le
   }
 
   function updateSlidePositions() {
+    // Cooking swipe axis follows device orientation (not layout mode):
+    // portrait → vertical slides; landscape → horizontal slides.
     const isLandscape = window.innerWidth > window.innerHeight;
     slides.forEach((slide, index) => {
       const position = index - currentSlide;
