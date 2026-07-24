@@ -2,7 +2,7 @@
 // Multi-Timer Manager Component
 ---
 
-<!-- Timer Sidebar for landscape mode -->
+<!-- Timer Sidebar for tablet/desktop layout -->
 <div id="timer-sidebar" class="timer-sidebar hidden">
   <!-- Expanded content -->
   <div id="timer-sidebar-content" class="timer-sidebar-content">
@@ -29,7 +29,7 @@
   <span class="timer-count-indicator" id="sidebar-timer-count"></span>
 </button>
 
-<!-- Timer Footer for portrait mode -->
+<!-- Timer Footer for mobile layout -->
 <div id="timer-footer" class="timer-footer hidden">
   <div class="timer-footer-toggle" id="timer-footer-toggle">
     <div class="flex items-center justify-between w-full">
@@ -56,6 +56,8 @@
 
 
 <script>
+  import { getLayoutMode, type LayoutMode } from '../../lib/layoutMode';
+
   // Timer interface definition
   interface Timer {
     id: string;
@@ -79,7 +81,8 @@
     private intervals: Map<string, NodeJS.Timeout> = new Map();
     private alarmIntervals: Map<string, NodeJS.Timeout> = new Map();
     private isExpanded = false;
-    private isPortraitMode = false;
+    /** True when layout mode is mobile (tall portrait) — timer footer instead of sidebar */
+    private isMobileLayout = false;
     private eventSource: EventSource | null = null;
     private syncInterval: NodeJS.Timeout | null = null;
     private isSyncing = false; // Prevent sync loops
@@ -87,7 +90,7 @@
     constructor() {
       this.init();
       this.setupEventListeners();
-      this.updateOrientation();
+      this.updateLayoutMode();
       // Ensure timer UI is always available
       this.showTimerUI();
       // Connect to global timer sync
@@ -169,10 +172,10 @@
     }
 
     private setupEventListeners() {
-      // Orientation change
-      window.addEventListener('resize', () => this.updateOrientation());
+      // Layout mode change (mobile / tablet / desktop)
+      window.addEventListener('resize', () => this.updateLayoutMode());
       window.addEventListener('orientationchange', () => {
-        setTimeout(() => this.updateOrientation(), 100);
+        setTimeout(() => this.updateLayoutMode(), 100);
       });
 
       // Footer toggle
@@ -634,23 +637,23 @@
       }
     }
 
-    private updateOrientation() {
-      const isLandscape = window.innerWidth > window.innerHeight;
-      this.isPortraitMode = !isLandscape;
+    private updateLayoutMode() {
+      const mode: LayoutMode = getLayoutMode();
+      this.isMobileLayout = mode === 'mobile';
       
       const sidebar = document.getElementById('timer-sidebar');
       const footer = document.getElementById('timer-footer');
       const toggleBtn = document.getElementById('sidebar-toggle');
       
-      if (this.isPortraitMode) {
-        // Portrait mode
+      if (this.isMobileLayout) {
+        // Mobile layout — footer
         sidebar?.classList.add('hidden');
         toggleBtn?.classList.add('hidden');
         footer?.classList.remove('hidden');
         document.body.classList.remove('timer-sidebar-active');
-        // Add fallback class for timer footer being active in portrait
+        // Add fallback class for timer footer being active in mobile
         document.body.classList.add('timer-footer-active');
-        // Keep footer collapsed by default in portrait mode
+        // Keep footer collapsed by default in mobile mode
         this.isExpanded = false;
         const expanded = document.getElementById('timer-footer-expanded');
         const chevron = document.getElementById('footer-chevron');
@@ -661,18 +664,18 @@
           document.body.classList.remove('timer-footer-expanded-active');
         }
       } else {
-        // Landscape mode
+        // Tablet / desktop — sidebar
         sidebar?.classList.remove('hidden');
         footer?.classList.add('hidden');
         toggleBtn?.classList.remove('hidden');
-        // Remove footer fallback classes when in landscape
+        // Remove footer fallback classes when using sidebar
         document.body.classList.remove('timer-footer-active');
         document.body.classList.remove('timer-footer-expanded-active');
-        // Start collapsed by default in landscape mode
+        // Start collapsed by default in tablet/desktop mode
         this.collapseSidebar();
       }
       
-      // Always update the toggle button visibility based on orientation
+      // Always update the toggle button visibility based on layout mode
       this.updateSidebarToggleDisplay();
     }
 
@@ -1032,10 +1035,10 @@
       const activeTimers = Array.from(this.timers.values()).filter(t => !t.isCompleted);
       sidebarCountEl.textContent = activeTimers.length.toString();
       
-      // Only show toggle button in landscape mode
+      // Only show toggle button in tablet/desktop (sidebar) mode
       const toggleBtn = document.getElementById('sidebar-toggle');
       if (toggleBtn) {
-        if (this.isPortraitMode) {
+        if (this.isMobileLayout) {
           toggleBtn.classList.add('hidden');
         } else {
           toggleBtn.classList.remove('hidden');
@@ -1263,13 +1266,13 @@
     }
 
     private showTimerUI() {
-      this.updateOrientation();
-      // If in landscape mode and we have timers, expand the sidebar
-      if (!this.isPortraitMode && this.timers.size > 0) {
+      this.updateLayoutMode();
+      // If in tablet/desktop mode and we have timers, expand the sidebar
+      if (!this.isMobileLayout && this.timers.size > 0) {
         this.expandSidebar();
       }
-      // In portrait mode, expand footer if we have timers
-      if (this.isPortraitMode && this.timers.size > 0) {
+      // In mobile mode, expand footer if we have timers
+      if (this.isMobileLayout && this.timers.size > 0) {
         this.isExpanded = true;
         const expanded = document.getElementById('timer-footer-expanded');
         const chevron = document.getElementById('footer-chevron');
@@ -1285,7 +1288,7 @@
     private hideTimerUI() {
       // Never hide the timer UI completely - just collapse it
       // Users need access to create manual timers
-      this.updateOrientation();
+      this.updateLayoutMode();
     }
 
     private showAddTimerDialog() {

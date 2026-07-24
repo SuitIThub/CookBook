@@ -155,8 +155,8 @@
   }
 }
 
-/* Portrait mode specific styles */
-@media (orientation: portrait) {
+/* Mobile layout (tall portrait: aspect-ratio <= 3/4) */
+@media (aspect-ratio <= 3/4) {
   .nav-header .container {
     position: relative;
   }
@@ -165,7 +165,7 @@
     background: inherit;
   }
   
-  /* Ensure mobile menu is properly hidden in portrait when not active */
+  /* Ensure mobile menu is properly hidden in mobile when not active */
   #mobile-menu.hidden {
     display: none !important;
   }
@@ -182,7 +182,7 @@
 }
 
 /* Recipe header mobile responsive styles */
-@media (orientation: portrait) {
+@media (aspect-ratio <= 3/4) {
   /* Mobile buttons should be slightly larger and more touch-friendly */
   #edit-btn-mobile,
   #add-to-shopping-mobile {
@@ -196,13 +196,44 @@
   }
 }
 
-/* Landscape mode - always hide mobile menu */
-@media (orientation: landscape) {
+/* Tablet: allow hamburger menu (same as mobile), fixed nav like desktop */
+@media (aspect-ratio > 3/4) and (width < 1280px) {
+  .nav-header .container {
+    position: relative;
+  }
+
+  #mobile-menu {
+    background: inherit;
+  }
+
+  #mobile-menu.hidden {
+    display: none !important;
+  }
+
+  .nav-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+  }
+
+  main.container {
+    padding-top: 6rem !important;
+  }
+
+  .timer-sidebar {
+    top: 4rem;
+  }
+}
+
+/* Desktop: hide mobile menu, fixed navbar */
+@media (aspect-ratio > 3/4) and (width >= 1280px) {
   #mobile-menu {
     display: none !important;
   }
   
-  /* Fixed navbar in landscape mode */
+  /* Fixed navbar in desktop mode */
   .nav-header {
     position: fixed;
     top: 0;
@@ -338,8 +369,8 @@
   border-radius: 0.5rem 0 0 0.5rem; /* Always rounded left only */
 }
 
-/* Show the toggle button only in landscape mode */
-@media (orientation: landscape) {
+/* Show the toggle button only in tablet/desktop (not-mobile) */
+@media (aspect-ratio > 3/4) {
   .timer-sidebar-toggle:not(.hidden) {
     @apply flex flex-col;
   }
@@ -351,8 +382,8 @@
   /* Keep same border-radius - always rounded left only */
 }
 
-/* Adjust main content when sidebar is visible and expanded */
-@media (orientation: landscape) {
+/* Adjust main content when sidebar is visible and expanded (tablet + desktop) */
+@media (aspect-ratio > 3/4) {
   body:has(.timer-sidebar:not(.hidden):not(.collapsed)) main {
     padding-right: 20rem; /* w-80 equivalent */
   }
@@ -363,14 +394,14 @@
   @apply pr-0;
 }
 
-@media (orientation: landscape) {
+@media (aspect-ratio > 3/4) {
   .timer-sidebar-active main {
     padding-right: 20rem; /* w-80 equivalent */
   }
 }
 
-/* Fallback for timer footer padding in portrait mode */
-@media (orientation: portrait) {
+/* Fallback for timer footer padding in mobile layout */
+@media (aspect-ratio <= 3/4) {
   .timer-footer-active main {
     padding-bottom: 80px; /* Space for collapsed timer footer */
   }
@@ -575,8 +606,8 @@ input[type="number"] {
   @apply bg-white text-orange-500 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center mt-1 min-w-[1.25rem];
 }
 
-/* Responsive adjustments */
-@media (orientation: landscape) and (max-height: 600px) {
+/* Responsive adjustments — short tablet/desktop viewports (e.g. Fold split-screen) */
+@media (aspect-ratio > 3/4) and (max-height: 600px) {
   .timer-sidebar {
     @apply w-64;
   }

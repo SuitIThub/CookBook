@@ -50,5 +50,14 @@ export default {
       },
     },
   },
-  plugins: [],
-} 
+  plugins: [
+    function ({ addVariant }) {
+      // Layout modes by aspect ratio + viewport width (see src/lib/layoutMode.ts)
+      // Mutually exclusive via range syntax (aspect-ratio <= 0.75 vs > 0.75)
+      addVariant('mobile', '@media (aspect-ratio <= 3/4)');
+      addVariant('tablet', '@media (aspect-ratio > 3/4) and (width < 1280px)');
+      addVariant('desktop', '@media (aspect-ratio > 3/4) and (width >= 1280px)');
+      addVariant('not-mobile', '@media (aspect-ratio > 3/4)');
+    },
+  ],
+}

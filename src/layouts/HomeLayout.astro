@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html lang="de" style="background-color: #111827; color: #f9fafb;">
   <script>
-    // Theme detection script (runs immediately to prevent flash)
+    // Theme + layout detection (runs immediately to prevent flash)
     (function() {
       const theme = localStorage.getItem('theme') || 
         (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -28,6 +28,23 @@
           document.documentElement.classList.add('low-bandwidth');
         }
       } catch (e) {}
+
+      // data-layout: mobile | tablet | desktop — mirrors src/lib/layoutMode.ts
+      function applyLayoutMode() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const aspect = h > 0 ? w / h : 0;
+        let mode = 'mobile';
+        if (aspect > 0.75) {
+          mode = w < 1280 ? 'tablet' : 'desktop';
+        }
+        document.documentElement.dataset.layout = mode;
+      }
+      applyLayoutMode();
+      window.addEventListener('resize', applyLayoutMode);
+      window.addEventListener('orientationchange', function() {
+        setTimeout(applyLayoutMode, 100);
+      });
     })();
   </script>
   <head>
