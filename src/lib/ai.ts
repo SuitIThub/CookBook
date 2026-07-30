@@ -35,6 +35,23 @@ function getOpenRouterEnvApiKey(): string {
   return apiKey.trim();
 }
 
+/** Attribution headers recommended/required by OpenRouter for stable responses. */
+function getOpenRouterHeaders(apiKey: string, withJsonContentType = false): Record<string, string> {
+  const siteUrl =
+    (typeof import.meta.env.PUBLIC_SITE_URL === 'string' && import.meta.env.PUBLIC_SITE_URL.trim()) ||
+    'https://cookbook.local';
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${apiKey}`,
+    'HTTP-Referer': siteUrl,
+    'X-Title': 'CookBook',
+    'X-OpenRouter-Title': 'CookBook',
+  };
+  if (withJsonContentType) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
+}
+
 export type AIProvider = 'ollama' | 'openrouter';
 
 export interface AIRequestConfig {
@@ -120,7 +137,7 @@ export async function validateOpenRouterApiKey(apiKey?: string): Promise<boolean
   try {
     const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
       method: 'GET',
-      headers: { Authorization: `Bearer ${key}` },
+      headers: getOpenRouterHeaders(key),
       signal: AbortSignal.timeout(5000),
     });
     return res.ok;
@@ -148,7 +165,7 @@ export async function getOpenRouterKeyInfo(apiKey?: string): Promise<OpenRouterK
   const key = typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : getOpenRouterEnvApiKey();
   const res = await fetch('https://openrouter.ai/api/v1/key', {
     method: 'GET',
-    headers: { Authorization: `Bearer ${key}` },
+    headers: getOpenRouterHeaders(key),
     signal: AbortSignal.timeout(6000),
   });
   if (!res.ok) {
@@ -221,11 +238,9 @@ export async function listOpenRouterModelsDetailed(
   options?: { freeOnly?: boolean }
 ): Promise<OpenRouterModelDetail[]> {
   const key = typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : getOpenRouterEnvApiKey();
-  const headers: Record<string, string> = {};
-  headers.Authorization = `Bearer ${key}`;
   const res = await fetch('https://openrouter.ai/api/v1/models', {
     method: 'GET',
-    headers,
+    headers: getOpenRouterHeaders(key),
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
@@ -356,10 +371,7 @@ export async function openRouterChat(
   }
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: getOpenRouterHeaders(apiKey, true),
     body: JSON.stringify({
       model: getModelForProvider({ ...config, provider: 'openrouter' }),
       messages,
@@ -527,10 +539,7 @@ export async function* openRouterChatStream(
   }
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: getOpenRouterHeaders(apiKey, true),
     body: JSON.stringify({
       model: getModelForProvider({ ...config, provider: 'openrouter' }),
       messages,

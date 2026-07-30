@@ -239,7 +239,28 @@ ${recipeMarkdown}`,
 
     const stream = new ReadableStream({
       async start(controller) {
+        // Immediate first byte + keepalives: long OpenRouter waits otherwise look "idle"
+        // and mobile/Tailscale/VPN stacks often abort with "Failed to fetch".
+        const enqueueJson = (payload: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(JSON.stringify(payload) + '\n'));
+        };
+        let keepAlive: ReturnType<typeof setInterval> | null = null;
         try {
+          enqueueJson({ status: 'started' });
+          keepAlive = setInterval(() => {
+            try {
+              enqueueJson({ ping: true, t: Date.now() });
+            } catch {
+              /* stream already closed */
+            }
+          }, 8000);
+          // Don't keep the process alive solely for pings (Node)
+          try {
+            (keepAlive as NodeJS.Timeout).unref?.();
+          } catch {
+            /* ignore */
+          }
+
           for await (const chunk of aiChatStream(providerForRequest === 'openrouter' ? messagesForOpenRouter : messagesForOllama, aiConfig, {
             extraBody,
             onMeta: (meta) => {
@@ -247,35 +268,28 @@ ${recipeMarkdown}`,
             },
           })) {
             fullContent += chunk;
-            controller.enqueue(encoder.encode(JSON.stringify({ delta: chunk }) + '\n'));
+            enqueueJson({ delta: chunk });
           }
           const assistantMessage: ChatMessage = { role: 'assistant', content: fullContent };
           const newCache = [...cached, userMessage, assistantMessage];
           setCachedMessages(cacheKey, newCache);
-          controller.enqueue(
-            encoder.encode(
-              JSON.stringify({
-                done: true,
-                fullMessage: fullContent,
-                cache: {
-                  supported: cacheCapability.supported,
-                  mode: cacheCapability.mode,
-                  note: cacheCapability.note,
-                },
-                usage: streamMeta.usage,
-              }) + '\n'
-            )
-          );
+          enqueueJson({
+            done: true,
+            fullMessage: fullContent,
+            cache: {
+              supported: cacheCapability.supported,
+              mode: cacheCapability.mode,
+              note: cacheCapability.note,
+            },
+            usage: streamMeta.usage,
+          });
         } catch (err) {
           console.error('AI chat stream error:', err);
-          controller.enqueue(
-            encoder.encode(
-              JSON.stringify({
-                error: err instanceof Error ? err.message : 'Chat request failed',
-              }) + '\n'
-            )
-          );
+          enqueueJson({
+            error: err instanceof Error ? err.message : 'Chat request failed',
+          });
         } finally {
+          if (keepAlive) clearInterval(keepAlive);
           controller.close();
         }
       },
@@ -284,8 +298,10 @@ ${recipeMarkdown}`,
     return new Response(stream, {
       status: 200,
       headers: {
-        'Content-Type': 'application/x-ndjson',
-        'Cache-Control': 'no-store',
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'X-Accel-Buffering': 'no',
+        Connection: 'keep-alive',
       },
     });
   } catch (err) {

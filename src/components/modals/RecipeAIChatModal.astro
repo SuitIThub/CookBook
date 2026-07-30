@@ -1599,6 +1599,8 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
               if (DEBUG_ENABLED) {
                 console.log('[AI DEBUG stream line]', trimmed);
               }
+              // Keepalive / handshake lines from the server (Tailscale/VPN idle protection)
+              if (data.ping === true || data.status === 'started') continue;
               if (data.error) {
                 streamError = data.error;
                 break;
@@ -1631,6 +1633,7 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
         for (const line of buffer.split('\n').map((l) => l.trim()).filter(Boolean)) {
           try {
             const data = JSON.parse(line);
+            if (data.ping === true || data.status === 'started') continue;
             if (data.error) { streamError = data.error; break; }
             if (data.cache && typeof data.cache === 'object') cacheMeta = data.cache;
             if (data.usage && typeof data.usage === 'object') usageMeta = data.usage;
@@ -1709,7 +1712,13 @@ const recipeTitle = referencedRecipes[0]?.title ?? 'Rezept';
           appendRegenerateButton(assistantWrap, messages.length - 1);
           setCacheImpact(`Abgebrochen nach ${formatElapsed(Date.now() - generationStartedAt)}.`);
         } else {
-          bubble.textContent = e instanceof Error ? e.message : 'Netzwerkfehler. Bitte erneut versuchen.';
+          const raw = e instanceof Error ? e.message : '';
+          const isNetworkFetch =
+            e instanceof TypeError ||
+            /failed to fetch|networkerror|load failed|fetch/i.test(raw);
+          bubble.textContent = isNetworkFetch
+            ? 'Verbindung abgebrochen (häufig über Tailscale/VPN bei langen KI-Antworten). Bitte erneut versuchen.'
+            : raw || 'Netzwerkfehler. Bitte erneut versuchen.';
           thinkingHost.innerHTML = '';
           messages = [...baseHistory, { role: 'user', content: text }, { role: 'assistant', content: bubble.textContent }];
           touchActiveTab();
