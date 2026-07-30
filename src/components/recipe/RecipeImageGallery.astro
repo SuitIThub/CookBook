@@ -163,6 +163,31 @@ const images = recipe.images || [];
         });
 
         if (response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const remainingImages = Array.isArray(payload.images)
+            ? payload.images
+            : recipeImages.filter((img) => img.id !== imageId);
+
+          // Keep in-memory recipe in sync so form save does not restore deleted images
+          if (window.currentRecipe && typeof window.currentRecipe === 'object') {
+            window.currentRecipe.images = remainingImages;
+            window.currentRecipe.imageUrl =
+              typeof payload.imageUrl === 'string'
+                ? payload.imageUrl
+                : (remainingImages[0]?.url ?? null);
+          }
+
+          recipeImages = remainingImages;
+          document.querySelectorAll('[data-recipe-images]').forEach((el) => {
+            if (el instanceof HTMLElement) {
+              el.dataset.recipeImages = JSON.stringify(remainingImages);
+              // Also remove matching thumbnails from the other gallery (view/edit twin)
+              el.querySelectorAll(`img[data-image-id="${imageId}"]`).forEach((img) => {
+                img.closest('.relative')?.remove();
+              });
+            }
+          });
+
           if (window.showSuccess) {
             await window.showSuccess('Bild erfolgreich gelöscht!');
           } else {
@@ -171,9 +196,6 @@ const images = recipe.images || [];
           
           // Remove image from DOM immediately for better UX
           target.closest('.relative')?.remove();
-          
-          // Update local images array
-          recipeImages = recipeImages.filter(img => img.id !== imageId);
         } else {
           const error = await response.json();
           console.error('Delete error response:', error);

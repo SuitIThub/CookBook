@@ -23,6 +23,7 @@ let recipe: Recipe | null = null;
 let editRecipe: Recipe | null = null;
 let variants: Recipe[] = [];
 let originalRecipe: Recipe | null = null;
+let aiDraftMode = false;
 try {
   recipe = id ? db.getRecipe(id as string) : null;
   if (!recipe) {
@@ -36,7 +37,7 @@ try {
 
   originalRecipe = rootOriginal;
   variants = db.getVariantsForRecipe(rootOriginalId);
-  const aiDraftMode = Astro.url.searchParams.get('aiDraft') === '1';
+  aiDraftMode = Astro.url.searchParams.get('aiDraft') === '1';
   const draftRecipe = aiDraftMode ? db.getDraft(recipe.id) : null;
   editRecipe = draftRecipe || recipe;
 } catch (error) {
@@ -168,7 +169,10 @@ try {
           Entwurf verwerfen
         </button>
       </div>
-      <EditRecipeForm recipe={editRecipe || recipe} />
+      <EditRecipeForm
+        recipe={editRecipe || recipe}
+        aiDiffOriginal={aiDraftMode ? recipe : null}
+      />
       <div class="max-w-4xl mx-auto">
         <EditFormActions recipeId={recipe.id} />
       </div>
@@ -650,13 +654,21 @@ try {
           window.location.href = '/rezepte';
           return;
         }
-        
-        // Cancel edit mode for existing recipes
-        toggleEditMode();
+
+        // Reload without aiDraft/aiEditToken so "Bearbeiten" opens the published recipe, not the discarded AI draft.
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('aiDraft');
+        cleanUrl.searchParams.delete('aiEditToken');
+        cleanUrl.searchParams.delete('edit');
+        window.location.href = cleanUrl.pathname + (cleanUrl.searchParams.toString() ? `?${cleanUrl.searchParams}` : '');
       } catch (error) {
         console.error('Error discarding draft:', error);
-        // Still cancel edit mode even if deletion fails
-        toggleEditMode();
+        // Still leave AI draft params so a retry is possible; fall back to view mode
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('aiDraft');
+        cleanUrl.searchParams.delete('aiEditToken');
+        cleanUrl.searchParams.delete('edit');
+        window.location.href = cleanUrl.pathname + (cleanUrl.searchParams.toString() ? `?${cleanUrl.searchParams}` : '');
       }
     });
     

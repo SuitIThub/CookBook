@@ -71,7 +71,10 @@ export const POST: APIRoute = async ({ request }) => {
 
     // Update recipe with new image
     const updatedImages = [...(recipe.images || []), newImage];
-    const updatedRecipe = db.updateRecipe(recipeId, { images: updatedImages });
+    const updatedRecipe = db.updateRecipe(recipeId, {
+      images: updatedImages,
+      imageUrl: recipe.imageUrl || newImage.url,
+    });
 
     if (!updatedRecipe) {
       // Clean up file if database update failed
@@ -128,11 +131,15 @@ export const DELETE: APIRoute = async ({ request, url }) => {
 
     // Remove image from database
     const updatedImages = recipe.images?.filter((img: RecipeImage) => img.id !== imageId) || [];
-    console.log('Original images count:', recipe.images?.length || 0);
-    console.log('Updated images count:', updatedImages.length);
-    console.log('Image ID to delete:', imageId);
-    
-    const updatedRecipe = db.updateRecipe(recipeId, { images: updatedImages });
+    const nextImageUrl =
+      updatedImages.length > 0
+        ? updatedImages[0].url
+        : undefined;
+
+    const updatedRecipe = db.updateRecipe(recipeId, {
+      images: updatedImages,
+      imageUrl: nextImageUrl,
+    });
 
     if (!updatedRecipe) {
       console.error('Failed to update recipe in database');
@@ -141,8 +148,6 @@ export const DELETE: APIRoute = async ({ request, url }) => {
         headers: { 'Content-Type': 'application/json' } 
       });
     }
-    
-    console.log('Successfully updated recipe with new images array');
 
     // Verify the update by re-fetching the recipe
     const verificationRecipe = db.getRecipe(recipeId);
@@ -156,15 +161,18 @@ export const DELETE: APIRoute = async ({ request, url }) => {
       });
     }
 
-    // Delete file from filesystem
-    const filePath = path.join(UPLOADS_DIR, imageToDelete.filename);
-    await fs.unlink(filePath).catch(() => {
-      // File might not exist, continue anyway
-      console.log('File already deleted or not found:', filePath);
-    });
+    // Only delete local upload files (URL images have no file under public/uploads)
+    const isLocalUpload =
+      typeof imageToDelete.url === 'string' &&
+      (imageToDelete.url.startsWith('/uploads/') || imageToDelete.url.startsWith('/public/uploads/'));
+    if (isLocalUpload && imageToDelete.filename && !String(imageToDelete.filename).startsWith('url-image')) {
+      const filePath = path.join(UPLOADS_DIR, imageToDelete.filename);
+      await fs.unlink(filePath).catch(() => {
+        console.log('File already deleted or not found:', filePath);
+      });
+    }
 
-    console.log('Image deletion completed successfully');
-    return new Response(JSON.stringify({ success: true }), { 
+    return new Response(JSON.stringify({ success: true, images: updatedImages, imageUrl: nextImageUrl ?? null }), { 
       status: 200, 
       headers: { 'Content-Type': 'application/json' } 
     });

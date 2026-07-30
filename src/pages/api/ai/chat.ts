@@ -7,6 +7,7 @@ import {
   type AIStreamMeta,
   type ChatMessage,
 } from '../../../lib/ai';
+import { recipeToMarkdown } from '../../../lib/recipeMarkdown';
 
 // In-memory cache: cacheKey -> messages (user/assistant only; recipe context is injected on send)
 const chatCache = new Map<string, ChatMessage[]>();
@@ -64,7 +65,7 @@ export const GET: APIRoute = async ({ url }) => {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const { recipeId, recipeIds, message, chatId, history, provider, model, openRouterApiKey } = body as {
+    const { recipeId, recipeIds, message, chatId, history, provider, model, openRouterApiKey, includeAllRecipes } = body as {
       recipeId?: string;
       recipeIds?: string[];
       message?: string;
@@ -73,6 +74,7 @@ export const POST: APIRoute = async ({ request }) => {
       provider?: AIRequestConfig['provider'];
       model?: string;
       openRouterApiKey?: string;
+      includeAllRecipes?: boolean;
     };
 
     if (!recipeId || typeof message !== 'string' || !message.trim()) {
@@ -82,23 +84,25 @@ export const POST: APIRoute = async ({ request }) => {
       );
     }
 
-    const isAllRecipesContext = recipeId === ALL_RECIPES_CONTEXT_ID;
-    const recipe = isAllRecipesContext ? null : db.getRecipe(recipeId);
-    if (!isAllRecipesContext && !recipe) {
+    const isAllRecipesContext = recipeId === ALL_RECIPES_CONTEXT_ID && includeAllRecipes !== false;
+    const isOverviewChat = recipeId === ALL_RECIPES_CONTEXT_ID;
+    const recipe = isOverviewChat ? null : db.getRecipe(recipeId);
+    if (!isOverviewChat && !recipe) {
       return new Response(JSON.stringify({ error: 'Recipe not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const origin = new URL(request.url).origin;
     const idsToLoad = (() => {
       if (isAllRecipesContext) {
         return db.getAllRecipes().map((r) => r.id);
       }
       return Array.isArray(recipeIds) && recipeIds.length > 0
         ? [...new Set(recipeIds.filter((id) => id && id !== ALL_RECIPES_CONTEXT_ID))]
-        : [recipeId];
+        : isOverviewChat
+          ? []
+          : [recipeId];
     })();
 
     const recipeMarkdownParts: string[] = [];
@@ -108,10 +112,7 @@ export const POST: APIRoute = async ({ request }) => {
       const r = db.getRecipe(id);
       const title = r?.title ?? 'Rezept';
       recipeIdList.push(`- ${title} => ${id}`);
-      const markdownRes = await fetch(
-        `${origin}/api/recipes/markdown?id=${encodeURIComponent(id)}`
-      );
-      const md = markdownRes.ok ? await markdownRes.text() : '';
+      const md = r ? recipeToMarkdown(r) : '';
       const label =
         idsToLoad.length === 1
           ? 'Rezept (als Markdown)'
@@ -130,9 +131,13 @@ export const POST: APIRoute = async ({ request }) => {
     const userMessage: ChatMessage = { role: 'user', content: message.trim() };
     const intro = isAllRecipesContext
       ? 'Der Nutzer chattet über den gesamten Rezeptbestand.'
+      : isOverviewChat && idsToLoad.length === 0
+        ? 'Der Nutzer chattet über das Kochbuch, ohne dass Rezepte im Kontext geladen sind. Du kannst allgemeine Tipps geben und bei Bedarf nachfragen, welche Rezepte referenziert werden sollen.'
       : idsToLoad.length === 1
         ? 'Der Nutzer chattet über das folgende Rezept.'
-        : 'Der Nutzer chattet über die folgenden Rezepte (mehrere sind referenziert). Das ERSTE Rezept im Kontext ist immer das Original und dient als Basis für alle Änderungen. Alle weiteren Rezepte sind nur zusätzliche Referenzen/Inspiration und sollen NICHT die Grundstruktur des Originals überschreiben.';
+        : idsToLoad.length > 1
+        ? 'Der Nutzer chattet über die folgenden Rezepte (mehrere sind referenziert). Das ERSTE Rezept im Kontext ist immer das Original und dient als Basis für alle Änderungen. Alle weiteren Rezepte sind nur zusätzliche Referenzen/Inspiration und sollen NICHT die Grundstruktur des Originals überschreiben.'
+        : 'Der Nutzer chattet über das Kochbuch.';
     const allRecipesBehavior = isAllRecipesContext
       ? `WICHTIG fuer den Modus "Alle Rezepte":
 - Beantworte Anfragen IMMER zuerst auf Basis der im Kontext enthaltenen Rezepte.

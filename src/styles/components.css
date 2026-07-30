@@ -640,6 +640,50 @@ input[type="number"] {
   }
 }
 
+/* AI edit change markers */
+.ai-edit-changed {
+  position: relative;
+  outline: 2px solid rgb(129 140 248);
+  outline-offset: 2px;
+  background-color: rgba(99, 102, 241, 0.08);
+  border-radius: 0.5rem;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
+}
+
+.dark .ai-edit-changed {
+  outline-color: rgb(129 140 248);
+  background-color: rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+}
+
+.ai-edit-changed-field {
+  border-color: rgb(129 140 248) !important;
+}
+
+.ai-edit-changed-badge {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(67 56 202);
+  background: rgb(224 231 255);
+  border: 1px solid rgb(165 180 252);
+  pointer-events: none;
+}
+
+.dark .ai-edit-changed-badge {
+  color: rgb(199 210 254);
+  background: rgba(49, 46, 129, 0.85);
+  border-color: rgb(99 102 241);
+}
+
 /* Step highlighting animation */
 .step-highlight {
   animation: stepHighlight 2s ease-in-out;

@@ -417,11 +417,21 @@ declare global {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          images: updatedImages
+          images: updatedImages,
+          imageUrl: recipe.imageUrl || newImage.url
         })
       });
 
       if (updateResponse.ok) {
+        if (window.currentRecipe && typeof window.currentRecipe === 'object') {
+          window.currentRecipe.images = updatedImages;
+          window.currentRecipe.imageUrl = recipe.imageUrl || newImage.url;
+        }
+        document.querySelectorAll('[data-recipe-images]').forEach((el) => {
+          if (el instanceof HTMLElement) {
+            el.dataset.recipeImages = JSON.stringify(updatedImages);
+          }
+        });
         showNotification('Bild erfolgreich hinzugefügt!', 'success');
         closeModal();
         setTimeout(() => {

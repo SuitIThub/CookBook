@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database';
 import { openRouterChat, type AIRequestConfig } from '../../../lib/ai';
 import { createAiEditPreviewToken } from '../../../lib/aiRecipeEditPreviewStore';
+import { recipeToMarkdown } from '../../../lib/recipeMarkdown';
 import type { Recipe } from '../../../types/recipe';
 
 interface ProposedEditPayload {
@@ -515,7 +516,6 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    const origin = new URL(request.url).origin;
     const idsToLoad =
       Array.isArray(recipeIds) && recipeIds.length > 0
         ? [recipeId, ...recipeIds.filter((id: string) => id && id !== recipeId)]
@@ -525,8 +525,7 @@ export const POST: APIRoute = async ({ request }) => {
       const id = idsToLoad[i]!;
       const r = db.getRecipe(id);
       const title = r?.title ?? 'Rezept';
-      const markdownRes = await fetch(`${origin}/api/recipes/markdown?id=${encodeURIComponent(id)}`);
-      const md = markdownRes.ok ? await markdownRes.text() : '';
+      const md = r ? recipeToMarkdown(r) : '';
       const label = i === 0 ? `ORIGINAL RECIPE (${title})` : `REFERENCED RECIPE ${i}: ${title}`;
       markdownParts.push(`--- ${label} ---\n${md}`);
     }
