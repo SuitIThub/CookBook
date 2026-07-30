@@ -4,6 +4,11 @@ import path from 'path';
 
 const dbPath = './cookbook.db';
 
+/** 1 EL ≈ 15 ml, 1 TL ≈ 5 ml – reverse of the broken unify migration. */
+const ML_PER_EL = 15;
+const ML_PER_TL = 5;
+const ML_SPOON_THRESHOLD = 100;
+
 // Expected database schema - this is the source of truth
 const EXPECTED_SCHEMA = {
   tables: {
@@ -254,6 +259,171 @@ function addColumn(db, tableName, column) {
 
 function normalizeType(type) {
   return type.toUpperCase().split('(')[0].trim();
+}
+
+function roundSpoonAmount(n) {
+  if (!Number.isFinite(n) || n <= 0) return n;
+  const asInt = Math.round(n);
+  if (Math.abs(n - asInt) < 0.05) return asInt;
+  const half = Math.round(n * 2) / 2;
+  if (Math.abs(n - half) < 0.05) return half;
+  return Math.round(n * 10) / 10;
+}
+
+function isNearlyInteger(n, epsilon = 0.05) {
+  return Number.isFinite(n) && Math.abs(n - Math.round(n)) < epsilon;
+}
+
+function isNearlyHalfStep(n, epsilon = 0.05) {
+  if (!Number.isFinite(n)) return false;
+  const half = Math.round(n * 2) / 2;
+  return Math.abs(n - half) < epsilon;
+}
+
+/**
+ * Convert a small ml amount back to EL or TL.
+ * Prefer TL when "small enough" (< 1 EL) or when the amount fits TL cleanly but not EL.
+ */
+function convertMlToSpoon(amount) {
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return null;
+  if (amount >= ML_SPOON_THRESHOLD) return null;
+
+  const asEl = amount / ML_PER_EL;
+  const asTl = amount / ML_PER_TL;
+  const elClean = isNearlyInteger(asEl) || isNearlyHalfStep(asEl);
+  const tlClean = isNearlyInteger(asTl) || isNearlyHalfStep(asTl);
+
+  // Below one tablespoon → teaspoon
+  if (amount < ML_PER_EL) {
+    return { amount: roundSpoonAmount(asTl), unit: 'TL' };
+  }
+
+  // Clean EL fit (15, 30, 45, 7.5→0.5, 22.5→1.5, …)
+  if (elClean && asEl >= 0.5) {
+    return { amount: roundSpoonAmount(asEl), unit: 'EL' };
+  }
+
+  // Clean TL fit that is not a clean EL (10, 20, 25, 35, 40, …)
+  if (tlClean && asTl >= 1) {
+    return { amount: roundSpoonAmount(asTl), unit: 'TL' };
+  }
+
+  // Fallback: EL for the rest under 100 ml
+  return { amount: roundSpoonAmount(asEl), unit: 'EL' };
+}
+
+function isMlUnit(unit) {
+  if (typeof unit !== 'string') return false;
+  const u = unit.trim().toLowerCase();
+  return u === 'ml' || u === 'milliliter' || u === 'millilitre';
+}
+
+function convertQuantitiesInIngredientGroups(groups) {
+  let converted = 0;
+  let toEl = 0;
+  let toTl = 0;
+
+  const visitIngredients = (items) => {
+    if (!Array.isArray(items)) return items;
+    return items.map((item) => {
+      if (!item || typeof item !== 'object') return item;
+      if (Array.isArray(item.ingredients)) {
+        return { ...item, ingredients: visitIngredients(item.ingredients) };
+      }
+      if (!Array.isArray(item.quantities)) return item;
+      const quantities = item.quantities.map((qty) => {
+        if (!qty || typeof qty !== 'object') return qty;
+        if (!isMlUnit(qty.unit)) return qty;
+        const amount = typeof qty.amount === 'number' ? qty.amount : Number(qty.amount);
+        const spoon = convertMlToSpoon(amount);
+        if (!spoon) return qty;
+        converted += 1;
+        if (spoon.unit === 'EL') toEl += 1;
+        else toTl += 1;
+        return { ...qty, amount: spoon.amount, unit: spoon.unit };
+      });
+      return { ...item, quantities };
+    });
+  };
+
+  const nextGroups = Array.isArray(groups) ? groups.map((g) => {
+    if (!g || typeof g !== 'object') return g;
+    return { ...g, ingredients: visitIngredients(g.ingredients) };
+  }) : groups;
+
+  return { groups: nextGroups, converted, toEl, toTl };
+}
+
+function fixSmallMlQuantitiesToSpoons(db) {
+  const recipes = db.prepare('SELECT id, title, ingredient_groups FROM recipes').all();
+  const updateStmt = db.prepare(`
+    UPDATE recipes
+    SET ingredient_groups = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+
+  let recipesUpdated = 0;
+  let quantitiesConverted = 0;
+  let toEl = 0;
+  let toTl = 0;
+
+  for (const recipe of recipes) {
+    let groups;
+    try {
+      groups = recipe.ingredient_groups ? JSON.parse(recipe.ingredient_groups) : [];
+    } catch {
+      console.log(`  ⚠️  Skipping recipe with invalid ingredient_groups JSON: ${recipe.id}`);
+      continue;
+    }
+
+    const result = convertQuantitiesInIngredientGroups(groups);
+    if (result.converted === 0) continue;
+
+    updateStmt.run(JSON.stringify(result.groups), recipe.id);
+    recipesUpdated += 1;
+    quantitiesConverted += result.converted;
+    toEl += result.toEl;
+    toTl += result.toTl;
+    console.log(
+      `  ✅ ${recipe.title || recipe.id}: ${result.converted} quantity(ies) → EL/TL`
+    );
+  }
+
+  return { recipesUpdated, quantitiesConverted, toEl, toTl };
+}
+
+function fixElTlUnitDefinitions(db) {
+  try {
+    const table = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='units'
+    `).get();
+    if (!table) return 0;
+
+    const rows = db.prepare(`
+      SELECT id, name, base_unit, conversion_factor
+      FROM units
+      WHERE UPPER(TRIM(name)) IN ('EL', 'TL')
+    `).all();
+
+    let fixed = 0;
+    const update = db.prepare(`
+      UPDATE units
+      SET base_unit = NULL, conversion_factor = NULL
+      WHERE id = ?
+    `);
+
+    for (const row of rows) {
+      const base = typeof row.base_unit === 'string' ? row.base_unit.trim().toLowerCase() : '';
+      if (base === 'ml' || row.conversion_factor != null) {
+        update.run(row.id);
+        fixed += 1;
+      }
+    }
+    return fixed;
+  } catch (err) {
+    console.log(`  ⚠️  Could not fix EL/TL unit definitions: ${err.message}`);
+    return 0;
+  }
 }
 
 function performDataMigrations(db) {
@@ -681,6 +851,23 @@ function performDataMigrations(db) {
     if (updated.changes > 0) {
       console.log('✅ Global template shopping list renamed to "Vorlagen-Einkaufsliste".');
     }
+  }
+
+  // Migration 10: Reverse accidental TL/EL → ml conversion from a broken unit unify.
+  // EL/TL were wrongly treated as child units of ml; small spoon amounts became ml.
+  console.log('🥄 Correcting small ml amounts back to EL/TL in recipes...');
+  const spoonFix = fixSmallMlQuantitiesToSpoons(db);
+  if (spoonFix.recipesUpdated > 0) {
+    console.log(
+      `✅ Updated ${spoonFix.recipesUpdated} recipe(s), converted ${spoonFix.quantitiesConverted} quantity(ies) (EL: ${spoonFix.toEl}, TL: ${spoonFix.toTl}).`
+    );
+  } else {
+    console.log('✅ No small ml spoon amounts needed correction.');
+  }
+
+  const unitsFix = fixElTlUnitDefinitions(db);
+  if (unitsFix > 0) {
+    console.log(`✅ Fixed ${unitsFix} unit definition(s) so EL/TL are base units again (not children of ml).`);
   }
 }
 

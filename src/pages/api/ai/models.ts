@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import {
   listOllamaModels,
-  listOpenRouterModelsWithOptions,
+  listOpenRouterModelsDetailed,
   validateOpenRouterApiKey,
   getOpenRouterKeyInfo,
   getModelCacheCapability,
@@ -23,6 +23,8 @@ export const GET: APIRoute = async ({ url, request }) => {
       cacheSupported: boolean;
       cacheMode: 'automatic' | 'explicit' | 'unknown' | 'none';
       cacheNote: string;
+      promptPrice: number | null;
+      completionPrice: number | null;
     }> = [];
     let openRouterUsage: {
       keyLabel: string | null;
@@ -48,7 +50,8 @@ export const GET: APIRoute = async ({ url, request }) => {
       const userKeyProvided = Boolean(userKey);
       const userKeyValid = userKeyProvided ? await validateOpenRouterApiKey(userKey) : false;
       const freeOnly = !userKeyValid;
-      models = await listOpenRouterModelsWithOptions(userKeyValid ? userKey : undefined, { freeOnly });
+      const detailed = await listOpenRouterModelsDetailed(userKeyValid ? userKey : undefined, { freeOnly });
+      models = detailed.map((m) => m.id);
       openRouterAccess = {
         userKeyProvided,
         userKeyValid,
@@ -71,18 +74,31 @@ export const GET: APIRoute = async ({ url, request }) => {
       } catch (err) {
         openRouterUsageError = err instanceof Error ? err.message : 'OpenRouter usage lookup failed';
       }
+      modelDetails = detailed.map((m) => {
+        const capability = getModelCacheCapability(provider, m.id);
+        return {
+          id: m.id,
+          cacheSupported: capability.supported,
+          cacheMode: capability.mode,
+          cacheNote: capability.note,
+          promptPrice: Number.isFinite(m.promptPrice) ? m.promptPrice : null,
+          completionPrice: Number.isFinite(m.completionPrice) ? m.completionPrice : null,
+        };
+      });
     } else {
       models = await listOllamaModels();
+      modelDetails = models.map((id) => {
+        const capability = getModelCacheCapability(provider, id);
+        return {
+          id,
+          cacheSupported: capability.supported,
+          cacheMode: capability.mode,
+          cacheNote: capability.note,
+          promptPrice: null,
+          completionPrice: null,
+        };
+      });
     }
-    modelDetails = models.map((id) => {
-      const capability = getModelCacheCapability(provider, id);
-      return {
-        id,
-        cacheSupported: capability.supported,
-        cacheMode: capability.mode,
-        cacheNote: capability.note,
-      };
-    });
 
     return new Response(
       JSON.stringify({

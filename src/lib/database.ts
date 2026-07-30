@@ -203,15 +203,17 @@ export class CookbookDatabase {
       newRecipe.updatedAt.toISOString()
     );
 
-    // Add ingredients to autocomplete
-    this.addIngredientsToAutocomplete(newRecipe.ingredientGroups);
-
-    // Update category and tags usage count
-    if (newRecipe.category) {
-      this.updateCategoryUsage(newRecipe.category);
-    }
-    if (newRecipe.tags && newRecipe.tags.length > 0) {
-      this.updateTagsUsage(newRecipe.tags);
+    // Side effects must not roll back a successful insert (better-sqlite3 autocommits).
+    try {
+      this.addIngredientsToAutocomplete(newRecipe.ingredientGroups);
+      if (newRecipe.category) {
+        this.updateCategoryUsage(newRecipe.category);
+      }
+      if (newRecipe.tags && newRecipe.tags.length > 0) {
+        this.updateTagsUsage(newRecipe.tags);
+      }
+    } catch (sideEffectError) {
+      console.error('createRecipe side effects failed (recipe was still saved):', sideEffectError);
     }
 
     return newRecipe;
@@ -353,15 +355,22 @@ export class CookbookDatabase {
     }));
   }
 
-  updateRecipe(id: string, updates: Partial<Recipe>): Recipe | null {
+  updateRecipe(id: string, updates: Partial<Recipe> & { imageUrl?: string | null }): Recipe | null {
     const existingRecipe = this.getRecipe(id);
     if (!existingRecipe) {
       return null;
     }
 
+    // Keep imageUrl in sync with images[] when images are updated but imageUrl was omitted
+    // (JSON.stringify drops undefined, which previously left a stale imageUrl behind)
+    const normalizedUpdates: Partial<Recipe> & { imageUrl?: string | null } = { ...updates };
+    if (Array.isArray(normalizedUpdates.images) && !('imageUrl' in normalizedUpdates)) {
+      normalizedUpdates.imageUrl = normalizedUpdates.images[0]?.url ?? null;
+    }
+
     const updatedRecipe = {
       ...existingRecipe,
-      ...updates,
+      ...normalizedUpdates,
       updatedAt: new Date()
     };
 
@@ -381,7 +390,7 @@ export class CookbookDatabase {
       JSON.stringify(updatedRecipe.tags || []),
       JSON.stringify(updatedRecipe.ingredientGroups),
       JSON.stringify(updatedRecipe.preparationGroups),
-      updatedRecipe.imageUrl,
+      updatedRecipe.imageUrl ?? null,
       JSON.stringify(updatedRecipe.images || []),
       updatedRecipe.sourceUrl,
       updatedRecipe.parentRecipeId || null,
@@ -396,17 +405,18 @@ export class CookbookDatabase {
       return null;
     }
 
-    // Update ingredients autocomplete
-    if (updates.ingredientGroups) {
-      this.addIngredientsToAutocomplete(updates.ingredientGroups);
-    }
-
-    // Update category and tags usage count
-    if (updates.category) {
-      this.updateCategoryUsage(updates.category);
-    }
-    if (updates.tags) {
-      this.updateTagsUsage(updates.tags);
+    try {
+      if (updates.ingredientGroups) {
+        this.addIngredientsToAutocomplete(updates.ingredientGroups);
+      }
+      if (updates.category) {
+        this.updateCategoryUsage(updates.category);
+      }
+      if (updates.tags) {
+        this.updateTagsUsage(updates.tags);
+      }
+    } catch (sideEffectError) {
+      console.error('updateRecipe side effects failed (recipe was still saved):', sideEffectError);
     }
 
     return updatedRecipe;
@@ -894,18 +904,32 @@ export class CookbookDatabase {
   }
 
   private addIngredientsToAutocomplete(ingredientGroups: any[]): void {
+    if (!Array.isArray(ingredientGroups)) return;
+
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO ingredients (id, name, description, usage_count) 
       VALUES (?, ?, ?, COALESCE((SELECT usage_count FROM ingredients WHERE name = ?) + 1, 1))
     `);
 
-    ingredientGroups.forEach(group => {
-      group.ingredients.forEach((ingredient: any) => {
-        if (ingredient.name) {
-          stmt.run(uuidv4(), ingredient.name, ingredient.description, ingredient.name);
+    const visit = (groups: any[]): void => {
+      for (const group of groups) {
+        if (!group || !Array.isArray(group.ingredients)) continue;
+        for (const ingredient of group.ingredients) {
+          if (!ingredient || typeof ingredient !== 'object') continue;
+          if (Array.isArray(ingredient.ingredients)) {
+            visit([ingredient]);
+            continue;
+          }
+          const name = typeof ingredient.name === 'string' ? ingredient.name.trim() : '';
+          if (!name) continue;
+          const description =
+            typeof ingredient.description === 'string' ? ingredient.description : null;
+          stmt.run(uuidv4(), name, description, name);
         }
-      });
-    });
+      }
+    };
+
+    visit(ingredientGroups);
   }
 
   // Get all unique ingredients from all recipes
@@ -1054,8 +1078,9 @@ export class CookbookDatabase {
   }
 
   private updateCategoryUsage(category: string): void {
+    if (typeof category !== 'string' || !category.trim()) return;
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO categories (id, name, usage_count) 
+      INSERT OR REPLACE INTO categories (id, name, usage_count)
       VALUES (?, ?, COALESCE((SELECT usage_count FROM categories WHERE name = ?) + 1, 1))
     `);
     stmt.run(uuidv4(), category, category);
@@ -1083,12 +1108,14 @@ export class CookbookDatabase {
   }
 
   private updateTagsUsage(tags: string[]): void {
+    if (!Array.isArray(tags)) return;
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO recipe_tags (id, name, usage_count) 
+      INSERT OR REPLACE INTO recipe_tags (id, name, usage_count)
       VALUES (?, ?, COALESCE((SELECT usage_count FROM recipe_tags WHERE name = ?) + 1, 1))
     `);
-    
-    tags.forEach(tag => {
+
+    tags.forEach((tag) => {
+      if (typeof tag !== 'string' || !tag.trim()) return;
       stmt.run(uuidv4(), tag, tag);
     });
   }

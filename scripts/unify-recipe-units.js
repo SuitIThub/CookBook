@@ -37,22 +37,23 @@ const BASE_UNITS = {
   'Spritzer': { name: 'Spritzer', isBaseUnit: true, category: 'small' },
   'Schuss': { name: 'Schuss', isBaseUnit: true, category: 'small' },
   'Hauch': { name: 'Hauch', isBaseUnit: true, category: 'small' },
-  'Handvoll': { name: 'Handvoll', isBaseUnit: true, category: 'natural' }
+  'Handvoll': { name: 'Handvoll', isBaseUnit: true, category: 'natural' },
+  // Spoon / cup measures stay as base units (must not be folded into ml)
+  'TL': { name: 'TL', isBaseUnit: true, category: 'volume' },
+  'EL': { name: 'EL', isBaseUnit: true, category: 'volume' },
+  'Tasse': { name: 'Tasse', isBaseUnit: true, category: 'volume' },
+  'Becher': { name: 'Becher', isBaseUnit: true, category: 'volume' },
+  'Glas': { name: 'Glas', isBaseUnit: true, category: 'volume' }
 };
 
 const UNIT_CONVERSIONS = {
   // Weight units -> g
   'kg': { baseUnit: 'g', factor: 1000 },
   
-  // Volume units -> ml
+  // Volume units -> ml (only true metric volume children – NOT EL/TL spoons)
   'l': { baseUnit: 'ml', factor: 1000 },
   'L': { baseUnit: 'ml', factor: 1000 },
   'Liter': { baseUnit: 'ml', factor: 1000 },
-  'TL': { baseUnit: 'ml', factor: 5 },
-  'EL': { baseUnit: 'ml', factor: 15 },
-  'Tasse': { baseUnit: 'ml', factor: 250 },
-  'Becher': { baseUnit: 'ml', factor: 200 },
-  'Glas': { baseUnit: 'ml', factor: 200 },
   
   // Piece units -> Stück
   'Pck.': { baseUnit: 'Stück', factor: 1 },

@@ -7,6 +7,7 @@ import {
   type ChatMessage,
 } from '../../../lib/ai';
 import { createDraftToken } from '../../../lib/draftVariantStore';
+import { recipeToMarkdown } from '../../../lib/recipeMarkdown';
 import type { Recipe } from '../../../types/recipe';
 
 function ensureId(value: unknown): string {
@@ -300,7 +301,6 @@ export const POST: APIRoute = async ({ request }) => {
       ? recipeId
       : (validContextIds[0] || null);
 
-    const origin = new URL(request.url).origin;
     const idsToLoad = fallbackContextId
       ? [fallbackContextId, ...validContextIds.filter((id) => id !== fallbackContextId)]
       : [];
@@ -310,10 +310,7 @@ export const POST: APIRoute = async ({ request }) => {
       const id = idsToLoad[i]!;
       const r = db.getRecipe(id);
       const title = r?.title ?? 'Rezept';
-      const markdownRes = await fetch(
-        `${origin}/api/recipes/markdown?id=${encodeURIComponent(id)}`
-      );
-      const md = markdownRes.ok ? await markdownRes.text() : '';
+      const md = r ? recipeToMarkdown(r) : '';
       const label =
         i === 0
           ? `ORIGINAL RECIPE (Referenz – ${title})`

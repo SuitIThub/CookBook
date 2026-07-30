@@ -56,6 +56,8 @@ export interface AIUsageTelemetry {
   cachedTokens: number | null;
   cacheWriteTokens: number | null;
   cacheDiscount: number | null;
+  /** OpenRouter-reported cost in USD, when available. */
+  costUsd: number | null;
 }
 
 export interface AIStreamMeta {
@@ -208,10 +210,16 @@ export async function getOpenRouterKeyInfo(apiKey?: string): Promise<OpenRouterK
   };
 }
 
-export async function listOpenRouterModelsWithOptions(
+export interface OpenRouterModelDetail {
+  id: string;
+  promptPrice: number;
+  completionPrice: number;
+}
+
+export async function listOpenRouterModelsDetailed(
   apiKey?: string,
   options?: { freeOnly?: boolean }
-): Promise<string[]> {
+): Promise<OpenRouterModelDetail[]> {
   const key = typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : getOpenRouterEnvApiKey();
   const headers: Record<string, string> = {};
   headers.Authorization = `Bearer ${key}`;
@@ -238,15 +246,21 @@ export async function listOpenRouterModelsWithOptions(
     }))
     .filter((m) => Boolean(m.id));
   if (options?.freeOnly) {
-    return models
-      .filter(
-        (m) =>
-          isOpenRouterFreeModel(m.id) ||
-          ((Number.isNaN(m.promptPrice) || m.promptPrice === 0) &&
-            (Number.isNaN(m.completionPrice) || m.completionPrice === 0))
-      )
-      .map((m) => m.id);
+    return models.filter(
+      (m) =>
+        isOpenRouterFreeModel(m.id) ||
+        ((Number.isNaN(m.promptPrice) || m.promptPrice === 0) &&
+          (Number.isNaN(m.completionPrice) || m.completionPrice === 0))
+    );
   }
+  return models;
+}
+
+export async function listOpenRouterModelsWithOptions(
+  apiKey?: string,
+  options?: { freeOnly?: boolean }
+): Promise<string[]> {
+  const models = await listOpenRouterModelsDetailed(apiKey, options);
   return models.map((m) => m.id);
 }
 
@@ -556,6 +570,8 @@ export async function* openRouterChatStream(
               prompt_tokens?: number;
               completion_tokens?: number;
               total_tokens?: number;
+              cost?: number;
+              total_cost?: number;
               prompt_tokens_details?: {
                 cached_tokens?: number;
                 cache_write_tokens?: number;
@@ -565,6 +581,12 @@ export async function* openRouterChatStream(
           };
           if (data.usage && typeof data.usage === 'object') {
             const details = data.usage.prompt_tokens_details;
+            const costRaw =
+              typeof data.usage.cost === 'number'
+                ? data.usage.cost
+                : typeof data.usage.total_cost === 'number'
+                  ? data.usage.total_cost
+                  : null;
             lastUsage = {
               promptTokens: typeof data.usage.prompt_tokens === 'number' ? data.usage.prompt_tokens : null,
               completionTokens: typeof data.usage.completion_tokens === 'number' ? data.usage.completion_tokens : null,
@@ -572,6 +594,7 @@ export async function* openRouterChatStream(
               cachedTokens: typeof details?.cached_tokens === 'number' ? details.cached_tokens : null,
               cacheWriteTokens: typeof details?.cache_write_tokens === 'number' ? details.cache_write_tokens : null,
               cacheDiscount: typeof data.usage.cache_discount === 'number' ? data.usage.cache_discount : null,
+              costUsd: costRaw,
             };
           }
           const content = data.choices?.[0]?.delta?.content ?? '';
@@ -713,6 +736,58 @@ export interface ProposedVariant {
   recipeData: Record<string, unknown>;
 }
 
+const OPENROUTER_VARIANT_RESPONSE_FORMAT = {
+  response_format: {
+    type: 'json_schema',
+    json_schema: {
+      name: 'recipe_variant',
+      strict: false,
+      schema: RECIPE_VARIANT_FORMAT,
+    },
+  },
+} as const;
+
+/**
+ * Single OpenRouter call for variant JSON. Falls back to a plain chat call if
+ * structured output is rejected by the model/provider.
+ */
+async function openRouterProposeVariant(userContent: string, config?: AIRequestConfig): Promise<ProposedVariant> {
+  try {
+    const withSchema = await openRouterChat(
+      [{ role: 'user', content: userContent }],
+      config,
+      OPENROUTER_VARIANT_RESPONSE_FORMAT
+    );
+    return parseProposedVariant(withSchema, 'OpenRouter');
+  } catch (schemaErr) {
+    console.warn('OpenRouter structured variant failed, falling back to plain JSON chat:', schemaErr);
+    const raw = await openRouterChat([{ role: 'user', content: userContent }], config);
+    return parseProposedVariant(raw, 'OpenRouter');
+  }
+}
+
+async function ollamaProposeVariantRaw(userContent: string, config?: AIRequestConfig): Promise<string> {
+  const url = getOllamaChatUrl();
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: getModelForProvider(config),
+      messages: [{ role: 'user', content: userContent }],
+      stream: false,
+      format: RECIPE_VARIANT_FORMAT,
+      options: { temperature: 0.3 },
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Ollama propose-variant failed: ${res.status} ${text}`);
+  }
+  const data = (await res.json()) as { message?: { content?: string } };
+  return data.message?.content ?? '';
+}
+
 /**
  * Call Ollama with structured output to propose a recipe variant based on conversation and recipe.
  */
@@ -760,48 +835,10 @@ ${conversationSnippet}
 
 Gib das JSON mit variantName (max. 3 Wörter) und recipeData zurück. Pro Zutat nur ein Eintrag in "quantities". Verwende für alle id-Felder UUID-ähnliche Werte (z.B. "a1b2c3", "d4e5f6").`;
 
-  const rawMessage =
-    getProvider(config) === 'openrouter'
-      ? await openRouterChat([{ role: 'user', content: userContent }], config)
-      : await (async () => {
-          const url = getOllamaChatUrl();
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: getModelForProvider(config),
-              messages: [{ role: 'user', content: userContent }],
-              stream: false,
-              format: RECIPE_VARIANT_FORMAT,
-              options: { temperature: 0.3 },
-            }),
-          });
-
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`Ollama propose-variant failed: ${res.status} ${text}`);
-          }
-          const data = (await res.json()) as { message?: { content?: string } };
-          return data.message?.content ?? '';
-        })();
   if (getProvider(config) === 'openrouter') {
-    const responseWithSchema = await openRouterChat(
-      [{ role: 'user', content: userContent }],
-      config,
-      {
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'recipe_variant',
-            strict: true,
-            schema: RECIPE_VARIANT_FORMAT,
-          },
-        },
-      }
-    );
-    return parseProposedVariant(responseWithSchema, 'OpenRouter');
+    return openRouterProposeVariant(userContent, config);
   }
-  return parseProposedVariant(rawMessage, 'Ollama');
+  return parseProposedVariant(await ollamaProposeVariantRaw(userContent, config), 'Ollama');
 }
 
 /**
@@ -830,46 +867,8 @@ ${variantMessage}
 
 Gib nur das JSON mit variantName (max. 3 Wörter) und dem vollständigen recipeData zurück. Pro Zutat nur ein Eintrag in "quantities".`;
 
-  const rawMessage =
-    getProvider(config) === 'openrouter'
-      ? await openRouterChat([{ role: 'user', content: userContent }], config)
-      : await (async () => {
-          const url = getOllamaChatUrl();
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: getModelForProvider(config),
-              messages: [{ role: 'user', content: userContent }],
-              stream: false,
-              format: RECIPE_VARIANT_FORMAT,
-              options: { temperature: 0.3 },
-            }),
-          });
-
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`Ollama propose-variant failed: ${res.status} ${text}`);
-          }
-          const data = (await res.json()) as { message?: { content?: string } };
-          return data.message?.content ?? '';
-        })();
   if (getProvider(config) === 'openrouter') {
-    const responseWithSchema = await openRouterChat(
-      [{ role: 'user', content: userContent }],
-      config,
-      {
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'recipe_variant',
-            strict: true,
-            schema: RECIPE_VARIANT_FORMAT,
-          },
-        },
-      }
-    );
-    return parseProposedVariant(responseWithSchema, 'OpenRouter');
+    return openRouterProposeVariant(userContent, config);
   }
-  return parseProposedVariant(rawMessage, 'Ollama');
+  return parseProposedVariant(await ollamaProposeVariantRaw(userContent, config), 'Ollama');
 }

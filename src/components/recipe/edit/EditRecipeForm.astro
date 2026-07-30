@@ -11,9 +11,11 @@ import RecipeImageGallery from '../RecipeImageGallery.astro';
 
 interface Props {
   recipe: Recipe;
+  /** Published recipe used to mark AI-changed fields when reviewing an AI draft. */
+  aiDiffOriginal?: Recipe | null;
 }
 
-const { recipe } = Astro.props;
+const { recipe, aiDiffOriginal = null } = Astro.props;
 ---
 
 <form id="edit-recipe-form" class="space-y-6">
@@ -35,7 +37,7 @@ const { recipe } = Astro.props;
   <AlternativeEditScript />
 </div>
 
-<script define:vars={{ recipe }}>
+<script define:vars={{ recipe, aiDiffOriginal }}>
   const aiEditToken = new URLSearchParams(window.location.search).get('aiEditToken');
   // Make recipe data available globally for ingredient linking
   window.currentRecipe = recipe;
@@ -402,40 +404,200 @@ const { recipe } = Astro.props;
       if (!data || !Array.isArray(data.highlights)) return;
       const isDebug = new URLSearchParams(window.location.search).get('debug') === '1';
 
-      const banner = document.createElement('div');
-      banner.className = 'mb-4 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20 p-3';
-      const title = document.createElement('p');
-      title.className = 'text-sm font-semibold text-indigo-700 dark:text-indigo-300';
-      title.textContent = 'KI-Änderungsvorschlag geladen – bitte prüfen und speichern.';
-      banner.appendChild(title);
+      const marked = new Set();
+      const markElement = (el) => {
+        if (!el || marked.has(el)) return;
+        marked.add(el);
+        el.classList.add('ai-edit-changed');
+        if (!el.querySelector(':scope > .ai-edit-changed-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'ai-edit-changed-badge';
+          badge.textContent = 'Geändert';
+          el.appendChild(badge);
+        }
+      };
+      const markInput = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        // Prefer the immediate field wrapper (label+input div), never a large section container.
+        const wrap = el.parentElement && el.parentElement !== document.body ? el.parentElement : el;
+        markElement(wrap);
+        el.classList.add('ai-edit-changed-field');
+      };
+      const markBySelector = (selector) => {
+        document.querySelectorAll(selector).forEach((el) => markElement(el));
+      };
+      const escapeAttr = (value) => {
+        if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+        return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      };
 
-      if (data.diagnostics && typeof data.diagnostics.message === 'string') {
-        const diag = document.createElement('p');
-        const isOk = data.diagnostics.status === 'ok';
-        diag.className = isOk
-          ? 'mt-1 text-xs text-indigo-700 dark:text-indigo-300'
-          : 'mt-1 text-xs text-amber-700 dark:text-amber-300';
-        diag.textContent = `Diagnose: ${data.diagnostics.message}`;
-        banner.appendChild(diag);
-        if (isDebug && data.diagnostics.rawExcerpt) {
-          const raw = document.createElement('pre');
-          raw.className = 'mt-2 max-h-28 overflow-auto rounded border border-indigo-100 dark:border-indigo-900 bg-white/70 dark:bg-gray-800/50 p-2 text-[11px] text-indigo-900 dark:text-indigo-100 whitespace-pre-wrap';
-          raw.textContent = data.diagnostics.rawExcerpt;
-          banner.appendChild(raw);
+      const stableJson = (value) => {
+        try {
+          return JSON.stringify(value ?? null);
+        } catch {
+          return String(value);
+        }
+      };
+
+      const flattenIngredients = (groups) => {
+        const map = new Map();
+        const visit = (items) => {
+          if (!Array.isArray(items)) return;
+          for (const item of items) {
+            if (!item || typeof item !== 'object') continue;
+            if (Array.isArray(item.ingredients)) {
+              visit(item.ingredients);
+              continue;
+            }
+            if (typeof item.id === 'string' && item.id) {
+              map.set(item.id, item);
+            }
+          }
+        };
+        if (Array.isArray(groups)) {
+          for (const group of groups) visit(group?.ingredients);
+        }
+        return map;
+      };
+
+      const flattenSteps = (groups) => {
+        const map = new Map();
+        const visit = (items) => {
+          if (!Array.isArray(items)) return;
+          for (const item of items) {
+            if (!item || typeof item !== 'object') continue;
+            if (Array.isArray(item.steps)) {
+              visit(item.steps);
+              continue;
+            }
+            if (typeof item.id === 'string' && item.id) {
+              map.set(item.id, item);
+            }
+          }
+        };
+        if (Array.isArray(groups)) {
+          for (const group of groups) visit(group?.steps);
+        }
+        return map;
+      };
+
+      const ingredientChanged = (a, b) => {
+        if (!a || !b) return true;
+        return (
+          (a.name || '') !== (b.name || '') ||
+          (a.description || '') !== (b.description || '') ||
+          stableJson(a.quantities) !== stableJson(b.quantities) ||
+          (a.alternativeGroupId || '') !== (b.alternativeGroupId || '') ||
+          !!a.isAlternativeDefault !== !!b.isAlternativeDefault
+        );
+      };
+
+      const stepChanged = (a, b) => {
+        if (!a || !b) return true;
+        return (
+          (a.text || '') !== (b.text || '') ||
+          stableJson(a.linkedIngredients) !== stableJson(b.linkedIngredients) ||
+          stableJson(a.intermediateIngredients) !== stableJson(b.intermediateIngredients) ||
+          (a.timer ?? null) !== (b.timer ?? null)
+        );
+      };
+
+      // Prefer precise field/item marking via original vs draft diff.
+      const original = aiDiffOriginal && typeof aiDiffOriginal === 'object' ? aiDiffOriginal : null;
+      const draft = recipe && typeof recipe === 'object' ? recipe : null;
+      if (original && draft) {
+        if ((original.title || '') !== (draft.title || '')) markInput('edit-title');
+        if ((original.subtitle || '') !== (draft.subtitle || '')) markInput('edit-subtitle');
+        if ((original.description || '') !== (draft.description || '')) markInput('edit-description');
+        if ((original.sourceUrl || '') !== (draft.sourceUrl || '')) markInput('edit-source-url');
+        if ((original.variantName || '') !== (draft.variantName || '')) markInput('edit-variant-name');
+        if ((original.category || '') !== (draft.category || '')) markInput('recipe-category');
+        if (stableJson(original.tags || []) !== stableJson(draft.tags || [])) {
+          const tagsWrap = document.getElementById('tags-container');
+          if (tagsWrap) markElement(tagsWrap);
+        }
+        if ((original.metadata?.servings ?? null) !== (draft.metadata?.servings ?? null)) {
+          markInput('edit-servings');
+        }
+        if ((original.metadata?.difficulty || '') !== (draft.metadata?.difficulty || '')) {
+          markInput('edit-difficulty');
+        }
+        if (stableJson(original.metadata?.nutrition || {}) !== stableJson(draft.metadata?.nutrition || {})) {
+          ['edit-calories', 'edit-carbohydrates', 'edit-protein', 'edit-fat'].forEach(markInput);
+        }
+        if (stableJson(original.metadata?.timeEntries || []) !== stableJson(draft.metadata?.timeEntries || [])) {
+          const timeWrap = document.getElementById('time-entries-container');
+          if (timeWrap) markElement(timeWrap);
+        }
+
+        const origIngs = flattenIngredients(original.ingredientGroups);
+        const draftIngs = flattenIngredients(draft.ingredientGroups);
+        for (const [id, draftIng] of draftIngs.entries()) {
+          const origIng = origIngs.get(id);
+          if (ingredientChanged(origIng, draftIng)) {
+            const el = document.querySelector(`.ingredient-edit-item[data-ingredient-id="${escapeAttr(id)}"]`);
+            if (el) markElement(el);
+          }
+        }
+
+        const origSteps = flattenSteps(original.preparationGroups);
+        const draftSteps = flattenSteps(draft.preparationGroups);
+        for (const [id, draftStep] of draftSteps.entries()) {
+          const origStep = origSteps.get(id);
+          if (stepChanged(origStep, draftStep)) {
+            const el = document.querySelector(`.step-edit-item[data-step-id="${escapeAttr(id)}"]`);
+            if (el) markElement(el);
+          }
         }
       }
 
-      const list = document.createElement('ul');
-      list.className = 'mt-2 space-y-1 text-xs text-indigo-900 dark:text-indigo-100';
-      const maxItems = 8;
-      data.highlights.slice(0, maxItems).forEach((h) => {
-        const li = document.createElement('li');
-        li.className = 'rounded bg-white/70 dark:bg-gray-800/40 px-2 py-1 border border-indigo-100 dark:border-indigo-900';
-        li.textContent = `${h.path || 'Feld'}: "${h.before || ''}" -> "${h.after || ''}"`;
-        list.appendChild(li);
-      });
-      if (data.highlights.length > 0) {
-        banner.appendChild(list);
+      // Fallback: coarse section marks from highlight paths when no precise marks yet.
+      if (marked.size === 0) {
+        const pathSet = new Set(data.highlights.map((h) => h.path || ''));
+        if (pathSet.has('title')) markInput('edit-title');
+        if (pathSet.has('subtitle')) markInput('edit-subtitle');
+        if (pathSet.has('description')) markInput('edit-description');
+        if (pathSet.has('category')) markInput('recipe-category');
+        if (pathSet.has('tags')) markBySelector('#tags-container');
+        if (pathSet.has('metadata.servings')) markInput('edit-servings');
+        if (pathSet.has('metadata.nutrition')) {
+          ['edit-calories', 'edit-carbohydrates', 'edit-protein', 'edit-fat'].forEach(markInput);
+        }
+        if (pathSet.has('metadata.timeEntries')) {
+          const timeWrap = document.getElementById('time-entries-container');
+          if (timeWrap) markElement(timeWrap);
+        }
+        if (pathSet.has('ingredientGroups')) {
+          markBySelector('#ingredients-edit-container .ingredient-edit-item');
+        }
+        if (pathSet.has('preparationGroups')) {
+          markBySelector('#preparation-edit-container .step-edit-item');
+        }
+      }
+
+      const banner = document.createElement('div');
+      banner.id = 'ai-edit-highlight-banner';
+      banner.className = 'mb-4 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-900/20 p-3';
+      const title = document.createElement('p');
+      title.className = 'text-sm font-semibold text-indigo-700 dark:text-indigo-300';
+      title.textContent =
+        marked.size > 0
+          ? `KI-Änderungsvorschlag – ${marked.size} Stelle${marked.size === 1 ? '' : 'n'} markiert. Bitte prüfen und speichern.`
+          : 'KI-Änderungsvorschlag geladen – bitte prüfen und speichern.';
+      banner.appendChild(title);
+
+      if (data.diagnostics && data.diagnostics.status && data.diagnostics.status !== 'ok') {
+        const diag = document.createElement('p');
+        diag.className = 'mt-1 text-xs text-amber-700 dark:text-amber-300';
+        diag.textContent = typeof data.diagnostics.message === 'string' ? data.diagnostics.message : 'Hinweis zur KI-Antwort.';
+        banner.appendChild(diag);
+      }
+      if (isDebug && data.diagnostics?.rawExcerpt) {
+        const raw = document.createElement('pre');
+        raw.className = 'mt-2 max-h-28 overflow-auto rounded border border-indigo-100 dark:border-indigo-900 bg-white/70 dark:bg-gray-800/50 p-2 text-[11px] text-indigo-900 dark:text-indigo-100 whitespace-pre-wrap';
+        raw.textContent = data.diagnostics.rawExcerpt;
+        banner.appendChild(raw);
       }
 
       const form = document.getElementById('edit-recipe-form');
@@ -443,31 +605,9 @@ const { recipe } = Astro.props;
         form.parentNode.insertBefore(banner, form);
       }
 
-      const pathSet = new Set(data.highlights.map((h) => h.path || ''));
-      const markInput = (id) => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600');
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      };
-      if (pathSet.has('title')) markInput('edit-title');
-      if (pathSet.has('subtitle')) markInput('edit-subtitle');
-      if (pathSet.has('description')) markInput('edit-description');
-      if (pathSet.has('metadata.nutrition')) {
-        ['edit-calories', 'edit-carbohydrates', 'edit-protein', 'edit-fat'].forEach(markInput);
-      }
-      if (pathSet.has('metadata.timeEntries')) {
-        const timeWrap = document.getElementById('time-entries-container');
-        if (timeWrap) timeWrap.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600', 'rounded-md');
-      }
-      if (pathSet.has('ingredientGroups')) {
-        const ingWrap = document.getElementById('ingredients-edit-container');
-        if (ingWrap) ingWrap.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600', 'rounded-md');
-      }
-      if (pathSet.has('preparationGroups')) {
-        const prepWrap = document.getElementById('preparation-edit-container');
-        if (prepWrap) prepWrap.classList.add('ring-2', 'ring-indigo-400', 'dark:ring-indigo-600', 'rounded-md');
+      const firstMarked = marked.values().next().value;
+      if (firstMarked && typeof firstMarked.scrollIntoView === 'function') {
+        firstMarked.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     } catch (e) {
       console.error('Could not apply AI edit highlights', e);
@@ -1766,8 +1906,12 @@ const { recipe } = Astro.props;
   async function createRecipeVariant(variantName) {
     try {
       const trimmedName = (variantName || '').trim();
-      const recipeId = window.location.pathname.split('/').pop();
-      if (!recipeId) {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      // /rezept/{id}/variante-neu → use recipe.parentRecipeId; /rezept/{id} → last segment
+      const recipeIdFromUrl = pathParts[pathParts.length - 1] === 'variante-neu'
+        ? (pathParts[pathParts.length - 2] || '')
+        : (pathParts[pathParts.length - 1] || '');
+      if (!recipeIdFromUrl && !recipe?.id) {
         throw new Error('Recipe ID not found in URL');
       }
 
@@ -1800,9 +1944,12 @@ const { recipe } = Astro.props;
       // After successfully creating the variant, remove any remaining draft
       // for the current recipe so that no stale "draft" state is shown.
       try {
-        const deleted = await deleteDraft(recipeId);
-        if (!deleted) {
-          console.warn('No draft deleted after creating variant (might not have existed).');
+        const draftKey = recipe?.id && recipe.id !== 'draft' ? recipe.id : recipeIdFromUrl;
+        if (draftKey && draftKey !== 'variante-neu') {
+          const deleted = await deleteDraft(draftKey);
+          if (!deleted) {
+            console.warn('No draft deleted after creating variant (might not have existed).');
+          }
         }
       } catch (deleteError) {
         console.error('Error deleting draft after creating variant:', deleteError);
@@ -1899,9 +2046,13 @@ const { recipe } = Astro.props;
           window.toggleEditMode();
         }
         
-        // Reload the page to show updated content after a short delay
+        // Reload the page to show updated content after a short delay (drop AI draft URL params)
         setTimeout(() => {
-          window.location.reload();
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('aiDraft');
+          cleanUrl.searchParams.delete('aiEditToken');
+          cleanUrl.searchParams.delete('edit');
+          window.location.href = cleanUrl.pathname + (cleanUrl.searchParams.toString() ? `?${cleanUrl.searchParams}` : '');
         }, 1500);
       } else {
         throw new Error(`Server error: ${response.status}`);
@@ -1922,6 +2073,31 @@ const { recipe } = Astro.props;
     }
   }
 
+  function collectCurrentImages() {
+    // Prefer live gallery state (edit mode) so deleted images are not restored on save
+    const editGallery = document.querySelector('#edit-content [data-recipe-images], [data-mode="edit"][data-recipe-images]');
+    if (editGallery instanceof HTMLElement) {
+      try {
+        const fromDataset = JSON.parse(editGallery.dataset.recipeImages || '[]');
+        if (Array.isArray(fromDataset)) {
+          const remainingIds = new Set(
+            Array.from(editGallery.querySelectorAll('img[data-image-id]'))
+              .map((img) => (img instanceof HTMLElement ? img.dataset.imageId : null))
+              .filter(Boolean)
+          );
+          // DOM is source of truth for which images are still present
+          return fromDataset.filter((img) => img && remainingIds.has(img.id));
+        }
+      } catch (e) {
+        console.warn('Could not parse gallery images dataset', e);
+      }
+    }
+    if (window.currentRecipe && Array.isArray(window.currentRecipe.images)) {
+      return window.currentRecipe.images;
+    }
+    return [];
+  }
+
   function collectRecipeData() {
     // Get updated recipe data from ingredient linker if available
     let updatedRecipe = window.currentRecipe;
@@ -1931,6 +2107,7 @@ const { recipe } = Astro.props;
     
     // Get tags data if available
     const tagsData = window.getRecipeTagsData ? window.getRecipeTagsData() : { category: updatedRecipe.category, tags: updatedRecipe.tags };
+    const images = collectCurrentImages();
     
     // Collect form data
     const formData = {
@@ -1944,6 +2121,9 @@ const { recipe } = Astro.props;
       })(),
       category: tagsData.category,
       tags: tagsData.tags,
+      images,
+      // Use null (not undefined) so JSON.stringify keeps the key and clears image_url in DB
+      imageUrl: images[0]?.url ?? null,
       variantName: (() => {
         const variantNameInput = document.getElementById('edit-variant-name');
         if (!variantNameInput) {
