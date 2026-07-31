@@ -148,7 +148,7 @@ export interface ShoppingList {
   // permanentType: 0 = normal list, 1 = personal Sammelliste, 2 = globale Vorlage
   permanentType?: number;
   isPermanent?: boolean; // Convenience flag: true when permanentType > 0
-  hasSeenGlobalTemplatePrompt?: boolean; // Whether user already saw/applied the global template prompt
+  hasSeenGlobalTemplatePrompt?: boolean; // First-open import modal seen (Sammelliste + Vorlage)
   createdAt: Date;
   updatedAt: Date;
 }

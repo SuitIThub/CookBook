@@ -809,10 +809,35 @@ export class CookbookDatabase {
       const targetRecipeIds = new Set((target.recipes || []).map(r => r.id));
       const recipeId = permRecipe.id;
       if (!targetRecipeIds.has(recipeId)) {
-        this.addRecipeToShoppingList(targetListId, recipeId);
-        transferredRecipeCount++;
-        permanentRecipes = permanentRecipes.filter(r => r.id !== recipeId);
-        permanentItems = permanentItems.filter(item => item.recipeId !== recipeId);
+        const added = this.getRecipe(recipeId)
+          ? this.addRecipeToShoppingList(targetListId, recipeId)
+          : null;
+        if (added) {
+          const desiredServings = permRecipe.currentServings ?? permRecipe.servings;
+          if (desiredServings) {
+            this.updateRecipeServingsInShoppingList(targetListId, recipeId, desiredServings);
+          }
+          transferredRecipeCount++;
+          permanentRecipes = permanentRecipes.filter(r => r.id !== recipeId);
+          permanentItems = permanentItems.filter(item => item.recipeId !== recipeId);
+        } else {
+          // Recipe missing – move stored recipe entry + items as-is
+          target = this.getShoppingList(targetListId)!;
+          target.recipes.push({
+            ...permRecipe,
+            isCompleted: false,
+            addedAt: new Date()
+          });
+          for (const item of permanentItems.filter(i => i.recipeId === recipeId)) {
+            const { id: _id, ...rest } = item;
+            target.items.push({ ...rest, id: uuidv4(), isChecked: false });
+            transferredItemCount++;
+          }
+          this.updateShoppingList(targetListId, { items: target.items, recipes: target.recipes });
+          transferredRecipeCount++;
+          permanentRecipes = permanentRecipes.filter(r => r.id !== recipeId);
+          permanentItems = permanentItems.filter(item => item.recipeId !== recipeId);
+        }
       } else if (addPortionsForRecipeIds.includes(recipeId)) {
         const targetRecipe = this.getShoppingList(targetListId)!.recipes.find(r => r.id === recipeId)!;
         const newServings = (targetRecipe.currentServings ?? targetRecipe.servings) + (permRecipe.currentServings ?? permRecipe.servings);
@@ -834,11 +859,12 @@ export class CookbookDatabase {
    * Apply the global template shopping list to a normal list.
    * Products and recipes are copied but NOT removed from the template list.
    * Recipes that already exist on the target list are skipped.
+   * If a recipe was deleted from the DB, its stored items on the template are still copied.
    */
   applyGlobalTemplateToList(targetListId: string): { copiedItemCount: number; copiedRecipeCount: number } | null {
     const GLOBAL_TEMPLATE_LIST_ID = 'global-template-shopping-list';
     const template = this.getGlobalTemplateShoppingList();
-    const target = this.getShoppingList(targetListId);
+    let target = this.getShoppingList(targetListId);
     if (!template || !target || target.isPermanent || target.id === GLOBAL_TEMPLATE_LIST_ID) {
       return null;
     }
@@ -855,12 +881,47 @@ export class CookbookDatabase {
     }
 
     // Copy recipes that are not yet on the target list
+    target = this.getShoppingList(targetListId)!;
     const targetRecipeIds = new Set((target.recipes || []).map(r => r.id));
     for (const tplRecipe of template.recipes || []) {
-      if (!targetRecipeIds.has(tplRecipe.id)) {
-        this.addRecipeToShoppingList(targetListId, tplRecipe.id);
-        copiedRecipeCount++;
+      if (targetRecipeIds.has(tplRecipe.id)) {
+        continue;
       }
+
+      // Prefer live recipe (keeps ingredients/alternatives in sync with current recipe)
+      if (this.getRecipe(tplRecipe.id) && this.addRecipeToShoppingList(targetListId, tplRecipe.id)) {
+        const desiredServings = tplRecipe.currentServings ?? tplRecipe.servings;
+        if (desiredServings) {
+          this.updateRecipeServingsInShoppingList(targetListId, tplRecipe.id, desiredServings);
+        }
+        copiedRecipeCount++;
+        targetRecipeIds.add(tplRecipe.id);
+        continue;
+      }
+
+      // Fallback: recipe missing/unavailable – copy stored recipe entry + items from template
+      target = this.getShoppingList(targetListId)!;
+      target.recipes.push({
+        ...tplRecipe,
+        isCompleted: false,
+        addedAt: new Date()
+      });
+      for (const item of template.items.filter(i => i.recipeId === tplRecipe.id)) {
+        const { id: _id, ...rest } = item;
+        target.items.push({ ...rest, id: uuidv4(), isChecked: false });
+        copiedItemCount++;
+      }
+      this.updateShoppingList(targetListId, { items: target.items, recipes: target.recipes });
+      copiedRecipeCount++;
+      targetRecipeIds.add(tplRecipe.id);
+    }
+
+    // Orphan items: linked to a recipeId that is not listed in template.recipes
+    const templateRecipeIds = new Set((template.recipes || []).map(r => r.id));
+    for (const item of template.items.filter(i => i.recipeId && !templateRecipeIds.has(i.recipeId))) {
+      const { id: _id, recipeId: _recipeId, ...rest } = item;
+      this.addItemToShoppingList(targetListId, { ...rest, isChecked: false });
+      copiedItemCount++;
     }
 
     return { copiedItemCount, copiedRecipeCount };

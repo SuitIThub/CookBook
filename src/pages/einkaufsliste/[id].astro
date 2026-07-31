@@ -26,8 +26,9 @@ if (!shoppingList) {
   return Astro.redirect('/einkaufslisten');
 }
 
-// Für normale Listen: prüfen ob die Sammelliste Einträge hat (für Transfer-Hinweis)
+// Für normale Listen: prüfen ob Sammelliste / Vorlage Einträge haben
 let permanentListSummary: { itemCount: number; recipeCount: number } | null = null;
+let globalTemplateSummary: { itemCount: number; recipeCount: number } | null = null;
 if (!shoppingList.isPermanent) {
   const permanentList = db.getPermanentShoppingList();
   if (permanentList && (permanentList.items.length > 0 || (permanentList.recipes?.length ?? 0) > 0)) {
@@ -36,19 +37,26 @@ if (!shoppingList.isPermanent) {
       recipeCount: permanentList.recipes?.length ?? 0
     };
   }
-}
 
-// Für normale Listen: prüfen, ob globale Vorlage Einträge hat und ob der Hinweis schon gezeigt wurde
-let globalTemplateSummary: { itemCount: number; recipeCount: number } | null = null;
-if (!shoppingList.isPermanent && !shoppingList.hasSeenGlobalTemplatePrompt) {
-  const globalTemplate = db.getGlobalTemplateShoppingList();
-  if (globalTemplate && (globalTemplate.items.length > 0 || (globalTemplate.recipes?.length ?? 0) > 0)) {
-    globalTemplateSummary = {
-      itemCount: globalTemplate.items.length,
-      recipeCount: globalTemplate.recipes?.length ?? 0
-    };
+  // Vorlage nur beim ersten Öffnen (Import-Modal) anbieten
+  if (!shoppingList.hasSeenGlobalTemplatePrompt) {
+    const globalTemplate = db.getGlobalTemplateShoppingList();
+    if (globalTemplate && (globalTemplate.items.length > 0 || (globalTemplate.recipes?.length ?? 0) > 0)) {
+      globalTemplateSummary = {
+        itemCount: globalTemplate.items.length,
+        recipeCount: globalTemplate.recipes?.length ?? 0
+      };
+    }
   }
 }
+
+// Erstes Öffnen: Sammelliste + Vorlage gemeinsam im Modal; danach Banner nur noch für Sammelliste
+const showImportSourcesModal = !shoppingList.isPermanent
+  && !shoppingList.hasSeenGlobalTemplatePrompt
+  && !!(permanentListSummary || globalTemplateSummary);
+const showTransferBanner = !shoppingList.isPermanent
+  && !!shoppingList.hasSeenGlobalTemplatePrompt
+  && !!permanentListSummary;
 
 // Query-Parameter für Edit-Modus überprüfen
 const url = new URL(Astro.request.url);
@@ -126,8 +134,8 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       </div>
     </div>
 
-    <!-- Transfer from permanent list banner (only for normal lists when permanent has content) -->
-    {permanentListSummary && (
+    <!-- Sammelliste-Erinnerung nach dem ersten Import-Prompt (wenn noch Inhalt vorhanden) -->
+    {showTransferBanner && permanentListSummary && (
       <div id="transfer-from-permanent-banner" class="mb-4 p-4 rounded-lg border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/20">
         <p class="text-sm text-gray-700 dark:text-gray-300 mb-3">
           Auf Ihrer <strong>Sammelliste</strong> befinden sich {permanentListSummary.itemCount} Artikel und {permanentListSummary.recipeCount} Rezept{permanentListSummary.recipeCount !== 1 ? 'e' : ''}. Möchten Sie diese in diese Einkaufsliste übernehmen?
@@ -407,29 +415,61 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
   <AddNoteModal />
   <ImageGalleryModal />
 
-  <!-- Global template (second permanent list) apply modal -->
-  <div id="global-template-modal" class="modal hidden">
+  <!-- Erstes Öffnen: Sammelliste + permanente Vorlage separat bestätigen -->
+  {showImportSourcesModal && (
+  <div id="import-sources-modal" class="modal hidden">
     <div class="modal-overlay"></div>
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title">Wiederverwendbare Einkaufsliste anwenden?</h2>
-        <button type="button" class="modal-close">&times;</button>
+        <h2 class="modal-title">Einträge übernehmen?</h2>
+        <button type="button" class="modal-close" id="import-sources-modal-close">&times;</button>
       </div>
-      <div class="modal-body space-y-4">
+      <div class="modal-body space-y-5">
         <p class="text-sm text-gray-700 dark:text-gray-300">
-          Es gibt eine permanente Einkaufsliste mit {globalTemplateSummary?.itemCount ?? 0} Artikeln und {globalTemplateSummary?.recipeCount ?? 0} Rezept{(globalTemplateSummary?.recipeCount ?? 0) !== 1 ? 'en' : ''}.
-          Sollen diese Einträge zu dieser neuen Einkaufsliste hinzugefügt werden?
+          Für diese Einkaufsliste können Inhalte aus vorhandenen Listen übernommen werden. Bitte entscheiden Sie für jede Quelle einzeln.
         </p>
-        <p class="text-xs text-gray-500 dark:text-gray-400">
-          Die Einträge bleiben auf der Vorlage erhalten und können auch bei zukünftigen Einkaufslisten erneut verwendet werden.
-        </p>
-        <div class="flex gap-2">
-          <button type="button" id="apply-global-template-yes" class="btn btn-primary">Ja, hinzufügen</button>
-          <button type="button" id="apply-global-template-no" class="btn btn-secondary">Nein, danke</button>
-        </div>
+
+        {permanentListSummary && (
+          <div id="import-sammelliste-section" class="rounded-lg border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/20 p-4 space-y-3" data-source="sammelliste">
+            <div>
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Sammelliste</h3>
+              <p class="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                {permanentListSummary.itemCount} Artikel und {permanentListSummary.recipeCount} Rezept{permanentListSummary.recipeCount !== 1 ? 'e' : ''} in diese Liste übernehmen?
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Die Einträge werden von der Sammelliste entfernt.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2" data-choice-actions>
+              <button type="button" id="import-sammelliste-yes" class="btn btn-primary btn-sm">Übernehmen</button>
+              <button type="button" id="import-sammelliste-no" class="btn btn-secondary btn-sm">Nicht übernehmen</button>
+            </div>
+            <p class="text-xs font-medium text-primary-700 dark:text-primary-300 hidden" data-choice-result></p>
+          </div>
+        )}
+
+        {globalTemplateSummary && (
+          <div id="import-template-section" class="rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/40 p-4 space-y-3" data-source="template">
+            <div>
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Permanente Einkaufsliste</h3>
+              <p class="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                {globalTemplateSummary.itemCount} Artikel und {globalTemplateSummary.recipeCount} Rezept{(globalTemplateSummary.recipeCount !== 1) ? 'e' : ''} hinzufügen?
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Die Einträge bleiben auf der Vorlage und können erneut verwendet werden.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2" data-choice-actions>
+              <button type="button" id="import-template-yes" class="btn btn-primary btn-sm">Hinzufügen</button>
+              <button type="button" id="import-template-no" class="btn btn-secondary btn-sm">Nicht hinzufügen</button>
+            </div>
+            <p class="text-xs font-medium text-primary-700 dark:text-primary-300 hidden" data-choice-result></p>
+          </div>
+        )}
       </div>
     </div>
   </div>
+  )}
 
   <!-- Apply this permanent list to a chosen normal list (manual action from permanent list page) -->
   <div id="apply-permanent-to-list-modal" class="modal hidden">
@@ -500,7 +540,7 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
-  <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList, isPermanentList: shoppingList.isPermanent ?? false, permanentType: shoppingList.permanentType ?? 0, permanentListSummary: permanentListSummary, globalTemplateSummary: globalTemplateSummary }}>
+  <script type="module" define:vars={{ shoppingListId: id, shoppingListData: shoppingList, isPermanentList: shoppingList.isPermanent ?? false, permanentType: shoppingList.permanentType ?? 0, permanentListSummary: permanentListSummary, globalTemplateSummary: globalTemplateSummary, showImportSourcesModal: showImportSourcesModal }}>
     // Variables are already defined via define:vars
     let availableUnits = [];
     let unitConversionData = null; // Store unit conversion data for formatting
@@ -849,12 +889,22 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         }
       });
 
-      // Global template (second permanent list) modal on first open of a normal list
-      const globalTemplateModal = document.getElementById('global-template-modal');
-      const applyGlobalTemplateYesBtn = document.getElementById('apply-global-template-yes');
-      const applyGlobalTemplateNoBtn = document.getElementById('apply-global-template-no');
+      // Erstes Öffnen: Sammelliste + permanente Vorlage gemeinsam im Modal, separat bestätigen
+      const importSourcesModal = document.getElementById('import-sources-modal');
+      const addPortionsModal = document.getElementById('add-portions-transfer-modal');
+      const addPortionsRecipeList = document.getElementById('add-portions-recipe-list');
+      const addPortionsYesBtn = document.getElementById('add-portions-yes-btn');
+      const addPortionsNoBtn = document.getElementById('add-portions-no-btn');
+      let pendingDuplicateRecipeIds = [];
+      let transferTargetListId = shoppingListId;
+      let importSourcesFinishing = false;
 
-      async function markGlobalTemplatePromptSeen() {
+      const importChoices = {
+        sammelliste: permanentListSummary && showImportSourcesModal ? null : 'skip',
+        template: globalTemplateSummary && showImportSourcesModal ? null : 'skip'
+      };
+
+      async function markImportPromptSeen() {
         try {
           await fetch(`/api/shopping-lists?id=${shoppingListId}`, {
             method: 'PUT',
@@ -862,60 +912,132 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
             body: JSON.stringify({ hasSeenGlobalTemplatePrompt: true })
           });
         } catch (e) {
-          console.error('Failed to mark global template prompt as seen', e);
+          console.error('Failed to mark import prompt as seen', e);
         }
       }
 
-      if (!isPermanentList && globalTemplateSummary) {
-        globalTemplateModal?.classList.remove('hidden');
+      function setImportChoice(source, accepted, resultText) {
+        importChoices[source] = accepted;
+        const section = document.querySelector(`[data-source="${source}"]`);
+        if (!section) return;
+        const actions = section.querySelector('[data-choice-actions]');
+        const result = section.querySelector('[data-choice-result]');
+        actions?.classList.add('hidden');
+        if (result) {
+          result.textContent = resultText;
+          result.classList.remove('hidden');
+        }
+        maybeFinishImportSources();
       }
 
-      applyGlobalTemplateYesBtn?.addEventListener('click', async () => {
+      async function maybeFinishImportSources() {
+        if (importChoices.sammelliste === null || importChoices.template === null) return;
+        if (importSourcesFinishing) return;
+        importSourcesFinishing = true;
+
+        const applySammelliste = importChoices.sammelliste === true;
+        const applyTemplate = importChoices.template === true;
+
+        importSourcesModal?.classList.add('hidden');
+        await markImportPromptSeen();
+
+        if (!applySammelliste && !applyTemplate) {
+          return;
+        }
+
         try {
-          const response = await fetch(`/api/shopping-lists/${shoppingListId}/apply-global-template`, {
-            method: 'POST'
-          });
-          await markGlobalTemplatePromptSeen();
-          globalTemplateModal?.classList.add('hidden');
-          if (!response.ok) {
-            const err = await response.json();
-            alert(err.error || 'Fehler beim Anwenden der Vorlage');
+          let pendingDuplicates = null;
+
+          if (applySammelliste) {
+            const response = await fetch(`/api/shopping-lists/${shoppingListId}/transfer-from-permanent`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            });
+            if (!response.ok) {
+              const err = await response.json();
+              alert(err.error || 'Übernahme von der Sammelliste fehlgeschlagen');
+              return;
+            }
+            const result = await response.json();
+            if (result.duplicateRecipeIds && result.duplicateRecipeIds.length > 0) {
+              pendingDuplicates = result.duplicateRecipeIds;
+            }
+          }
+
+          if (applyTemplate) {
+            const response = await fetch(`/api/shopping-lists/${shoppingListId}/apply-global-template`, {
+              method: 'POST'
+            });
+            if (!response.ok) {
+              const err = await response.json();
+              alert(err.error || 'Fehler beim Anwenden der Vorlage');
+              window.location.reload();
+              return;
+            }
+          }
+
+          if (pendingDuplicates) {
+            pendingDuplicateRecipeIds = pendingDuplicates;
+            transferTargetListId = shoppingListId;
+            const titles = (shoppingListData.recipes || [])
+              .filter(r => pendingDuplicateRecipeIds.includes(r.id))
+              .map(r => r.title);
+            if (addPortionsRecipeList) {
+              addPortionsRecipeList.innerHTML = titles.map(t => `<li>${t}</li>`).join('');
+            }
+            addPortionsModal?.classList.remove('hidden');
             return;
           }
+
+          const messages = [];
+          if (applySammelliste) messages.push('Sammelliste übernommen');
+          if (applyTemplate) messages.push('permanente Liste hinzugefügt');
           if (typeof window.showInfo === 'function') {
-            window.showInfo('Vorlagen-Einkaufsliste wurde übernommen.');
+            window.showInfo(messages.join(', ') + '.');
           }
           window.location.reload();
         } catch (e) {
-          console.error('Failed to apply global template', e);
-          alert('Fehler beim Anwenden der Vorlage');
+          console.error('Failed to apply import sources', e);
+          alert('Fehler beim Übernehmen der Einträge');
         }
+      }
+
+      if (showImportSourcesModal) {
+        importSourcesModal?.classList.remove('hidden');
+      }
+
+      document.getElementById('import-sammelliste-yes')?.addEventListener('click', () => {
+        setImportChoice('sammelliste', true, 'Wird übernommen.');
+      });
+      document.getElementById('import-sammelliste-no')?.addEventListener('click', () => {
+        setImportChoice('sammelliste', false, 'Nicht übernommen.');
+      });
+      document.getElementById('import-template-yes')?.addEventListener('click', () => {
+        setImportChoice('template', true, 'Wird hinzugefügt.');
+      });
+      document.getElementById('import-template-no')?.addEventListener('click', () => {
+        setImportChoice('template', false, 'Nicht hinzugefügt.');
       });
 
-      const closeGlobalTemplateModal = async () => {
-        globalTemplateModal?.classList.add('hidden');
-        await markGlobalTemplatePromptSeen();
+      const dismissImportSourcesModal = () => {
+        // Offene Quellen als abgelehnt werten; bereits bestätigte weiterhin anwenden
+        if (importChoices.sammelliste === null) importChoices.sammelliste = false;
+        if (importChoices.template === null) importChoices.template = false;
+        maybeFinishImportSources();
       };
+      document.getElementById('import-sources-modal-close')?.addEventListener('click', dismissImportSourcesModal);
+      importSourcesModal?.querySelector('.modal-overlay')?.addEventListener('click', dismissImportSourcesModal);
 
-      applyGlobalTemplateNoBtn?.addEventListener('click', closeGlobalTemplateModal);
-      globalTemplateModal?.querySelector('.modal-close')?.addEventListener('click', closeGlobalTemplateModal);
-      globalTemplateModal?.querySelector('.modal-overlay')?.addEventListener('click', closeGlobalTemplateModal);
-
-      // Transfer from permanent list (Sammelliste)
+      // Transfer from permanent list (Sammelliste) – Banner nach erstem Prompt
       const transferBanner = document.getElementById('transfer-from-permanent-banner');
       const transferBtn = document.getElementById('transfer-from-permanent-btn');
       const dismissTransferBtn = document.getElementById('dismiss-transfer-banner-btn');
-      const addPortionsModal = document.getElementById('add-portions-transfer-modal');
-      const addPortionsRecipeList = document.getElementById('add-portions-recipe-list');
-      const addPortionsYesBtn = document.getElementById('add-portions-yes-btn');
-      const addPortionsNoBtn = document.getElementById('add-portions-no-btn');
 
       dismissTransferBtn?.addEventListener('click', () => {
         transferBanner?.classList.add('hidden');
       });
 
-      let pendingDuplicateRecipeIds = [];
-      let transferTargetListId = shoppingListId; // target list for transfer (current page when from banner; chosen list when from "apply to list" on permanent page)
       transferBtn?.addEventListener('click', async () => {
         if (!shoppingListId) return;
         transferTargetListId = shoppingListId;
