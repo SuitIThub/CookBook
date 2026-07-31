@@ -159,16 +159,8 @@ const { recipeId, isVariantDraft = false, parentRecipeId } = Astro.props;
   } else {
     [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].forEach(btn => {
       btn?.addEventListener('click', () => {
-        [saveBtn, saveBtnMobile, saveBtnBottom, saveBtnBottomMobile].forEach(button => {
-          if (button) {
-            const span = button.querySelector('span');
-            const svg = button.querySelector('svg');
-            button.disabled = true;
-            if (span) span.textContent = 'Speichert...';
-            if (svg) svg.style.display = 'none';
-          }
-        });
-        form?.dispatchEvent(new Event('submit'));
+        // Loading state is handled in handleFormSubmit after required-field validation
+        form?.dispatchEvent(new Event('submit', { cancelable: true }));
       });
     });
     [saveAsVariantBtn, saveAsVariantBtnMobile].forEach(btn => {

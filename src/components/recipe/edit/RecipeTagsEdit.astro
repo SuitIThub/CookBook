@@ -16,11 +16,13 @@ const { recipe } = Astro.props;
   <div class="space-y-4">
     <!-- Category Selection -->
     <div>
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        Kategorie
+      <label for="recipe-category" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        Kategorie <span class="text-red-500" aria-hidden="true">*</span>
       </label>
       <select 
         id="recipe-category"
+        required
+        aria-required="true"
         class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
       >
         <option value="">Kategorie wählen...</option>
