@@ -250,6 +250,7 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
     if (form) {
       form.addEventListener('submit', handleFormSubmit);
     }
+    bindRequiredFieldClearListeners();
 
     if (aiEditToken) {
       await applyAiEditHighlights(aiEditToken);
@@ -1905,6 +1906,11 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
   // Create a new recipe variant based on the current edit state
   async function createRecipeVariant(variantName) {
     try {
+      bindRequiredFieldClearListeners();
+      if (!validateRequiredRecipeFields()) {
+        return null;
+      }
+
       const trimmedName = (variantName || '').trim();
       const pathParts = window.location.pathname.split('/').filter(Boolean);
       // /rezept/{id}/variante-neu → use recipe.parentRecipeId; /rezept/{id} → last segment
@@ -1974,8 +1980,97 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
     }
   }
 
+  const REQUIRED_FIELD_IDS = ['edit-title', 'edit-servings', 'recipe-category'];
+  const REQUIRED_INVALID_CLASSES = ['border-red-500', 'dark:border-red-500', 'focus:ring-red-500', 'focus:border-red-500'];
+
+  function clearRequiredFieldErrors() {
+    REQUIRED_FIELD_IDS.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!(el instanceof HTMLElement)) return;
+      el.classList.remove(...REQUIRED_INVALID_CLASSES);
+      el.removeAttribute('aria-invalid');
+      const errorEl = el.parentElement?.querySelector('[data-required-error]');
+      if (errorEl) errorEl.remove();
+    });
+  }
+
+  function markRequiredFieldInvalid(el, message) {
+    if (!(el instanceof HTMLElement)) return;
+    el.classList.add(...REQUIRED_INVALID_CLASSES);
+    el.setAttribute('aria-invalid', 'true');
+    if (!el.parentElement?.querySelector('[data-required-error]')) {
+      const errorEl = document.createElement('p');
+      errorEl.dataset.requiredError = '1';
+      errorEl.className = 'mt-1 text-sm text-red-600 dark:text-red-400';
+      errorEl.textContent = message;
+      el.parentElement?.appendChild(errorEl);
+    }
+  }
+
+  function validateRequiredRecipeFields() {
+    clearRequiredFieldErrors();
+
+    const titleInput = document.getElementById('edit-title');
+    const servingsInput = document.getElementById('edit-servings');
+    const categorySelect = document.getElementById('recipe-category');
+    const missing = [];
+    let firstInvalid = null;
+
+    const title = (titleInput instanceof HTMLInputElement ? titleInput.value : '').trim();
+    if (!title) {
+      missing.push('Titel');
+      markRequiredFieldInvalid(titleInput, 'Titel ist ein Pflichtfeld.');
+      firstInvalid = firstInvalid || titleInput;
+    }
+
+    const servingsRaw = (servingsInput instanceof HTMLInputElement ? servingsInput.value : '').trim();
+    const servings = parseInt(servingsRaw, 10);
+    if (!servingsRaw || !Number.isFinite(servings) || servings < 1) {
+      missing.push('Portionen');
+      markRequiredFieldInvalid(servingsInput, 'Portionen sind ein Pflichtfeld (mindestens 1).');
+      firstInvalid = firstInvalid || servingsInput;
+    }
+
+    const category = (categorySelect instanceof HTMLSelectElement ? categorySelect.value : '').trim();
+    if (!category) {
+      missing.push('Kategorie');
+      markRequiredFieldInvalid(categorySelect, 'Kategorie ist ein Pflichtfeld.');
+      firstInvalid = firstInvalid || categorySelect;
+    }
+
+    if (missing.length > 0) {
+      if (firstInvalid instanceof HTMLElement) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid.focus();
+      }
+      showNotification(`Bitte Pflichtfelder ausfüllen: ${missing.join(', ')}`, 'error');
+      return false;
+    }
+    return true;
+  }
+
+  function bindRequiredFieldClearListeners() {
+    REQUIRED_FIELD_IDS.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!(el instanceof HTMLElement) || el.dataset.requiredClearBound === '1') return;
+      el.dataset.requiredClearBound = '1';
+      const clearThis = () => {
+        el.classList.remove(...REQUIRED_INVALID_CLASSES);
+        el.removeAttribute('aria-invalid');
+        el.parentElement?.querySelector('[data-required-error]')?.remove();
+      };
+      el.addEventListener('input', clearThis);
+      el.addEventListener('change', clearThis);
+    });
+  }
+
   async function handleFormSubmit(e) {
     e.preventDefault();
+
+    bindRequiredFieldClearListeners();
+    if (!validateRequiredRecipeFields()) {
+      return;
+    }
     
     // Get the save buttons (from header and bottom)
     const saveBtn = document.getElementById('save-btn');

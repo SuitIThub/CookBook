@@ -117,8 +117,12 @@ declare global {
         variantConfirmBtn.textContent = 'Erstellt...';
       }
 
-      await createVariant(name);
+      const created = await createVariant(name);
       // createRecipeVariant handles redirect and notifications
+      if (!created && variantConfirmBtn) {
+        variantConfirmBtn.disabled = false;
+        variantConfirmBtn.textContent = 'Variante erstellen';
+      }
     } catch (error) {
       console.error('Error while creating variant from modal:', error);
       if (variantConfirmBtn) {
