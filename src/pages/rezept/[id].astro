@@ -113,7 +113,13 @@ try {
       </div>
     )}
 
-    <RecipeHeader recipe={recipe} />
+    <RecipeHeader
+      recipe={recipe}
+      familyIds={[
+        originalRecipe?.id || recipe.id,
+        ...variants.map((v) => v.id),
+      ].filter((id, index, arr) => arr.indexOf(id) === index)}
+    />
 
     <!-- View Mode Content -->
     <div id="view-content" class="space-y-6">

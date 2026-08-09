@@ -4,9 +4,11 @@ import NutritionInfo from './NutritionInfo.astro';
 
 interface Props {
   recipe: Recipe;
+  familyIds?: string[];
 }
 
-const { recipe } = Astro.props;
+const { recipe, familyIds = [recipe.id] } = Astro.props;
+const familyIdsAttr = familyIds.join(',');
 
 // Helper function to format time
 function formatTime(minutes: number): string {
@@ -220,6 +222,22 @@ const hasHeroImage = !!heroImage;
         )}
       </div>
       <div class="flex flex-col space-y-2 flex-shrink-0 min-w-fit">
+        <button
+          id="favorite-btn"
+          type="button"
+          class="favorite-action-btn hidden items-center space-x-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap"
+          data-family-ids={familyIdsAttr}
+          aria-label="Favorisieren"
+        >
+          <svg class="favorite-icon-outline w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+          </svg>
+          <svg class="favorite-icon-filled hidden w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+          </svg>
+          <span class="favorite-label-add">Favorisieren</span>
+          <span class="favorite-label-remove hidden">Unfavorisieren</span>
+        </button>
         <button id="edit-btn" class="flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors whitespace-nowrap">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -298,6 +316,22 @@ const hasHeroImage = !!heroImage;
       
       <!-- Action buttons - full width on mobile -->
       <div class="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-3">
+        <button
+          id="favorite-btn-mobile"
+          type="button"
+          class="favorite-action-btn hidden items-center justify-center space-x-2 px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm font-medium transition-colors flex-1"
+          data-family-ids={familyIdsAttr}
+          aria-label="Favorisieren"
+        >
+          <svg class="favorite-icon-outline w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+          </svg>
+          <svg class="favorite-icon-filled hidden w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+          </svg>
+          <span class="favorite-label-add">Favorisieren</span>
+          <span class="favorite-label-remove hidden">Unfavorisieren</span>
+        </button>
         <button id="edit-btn-mobile" class="flex items-center justify-center space-x-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors flex-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -553,6 +587,7 @@ const hasHeroImage = !!heroImage;
   // Function to update button visibility based on edit mode
   function updateButtonVisibility(isEditMode: boolean) {
     // Desktop buttons
+    const favoriteBtn = document.getElementById('favorite-btn');
     const exportContainer = document.getElementById('export-container');
     const addToShoppingBtn = document.getElementById('add-to-shopping');
     const cookingModeBtn = document.getElementById('cooking-mode-btn');
@@ -560,6 +595,7 @@ const hasHeroImage = !!heroImage;
     const saveVariantBtnHeader = document.getElementById('save-as-variant-btn-header');
     
     // Mobile buttons
+    const favoriteBtnMobile = document.getElementById('favorite-btn-mobile');
     const exportContainerMobile = document.getElementById('export-container-mobile');
     const addToShoppingBtnMobile = document.getElementById('add-to-shopping-mobile');
     const cookingModeBtnMobile = document.getElementById('cooking-mode-btn-mobile');
@@ -570,7 +606,11 @@ const hasHeroImage = !!heroImage;
     const sourceUrlSection = document.getElementById('source-url-section');
     
     if (isEditMode) {
-      // Hide export, shopping list, and cookmode buttons
+      // Hide favorite, export, shopping list, and cookmode buttons
+      favoriteBtn?.classList.add('hidden');
+      favoriteBtn?.classList.remove('flex');
+      favoriteBtnMobile?.classList.add('hidden');
+      favoriteBtnMobile?.classList.remove('flex');
       exportContainer?.classList.add('hidden');
       addToShoppingBtn?.classList.add('hidden');
       cookingModeBtn?.classList.add('hidden');
@@ -611,6 +651,9 @@ const hasHeroImage = !!heroImage;
       saveVariantBtnHeader?.classList.remove('flex');
       saveVariantBtnHeaderMobile?.classList.add('hidden');
       saveVariantBtnHeaderMobile?.classList.remove('flex');
+
+      // Favorite buttons: visibility depends on alias (handled separately)
+      document.dispatchEvent(new CustomEvent('cookbook:favorites-ui-refresh'));
     }
   }
 
@@ -637,4 +680,69 @@ const hasHeroImage = !!heroImage;
     });
   });
 
+</script>
+
+<script>
+  import {
+    ensureFavoriteFamilyComplete,
+    hasAlias,
+    isFamilyFavorite,
+    parseFamilyIds,
+    toggleFamilyFavorite,
+  } from '../../../lib/favorites';
+
+  function isEditModeActive(): boolean {
+    const viewContent = document.getElementById('view-content');
+    return viewContent?.classList.contains('hidden') ?? false;
+  }
+
+  function updateFavoriteActionBtn(btn: HTMLElement) {
+    const familyIds = parseFamilyIds(btn.getAttribute('data-family-ids'));
+    ensureFavoriteFamilyComplete(familyIds);
+    const favorited = isFamilyFavorite(familyIds);
+    btn.querySelector('.favorite-icon-outline')?.classList.toggle('hidden', favorited);
+    btn.querySelector('.favorite-icon-filled')?.classList.toggle('hidden', !favorited);
+    btn.querySelector('.favorite-label-add')?.classList.toggle('hidden', favorited);
+    btn.querySelector('.favorite-label-remove')?.classList.toggle('hidden', !favorited);
+    btn.setAttribute('aria-label', favorited ? 'Unfavorisieren' : 'Favorisieren');
+  }
+
+  function refreshFavoriteHeaderUi() {
+    const enabled = hasAlias() && !isEditModeActive();
+    document.querySelectorAll<HTMLElement>('.favorite-action-btn').forEach((btn) => {
+      if (enabled) {
+        btn.classList.remove('hidden');
+        btn.classList.add('flex');
+        updateFavoriteActionBtn(btn);
+      } else {
+        btn.classList.add('hidden');
+        btn.classList.remove('flex');
+      }
+    });
+  }
+
+  function onFavoriteActionClick(e: Event) {
+    const target = e.target as HTMLElement | null;
+    const btn = target?.closest?.('.favorite-action-btn') as HTMLElement | null;
+    if (!btn) return;
+    e.preventDefault();
+    if (!hasAlias()) return;
+    const familyIds = parseFamilyIds(btn.getAttribute('data-family-ids'));
+    toggleFamilyFavorite(familyIds);
+    document.querySelectorAll<HTMLElement>('.favorite-action-btn').forEach(updateFavoriteActionBtn);
+  }
+
+  if (!(window as any).__cookbookFavoritesHeaderWired) {
+    (window as any).__cookbookFavoritesHeaderWired = true;
+    document.addEventListener('click', onFavoriteActionClick);
+    document.addEventListener('cookbook:favorites-changed', refreshFavoriteHeaderUi);
+    document.addEventListener('cookbook:favorites-ui-refresh', refreshFavoriteHeaderUi);
+    document.addEventListener('astro:after-swap', refreshFavoriteHeaderUi);
+    const sync = (window as any).__cookbookAliasSync;
+    if (sync && typeof sync._registerUiRefresher === 'function') {
+      sync._registerUiRefresher(refreshFavoriteHeaderUi);
+    }
+  }
+
+  refreshFavoriteHeaderUi();
 </script> 

@@ -77,7 +77,7 @@
     if (!window.__cookbookAliasSync) {
       var ALIAS_KEY = 'cookbook.alias';
       var META_KEY = 'cookbook.alias.meta';
-      var SYNC_KEYS = ['theme', 'lowBandwidth', 'cookbook.ai.settings', 'cookbook.recipes.layout'];
+      var SYNC_KEYS = ['theme', 'lowBandwidth', 'cookbook.ai.settings', 'cookbook.recipes.layout', 'cookbook.recipes.favorites'];
 
       var origSetItem = Storage.prototype.setItem;
       var origRemoveItem = Storage.prototype.removeItem;
@@ -176,6 +176,8 @@
             var layout = value ? JSON.parse(value) : null;
             document.dispatchEvent(new CustomEvent('cookbook:recipe-layout-changed', { detail: layout }));
           } catch (e) {}
+        } else if (key === 'cookbook.recipes.favorites') {
+          document.dispatchEvent(new CustomEvent('cookbook:favorites-changed'));
         }
       }
 

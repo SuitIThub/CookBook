@@ -528,8 +528,28 @@ export class CookbookDatabase {
     return this.shoppingListFromRow(row);
   }
 
+  /** Ensure every shopping-list item has a stable UUID (fixes legacy rows saved without id). */
+  private ensureShoppingListItemIds(items: ShoppingListItem[]): { items: ShoppingListItem[]; changed: boolean } {
+    let changed = false;
+    const normalized = items.map(item => {
+      const id = item?.id;
+      if (id && typeof id === 'string' && !id.startsWith('new-')) {
+        return item;
+      }
+      changed = true;
+      return { ...item, id: uuidv4() };
+    });
+    return { items: normalized, changed };
+  }
+
   private shoppingListFromRow(row: any): ShoppingList {
-    const items = row.items ? JSON.parse(row.items) : [];
+    const rawItems: ShoppingListItem[] = row.items ? JSON.parse(row.items) : [];
+    const { items, changed } = this.ensureShoppingListItemIds(rawItems);
+    // Persist backfilled ids so toggles/sync keep matching across reloads
+    if (changed) {
+      this.db.prepare('UPDATE shopping_lists SET items = ? WHERE id = ?')
+        .run(JSON.stringify(items), row.id);
+    }
     const permanentType = row.is_permanent != null ? Number(row.is_permanent) : 0;
     return {
       id: row.id,
@@ -571,6 +591,7 @@ export class CookbookDatabase {
     }
 
     let mergedItems = updates.items !== undefined ? updates.items : existingList.items;
+    mergedItems = this.ensureShoppingListItemIds(mergedItems).items;
     const mergedHasSeenGlobalTemplatePrompt =
       updates.hasSeenGlobalTemplatePrompt !== undefined
         ? updates.hasSeenGlobalTemplatePrompt
