@@ -7,6 +7,7 @@ const ALLOWED_KEYS = new Set([
   'lowBandwidth',
   'cookbook.ai.settings',
   'cookbook.recipes.layout',
+  'cookbook.recipes.favorites',
 ]);
 
 function normalizeAlias(value: unknown): string {

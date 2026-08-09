@@ -73,8 +73,8 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
 
     <div id="recipe-collection" class="mt-8">
       <div id="recipe-cards-root" class="recipe-cards-container view-grid">
-        {recipes.map(recipe => (
-          <RecipeCard recipe={recipe} />
+        {recipes.map((recipe, index) => (
+          <RecipeCard recipe={recipe} sortIndex={index} />
         ))}
       </div>
     </div>
@@ -93,6 +93,38 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
             root.classList.remove('view-grid');
             root.classList.add('view-list');
           }
+        } catch (e) {}
+      })();
+
+      // Anti-flash: favorites first when an alias is active.
+      (function () {
+        try {
+          if (!(localStorage.getItem('cookbook.alias') || '').trim()) return;
+          var favRaw = localStorage.getItem('cookbook.recipes.favorites');
+          if (!favRaw) return;
+          var parsed = JSON.parse(favRaw);
+          if (!Array.isArray(parsed) || !parsed.length) return;
+          var favs = new Set(parsed);
+          var root = document.getElementById('recipe-cards-root');
+          if (!root) return;
+          var cards = Array.prototype.slice.call(root.querySelectorAll('.recipe-card[data-recipe-id]'));
+          if (!cards.length) return;
+          var fav = [];
+          var rest = [];
+          cards.forEach(function (card) {
+            var menu = card.nextElementSibling;
+            menu = menu && menu.classList && menu.classList.contains('recipe-menu') ? menu : null;
+            var ids = (card.getAttribute('data-family-ids') || card.getAttribute('data-recipe-id') || '')
+              .split(',')
+              .map(function (s) { return s.trim(); })
+              .filter(Boolean);
+            var isFav = ids.some(function (id) { return favs.has(id); });
+            (isFav ? fav : rest).push({ card: card, menu: menu });
+          });
+          fav.concat(rest).forEach(function (pair) {
+            root.appendChild(pair.card);
+            if (pair.menu) root.appendChild(pair.menu);
+          });
         } catch (e) {}
       })();
     </script>

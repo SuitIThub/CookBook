@@ -717,8 +717,9 @@ if (!shoppingList) {
           const originalItem = isNewItem ? null : shoppingListData.items.find(i => i.id === itemId);
           const isChecked = originalItem?.isChecked || false;
 
+          // Always persist a real UUID – missing ids break checkbox toggle matching after save
           const item = {
-            id: itemId?.startsWith('new-') ? undefined : itemId,
+            id: isNewItem || !itemId ? crypto.randomUUID() : itemId,
             name,
             description: description || undefined,
             isChecked

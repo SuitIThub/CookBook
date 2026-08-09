@@ -152,6 +152,53 @@ const { categories } = Astro.props;
       return cat ? cat : 'Ohne Kategorie';
     }
 
+    function getFavoriteIds() {
+      try {
+        var raw = localStorage.getItem('cookbook.recipes.favorites');
+        if (!raw) return new Set();
+        var parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.filter(function (id) { return typeof id === 'string' && id; }));
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function hasAlias() {
+      try {
+        return !!(localStorage.getItem('cookbook.alias') || '').trim();
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function isItemFavorite(it, favorites) {
+      var attr = it.card.getAttribute('data-family-ids') || it.card.getAttribute('data-recipe-id') || '';
+      var ids = attr.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      return ids.some(function (id) { return favorites.has(id); });
+    }
+
+    function itemSortIndex(it) {
+      var n = parseInt(it.card.getAttribute('data-sort-index') || '0', 10);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    // Favorites first; within each group keep the original (updated_at DESC) order.
+    function sortFavoritesFirst(list) {
+      var copy = list.slice().sort(function (a, b) {
+        return itemSortIndex(a) - itemSortIndex(b);
+      });
+      if (!hasAlias()) return copy;
+      var favorites = getFavoriteIds();
+      var fav = [];
+      var rest = [];
+      copy.forEach(function (it) {
+        if (isItemFavorite(it, favorites)) fav.push(it);
+        else rest.push(it);
+      });
+      return fav.concat(rest);
+    }
+
     function makeContainer(view) {
       const d = document.createElement('div');
       d.className = 'recipe-cards-container ' + (view === 'list' ? 'view-list' : 'view-grid');
@@ -185,6 +232,10 @@ const { categories } = Astro.props;
         if (!map.has(it.category)) map.set(it.category, []);
         map.get(it.category).push(it);
       });
+      // Favorites first within each category.
+      map.forEach((list, key) => {
+        map.set(key, sortFavoritesFirst(list));
+      });
       // Sort: non-empty categories alphabetically, "Ohne Kategorie" (empty) last.
       const keys = Array.from(map.keys()).sort((a, b) => {
         if (a === '') return 1;
@@ -206,7 +257,7 @@ const { categories } = Astro.props;
       const collection = clearCollection();
       if (!collection) return;
       const cont = makeContainer(view);
-      items.forEach((it) => appendItem(cont, it));
+      sortFavoritesFirst(items).forEach((it) => appendItem(cont, it));
       collection.appendChild(cont);
     }
 
@@ -285,7 +336,7 @@ const { categories } = Astro.props;
       });
 
       const cont = makeContainer(view);
-      items.forEach((it) => appendItem(cont, it));
+      sortFavoritesFirst(items).forEach((it) => appendItem(cont, it));
 
       collection.appendChild(bar);
       collection.appendChild(cont);
@@ -425,10 +476,26 @@ const { categories } = Astro.props;
       captureItems();
       wireControls();
       render(readLayout());
+
+      // Re-render when alias is set/cleared so favorites sort / UI stay in sync.
+      var sync = window.__cookbookAliasSync;
+      if (sync && typeof sync._registerUiRefresher === 'function' && !window.__cookbookFavoritesSortRefresher) {
+        window.__cookbookFavoritesSortRefresher = true;
+        sync._registerUiRefresher(function () {
+          if (!getCollection()) return;
+          render(readLayout());
+        });
+      }
     }
 
     // React to layout changes pushed from other devices via the alias sync.
     document.addEventListener('cookbook:recipe-layout-changed', () => {
+      render(readLayout());
+    });
+
+    // Re-sort when favorites change (local toggle or remote sync).
+    document.addEventListener('cookbook:favorites-changed', () => {
+      if (!getCollection()) return;
       render(readLayout());
     });
 
