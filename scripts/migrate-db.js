@@ -9,6 +9,33 @@ const ML_PER_EL = 15;
 const ML_PER_TL = 5;
 const ML_SPOON_THRESHOLD = 100;
 
+/** Canonical Hauptkategorien. Keep in sync with src/lib/recipeCategories.ts */
+const MAIN_CATEGORIES = [
+  'Hauptgericht',
+  'Vorspeise',
+  'Dessert',
+  'Getränk',
+  'Snack',
+  'Salat',
+  'Suppe',
+  'Beilage',
+  'Frühstück',
+  'Kuchen & Gebäck',
+];
+
+const MAIN_CATEGORY_ALIASES = {
+  'brot & gebäck': 'Kuchen & Gebäck',
+};
+
+function resolveMainCategory(name) {
+  if (typeof name !== 'string') return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (MAIN_CATEGORY_ALIASES[lower]) return MAIN_CATEGORY_ALIASES[lower];
+  return MAIN_CATEGORIES.find((category) => category.toLowerCase() === lower) || null;
+}
+
 // Expected database schema - this is the source of truth
 const EXPECTED_SCHEMA = {
   tables: {
@@ -535,21 +562,8 @@ function performDataMigrations(db) {
       VALUES (?, ?, ?)
     `);
     
-    const defaultCategories = [
-      'Hauptgericht',
-      'Vorspeise',
-      'Dessert',
-      'Getränk',
-      'Snack',
-      'Salat',
-      'Suppe',
-      'Beilage',
-      'Frühstück',
-      'Kuchen & Gebäck'
-    ];
-    
     let categoriesAdded = 0;
-    defaultCategories.forEach(category => {
+    MAIN_CATEGORIES.forEach(category => {
       const result = insertCategory.run(generateId(), category, 0);
       if (result.changes > 0) categoriesAdded++;
     });
@@ -868,6 +882,65 @@ function performDataMigrations(db) {
   const unitsFix = fixElTlUnitDefinitions(db);
   if (unitsFix > 0) {
     console.log(`✅ Fixed ${unitsFix} unit definition(s) so EL/TL are base units again (not children of ml).`);
+  }
+
+  // Migration 11: Remove Hauptkategorien that are not in the canonical list
+  // (old import bugs injected source-site categories into the categories table).
+  console.log('🏷️  Removing invalid main categories...');
+  const allowedCategories = new Set(MAIN_CATEGORIES);
+
+  const recipesWithCategory = db.prepare(`
+    SELECT id, title, category FROM recipes
+    WHERE category IS NOT NULL AND TRIM(category) != ''
+  `).all();
+
+  const updateRecipeCategory = db.prepare(`
+    UPDATE recipes SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  `);
+
+  let recipesRemapped = 0;
+  let recipesCleared = 0;
+  for (const recipe of recipesWithCategory) {
+    const resolved = resolveMainCategory(recipe.category);
+    if (resolved === recipe.category) continue;
+    if (resolved) {
+      updateRecipeCategory.run(resolved, recipe.id);
+      recipesRemapped += 1;
+      console.log(`  ✅ ${recipe.title}: "${recipe.category}" → "${resolved}"`);
+    } else {
+      updateRecipeCategory.run(null, recipe.id);
+      recipesCleared += 1;
+      console.log(`  🧹 ${recipe.title}: removed invalid category "${recipe.category}"`);
+    }
+  }
+
+  const categoryRows = db.prepare('SELECT id, name FROM categories').all();
+  const deleteCategory = db.prepare('DELETE FROM categories WHERE id = ?');
+  let categoriesRemoved = 0;
+  for (const row of categoryRows) {
+    if (!allowedCategories.has(row.name)) {
+      deleteCategory.run(row.id);
+      categoriesRemoved += 1;
+      console.log(`  🧹 Removed category "${row.name}"`);
+    }
+  }
+
+  const existingCategory = db.prepare('SELECT id FROM categories WHERE name = ?');
+  const insertCategoryIfMissing = db.prepare(`
+    INSERT INTO categories (id, name, usage_count) VALUES (?, ?, 0)
+  `);
+  for (const category of MAIN_CATEGORIES) {
+    if (!existingCategory.get(category)) {
+      insertCategoryIfMissing.run(generateId(), category);
+    }
+  }
+
+  if (recipesRemapped === 0 && recipesCleared === 0 && categoriesRemoved === 0) {
+    console.log('✅ No invalid main categories found.');
+  } else {
+    console.log(
+      `✅ Category cleanup: ${categoriesRemoved} list entries removed, ${recipesRemapped} recipe(s) remapped, ${recipesCleared} recipe(s) uncategorized.`
+    );
   }
 }
 

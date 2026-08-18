@@ -11,6 +11,7 @@ import {
   resolveSelection,
   type AlternativeSelection,
 } from './alternatives';
+import { resolveMainCategory } from './recipeCategories';
 
 export class CookbookDatabase {
   private db: Database.Database;
@@ -1160,12 +1161,13 @@ export class CookbookDatabase {
   }
 
   private updateCategoryUsage(category: string): void {
-    if (typeof category !== 'string' || !category.trim()) return;
+    const resolved = resolveMainCategory(category);
+    if (!resolved) return;
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO categories (id, name, usage_count)
       VALUES (?, ?, COALESCE((SELECT usage_count FROM categories WHERE name = ?) + 1, 1))
     `);
-    stmt.run(uuidv4(), category, category);
+    stmt.run(uuidv4(), resolved, resolved);
   }
 
   // Tag methods

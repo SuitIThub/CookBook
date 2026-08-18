@@ -1,5 +1,6 @@
 import { BaseRecipeExtractor, type ExtractedRecipeData } from './base-extractor';
 import type { NutritionData } from '../../types/recipe';
+import { resolveMainCategory } from '../recipeCategories';
 
 export class GaumenfreundinExtractor extends BaseRecipeExtractor {
   readonly name = 'Gaumenfreundin';
@@ -925,11 +926,7 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
   }
   
   private isValidCategory(category: string): boolean {
-    const validCategories = [
-      'Vorspeise', 'Hauptgericht', 'Dessert', 'Suppe', 'Salat', 
-      'Beilage', 'Getränk', 'Frühstück', 'Snack', 'Brot & Gebäck'
-    ];
-    return validCategories.includes(category);
+    return resolveMainCategory(category) === category;
   }
 
   getCapabilities() {

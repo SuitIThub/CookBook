@@ -589,8 +589,10 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
       
       if (category && typeof category === 'string') {
         const normalized = this.normalizeCategory(category);
-        console.log(`✅ Found category in JSON-LD recipeCategory: "${category}" → normalized: "${normalized}"`);
-        return normalized;
+        if (normalized) {
+          console.log(`✅ Found category in JSON-LD recipeCategory: "${category}" → normalized: "${normalized}"`);
+          return normalized;
+        }
       }
     }
     
@@ -602,8 +604,10 @@ export class ChefkochExtractor extends BaseRecipeExtractor {
       
       if (cuisine && typeof cuisine === 'string') {
         const normalized = this.normalizeCategory(cuisine);
-        console.log(`✅ Found category in JSON-LD recipeCuisine: "${cuisine}" → normalized: "${normalized}"`);
-        return normalized;
+        if (normalized) {
+          console.log(`✅ Found category in JSON-LD recipeCuisine: "${cuisine}" → normalized: "${normalized}"`);
+          return normalized;
+        }
       }
     }
     
