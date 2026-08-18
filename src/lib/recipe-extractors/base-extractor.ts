@@ -1,5 +1,6 @@
 import type { Recipe, NutritionData } from '../../types/recipe';
 import { getUnitVariations, convertToBaseUnit } from '../../lib/units';
+import { resolveMainCategory } from '../recipeCategories';
 
 export interface ExtractedRecipeData {
   title: string;
@@ -833,16 +834,20 @@ export abstract class BaseRecipeExtractor {
     const jsonLdMatch = html.match(/"recipeCategory":\s*"([^"]+)"/i);
     if (jsonLdMatch) {
       const category = this.normalizeCategory(jsonLdMatch[1]);
-      console.log(`✅ Found category in JSON-LD: ${category}`);
-      return category;
+      if (category) {
+        console.log(`✅ Found category in JSON-LD: ${category}`);
+        return category;
+      }
     }
     
     // Check meta properties
     const metaCategory = html.match(/<meta[^>]*property=["']article:section["'][^>]*content=["']([^"']+)["']/i);
     if (metaCategory) {
       const category = this.normalizeCategory(metaCategory[1]);
-      console.log(`✅ Found category in meta: ${category}`);
-      return category;
+      if (category) {
+        console.log(`✅ Found category in meta: ${category}`);
+        return category;
+      }
     }
     
     // Analyze title and description for category hints
@@ -859,7 +864,7 @@ export abstract class BaseRecipeExtractor {
       { category: 'Getränk', keywords: ['getränk', 'drink', 'smoothie', 'cocktail', 'saft', 'tee', 'kaffee'] },
       { category: 'Frühstück', keywords: ['frühstück', 'breakfast', 'müsli', 'pancake', 'french toast'] },
       { category: 'Snack', keywords: ['snack', 'häppchen', 'fingerfood', 'tapas', 'chips'] },
-      { category: 'Brot & Gebäck', keywords: ['brot', 'brötchen', 'gebäck', 'bread', 'backen'] }
+      { category: 'Kuchen & Gebäck', keywords: ['brot', 'brötchen', 'gebäck', 'bread', 'backen'] },
     ];
     
     for (const mapping of categoryMappings) {
@@ -876,7 +881,10 @@ export abstract class BaseRecipeExtractor {
   /**
    * Normalize category names to standardized German categories
    */
-  protected normalizeCategory(category: string): string {
+  protected normalizeCategory(category: string): string | undefined {
+    const resolved = resolveMainCategory(category);
+    if (resolved) return resolved;
+
     const normalized = category.toLowerCase().trim();
     
     const categoryMap: { [key: string]: string } = {
@@ -895,8 +903,8 @@ export abstract class BaseRecipeExtractor {
       'beverage': 'Getränk',
       'breakfast': 'Frühstück',
       'snack': 'Snack',
-      'bread': 'Brot & Gebäck',
-      'pastry': 'Brot & Gebäck',
+      'bread': 'Kuchen & Gebäck',
+      'pastry': 'Kuchen & Gebäck',
       
       // German variations and common terms
       'hauptspeise': 'Hauptgericht',
@@ -917,41 +925,19 @@ export abstract class BaseRecipeExtractor {
       'smoothie': 'Getränk',
       'häppchen': 'Snack',
       'fingerfood': 'Snack',
-      'brot': 'Brot & Gebäck',
-      'brötchen': 'Brot & Gebäck',
-      'gebäck': 'Brot & Gebäck',
-      'backen': 'Brot & Gebäck',
-      'backwerk': 'Brot & Gebäck',
-      
-      // Direct German category names (in case they come in different casing)
-      'vorspeise': 'Vorspeise',
-      'hauptgericht': 'Hauptgericht',
-      'suppe': 'Suppe',
-      'salat': 'Salat',
-      'beilage': 'Beilage',
-      'getränk': 'Getränk',
-      'frühstück': 'Frühstück',
-      'brot & gebäck': 'Brot & Gebäck'
+      'brot': 'Kuchen & Gebäck',
+      'brötchen': 'Kuchen & Gebäck',
+      'gebäck': 'Kuchen & Gebäck',
+      'backen': 'Kuchen & Gebäck',
+      'backwerk': 'Kuchen & Gebäck',
     };
     
-    // First try exact mapping
     if (categoryMap[normalized]) {
       return categoryMap[normalized];
     }
-    
-    // If no exact match, check if it's already a valid German category (with proper casing)
-    const validCategories = [
-      'Vorspeise', 'Hauptgericht', 'Dessert', 'Suppe', 'Salat', 
-      'Beilage', 'Getränk', 'Frühstück', 'Snack', 'Brot & Gebäck'
-    ];
-    
-    const exactMatch = validCategories.find(cat => cat.toLowerCase() === normalized);
-    if (exactMatch) {
-      return exactMatch;
-    }
-    
-    // Return original if no mapping found
-    return category;
+
+    // Unknown strings are not Hauptkategorien and must not be injected.
+    return undefined;
   }
 
   /**

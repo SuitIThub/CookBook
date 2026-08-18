@@ -396,8 +396,10 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
       
       if (category && typeof category === 'string') {
         const normalized = this.normalizeCategory(category);
-        console.log(`✅ Found category in JSON-LD: ${normalized}`);
-        return normalized;
+        if (normalized) {
+          console.log(`✅ Found category in JSON-LD: ${normalized}`);
+          return normalized;
+        }
       }
     }
     

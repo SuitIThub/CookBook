@@ -738,9 +738,11 @@ export class LeckerExtractor extends BaseRecipeExtractor {
       
       if (category && typeof category === 'string') {
         const normalized = this.normalizeCategory(category);
-        console.log(`   → Found category "${category}" → normalized to "${normalized}"`);
-        console.log(`✅ Extracted category from JSON-LD "recipeCategory" field: ${normalized}`);
-        return normalized;
+        if (normalized) {
+          console.log(`   → Found category "${category}" → normalized to "${normalized}"`);
+          console.log(`✅ Extracted category from JSON-LD "recipeCategory" field: ${normalized}`);
+          return normalized;
+        }
       }
     }
     

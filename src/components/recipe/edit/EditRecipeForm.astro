@@ -49,7 +49,7 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
   let draftSaveTimeout = null;
   const DRAFT_SAVE_DELAY = 1000; // Save draft 1 second after last change
   
-  // Flag to prevent draft saving right after a successful recipe save
+  // Flag to prevent draft saving after a successful recipe save or after discarding a draft
   let justSavedRecipe = false;
   
   // Track initial recipe state for change detection
@@ -66,9 +66,13 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
   // This ensures the cancel handler can find them even if called before DOMContentLoaded
   window.saveDraftToStorage = null;
   window.collectRecipeData = null;
+  window.suppressDraftAutosave = null;
   
   // Draft storage functions (using API)
   async function saveDraft(recipeId, recipe) {
+    if (justSavedRecipe) {
+      return;
+    }
     try {
       const response = await fetch(`/api/drafts?recipeId=${recipeId}`, {
         method: 'POST',
@@ -806,6 +810,10 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
   // Save current form state as draft
   async function saveDraftToStorage() {
     try {
+      if (justSavedRecipe) {
+        return false;
+      }
+
       // Clear any pending debounce timeout since we're saving now
       if (draftSaveTimeout) {
         clearTimeout(draftSaveTimeout);
@@ -903,6 +911,8 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
     // @ts-ignore - extend window with app-specific helpers
     window.saveDraftToStorage = saveDraftToStorage;
     // @ts-ignore - extend window with app-specific helpers
+    window.suppressDraftAutosave = suppressDraftAutosave;
+    // @ts-ignore - extend window with app-specific helpers
     window.collectRecipeData = collectRecipeData;
     // @ts-ignore - extend window with app-specific helpers
     window.createRecipeVariant = createRecipeVariant;
@@ -911,6 +921,19 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
     console.error('Error exposing draft/variant helper functions:', error);
   }
   
+  // Stop auto-save and ignore unload/visibility handlers so a discarded draft is not recreated.
+  function suppressDraftAutosave() {
+    justSavedRecipe = true;
+    if (draftSaveTimeout) {
+      clearTimeout(draftSaveTimeout);
+      draftSaveTimeout = null;
+    }
+    const editContent = document.getElementById('edit-content');
+    if (editContent) {
+      editContent.classList.add('hidden');
+    }
+  }
+
   // Save draft immediately (synchronous, for page unload)
   function saveDraftImmediately() {
     try {

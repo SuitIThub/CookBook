@@ -1,28 +1,9 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../lib/database';
+import { MAIN_CATEGORIES } from '../../lib/recipeCategories';
 
-export const GET: APIRoute = async ({ request }) => {
+export const GET: APIRoute = async () => {
   try {
-    const categories = db.getAllCategories();
-    
-    // Add some default categories if none exist
-    const defaultCategories = [
-      'Hauptgericht',
-      'Vorspeise',
-      'Dessert',
-      'Getränk',
-      'Snack',
-      'Salat',
-      'Suppe',
-      'Beilage',
-      'Frühstück',
-      'Kuchen & Gebäck'
-    ];
-    
-    // Combine and deduplicate
-    const allCategories = [...new Set([...categories, ...defaultCategories])];
-    
-    return new Response(JSON.stringify(allCategories), {
+    return new Response(JSON.stringify([...MAIN_CATEGORIES]), {
       status: 200,
       headers: {
         'Content-Type': 'application/json'

@@ -624,6 +624,14 @@ try {
       try {
         const recipeId = window.location.pathname.split('/').pop();
         if (!recipeId) return;
+
+        // Stop auto-save and unload handlers first. Otherwise beforeunload/visibilitychange
+        // would POST the current form back and recreate the draft we are about to delete.
+        if (typeof window.suppressDraftAutosave === 'function') {
+          window.suppressDraftAutosave();
+        } else {
+          document.getElementById('edit-content')?.classList.add('hidden');
+        }
         
         // Check if this is a new recipe (hasn't been saved yet)
         // A new recipe will have the default title "Neues Rezept"
