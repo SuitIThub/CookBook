@@ -162,7 +162,9 @@ export const POST: APIRoute = async ({ request, url }) => {
         ...recipeData,
         // Ensure relationship fields are set explicitly
         parentRecipeId: rootOriginalId,
-        variantName: trimmedVariantName
+        variantName: trimmedVariantName,
+        productAssignments: recipeData.productAssignments ?? originalRecipe.productAssignments,
+        preferredSupermarketId: recipeData.preferredSupermarketId ?? originalRecipe.preferredSupermarketId,
       };
 
       const newVariant = db.createRecipe(variantRecipeData);

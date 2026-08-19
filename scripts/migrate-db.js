@@ -55,6 +55,8 @@ const EXPECTED_SCHEMA = {
         { name: 'source_url', type: 'TEXT', nullable: true },
         { name: 'parent_recipe_id', type: 'TEXT', nullable: true },
         { name: 'variant_name', type: 'TEXT', nullable: true },
+        { name: 'product_assignments_json', type: 'TEXT', nullable: true },
+        { name: 'preferred_supermarket_id', type: 'TEXT', nullable: true },
         { name: 'is_draft', type: 'INTEGER', nullable: false, defaultValue: '0' },
         { name: 'created_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' },
         { name: 'updated_at', type: 'DATETIME', nullable: true, defaultValue: 'CURRENT_TIMESTAMP' }

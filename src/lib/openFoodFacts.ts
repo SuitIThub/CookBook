@@ -195,6 +195,9 @@ export interface OpenFoodFactsSearchResult {
   status: 'ok' | 'error';
   products: OpenFoodFactsProduct[];
   count?: number;
+  page?: number;
+  pageCount?: number;
+  hasMore?: boolean;
   message?: string;
 }
 
@@ -207,18 +210,19 @@ export interface OpenFoodFactsSearchResult {
  */
 export async function searchOpenFoodFactsProducts(
   query: string,
-  options: { pageSize?: number; language?: string; fetchFn?: typeof fetch } = {}
+  options: { pageSize?: number; page?: number; language?: string; fetchFn?: typeof fetch } = {}
 ): Promise<OpenFoodFactsSearchResult> {
   const trimmed = query.trim();
   if (!trimmed) return { status: 'error', products: [], message: 'Suchbegriff darf nicht leer sein' };
   const fetchFn = options.fetchFn ?? fetch;
-  const pageSize = Math.min(50, Math.max(1, options.pageSize ?? 15));
+  const pageSize = Math.min(50, Math.max(1, options.pageSize ?? 20));
+  const page = Math.max(1, options.page ?? 1);
   const language = options.language || 'de';
 
-  const primary = await searchViaSearchAlicious(trimmed, pageSize, language, fetchFn);
+  const primary = await searchViaSearchAlicious(trimmed, pageSize, page, language, fetchFn);
   if (primary.status === 'ok') return primary;
 
-  const fallback = await searchViaCgi(trimmed, pageSize, language, fetchFn);
+  const fallback = await searchViaCgi(trimmed, pageSize, page, language, fetchFn);
   if (fallback.status === 'ok') return fallback;
 
   return {
@@ -231,6 +235,7 @@ export async function searchOpenFoodFactsProducts(
 async function searchViaSearchAlicious(
   query: string,
   pageSize: number,
+  page: number,
   language: string,
   fetchFn: typeof fetch
 ): Promise<OpenFoodFactsSearchResult> {
@@ -239,7 +244,7 @@ async function searchViaSearchAlicious(
     q: asLiteralSearchQuery(query),
     langs,
     page_size: String(pageSize),
-    page: '1',
+    page: String(page),
     fields: SEARCH_FIELDS,
   });
   const response = await fetchWithRetries(`${OFF_SEARCH_ALICIOUS}?${params.toString()}`, fetchFn);
@@ -259,12 +264,24 @@ async function searchViaSearchAlicious(
     const title = body.errors[0]?.title || 'Suche fehlgeschlagen';
     return { status: 'error', products: [], message: title };
   }
-  return { status: 'ok', products: normalizeSearchHits(body?.hits), count: numericCount(body?.count) };
+  const products = normalizeSearchHits(body?.hits);
+  const count = numericCount(body?.count);
+  const pageCount = numericCount(body?.page_count);
+  const responsePageSize = numericCount(body?.page_size) ?? pageSize;
+  return {
+    status: 'ok',
+    products,
+    count,
+    page: numericCount(body?.page) ?? page,
+    pageCount,
+    hasMore: computeHasMore(page, responsePageSize, products.length, count, pageCount, true),
+  };
 }
 
 async function searchViaCgi(
   query: string,
   pageSize: number,
+  page: number,
   language: string,
   fetchFn: typeof fetch
 ): Promise<OpenFoodFactsSearchResult> {
@@ -274,6 +291,7 @@ async function searchViaCgi(
     action: 'process',
     json: '1',
     page_size: String(pageSize),
+    page: String(page),
     lc: language,
     fields: SEARCH_FIELDS,
   });
@@ -290,11 +308,31 @@ async function searchViaCgi(
   } catch {
     return { status: 'error', products: [], message: 'Antwort konnte nicht als JSON gelesen werden.' };
   }
+  const products = normalizeSearchHits(body?.products);
+  const count = numericCount(body?.count);
+  const responsePageSize = numericCount(body?.page_size) ?? pageSize;
   return {
     status: 'ok',
-    products: normalizeSearchHits(body?.products),
-    count: numericCount(body?.count),
+    products,
+    count,
+    page: numericCount(body?.page) ?? page,
+    pageCount: undefined,
+    hasMore: computeHasMore(page, responsePageSize, products.length, count),
   };
+}
+
+function computeHasMore(
+  page: number,
+  pageSize: number,
+  hitCount: number,
+  count?: number,
+  pageCount?: number,
+  pageCountMeansTotalPages = false
+): boolean {
+  if (hitCount === 0) return false;
+  if (count != null) return page * pageSize < count;
+  if (pageCountMeansTotalPages && pageCount != null) return page < pageCount;
+  return hitCount >= pageSize;
 }
 
 function normalizeSearchHits(raw: unknown): OpenFoodFactsProduct[] {

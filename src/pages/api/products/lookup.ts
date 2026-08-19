@@ -26,15 +26,24 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   if (query) {
-    const pageSize = Math.min(50, Math.max(1, Number.parseInt(params.get('pageSize') || '15', 10) || 15));
+    const pageSize = Math.min(50, Math.max(1, Number.parseInt(params.get('pageSize') || '20', 10) || 20));
+    const page = Math.max(1, Number.parseInt(params.get('page') || '1', 10) || 1);
     const local = db.searchProducts(query, Math.min(10, pageSize));
-    const result = await searchOpenFoodFactsProducts(query, { pageSize });
+    const result = await searchOpenFoodFactsProducts(query, { pageSize, page });
     if (result.status === 'error') {
-      return json({ source: 'openfoodfacts', local, results: [], error: result.message ?? 'search failed' }, 200);
+      return json({ source: 'openfoodfacts', local: page === 1 ? local : [], results: [], page, hasMore: false, error: result.message ?? 'search failed' }, 200);
     }
     const localEans = new Set(local.map((p) => p.ean).filter(Boolean) as string[]);
     const remoteFiltered = result.products.filter((p) => !localEans.has(p.ean));
-    return json({ source: 'openfoodfacts', local, results: remoteFiltered, count: result.count });
+    return json({
+      source: 'openfoodfacts',
+      local: page === 1 ? local : [],
+      results: remoteFiltered,
+      count: result.count,
+      page: result.page ?? page,
+      pageCount: result.pageCount,
+      hasMore: Boolean(result.hasMore),
+    });
   }
 
   return json({ error: 'ean or q parameter required' }, 400);

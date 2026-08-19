@@ -71,6 +71,17 @@ try {
   // column already exists
 }
 
+try {
+  db.exec(`ALTER TABLE recipes ADD COLUMN product_assignments_json TEXT`);
+} catch (error) {
+  // column already exists
+}
+try {
+  db.exec(`ALTER TABLE recipes ADD COLUMN preferred_supermarket_id TEXT`);
+} catch (error) {
+  // column already exists
+}
+
 // Phase 1 nutrition/tracker tables (see plan and src/lib/database.ts).
 db.exec(`
   CREATE TABLE IF NOT EXISTS supermarkets (

@@ -5,6 +5,7 @@ import {
   computeRecipeNutrition,
   computeRecipePrice,
   roundNutritionValues,
+  applySupermarketProductAssignments,
 } from '../../../../lib/recipeNutrition';
 import {
   filterRecipeBySelection,
@@ -29,14 +30,20 @@ export const POST: APIRoute = async ({ params, request }) => {
   } catch (error) {
     body = {};
   }
-  const productAssignments: Record<string, string> = body?.productAssignments && typeof body.productAssignments === 'object'
+  const incomingAssignments: Record<string, string> = body?.productAssignments && typeof body.productAssignments === 'object'
     ? Object.fromEntries(
         Object.entries(body.productAssignments)
-          .filter(([, v]) => typeof v === 'string' && v)
+          .filter(([, v]) => typeof v === 'string')
           .map(([k, v]) => [k, v as string])
       )
     : {};
+  let productAssignments: Record<string, string> = {
+    ...(recipe.productAssignments || {}),
+    ...incomingAssignments,
+  };
   const supermarketId: string | undefined = typeof body?.supermarketId === 'string' && body.supermarketId ? body.supermarketId : undefined;
+  const persist = body?.persist === true;
+  const applySupermarket = body?.applySupermarket === true;
   const servingsRaw = Number(body?.servings);
   const servings = Number.isFinite(servingsRaw) && servingsRaw > 0 ? servingsRaw : recipe.metadata.servings;
 
@@ -46,24 +53,41 @@ export const POST: APIRoute = async ({ params, request }) => {
 
   const catalogueByName = new Map<string, CatalogueIngredient>();
   const productsById = new Map<string, Product>();
+  const productsByIngredientId = new Map<string, Product[]>();
   const uniqueNames = Array.from(new Set(visible.map((i) => i.name.trim().toLowerCase()).filter(Boolean)));
   for (const name of uniqueNames) {
     const cat = db.getCatalogueIngredientByName(name);
     if (!cat) continue;
     catalogueByName.set(name, cat);
-    for (const product of db.getProductsForIngredient(cat.id)) {
-      productsById.set(product.id, product);
-    }
+    const products = db.getProductsForIngredient(cat.id);
+    productsByIngredientId.set(cat.id, products);
+    for (const product of products) productsById.set(product.id, product);
     if (cat.defaultProductId && !productsById.has(cat.defaultProductId)) {
       const dp = db.getProduct(cat.defaultProductId);
       if (dp) productsById.set(dp.id, dp);
     }
   }
+  if (applySupermarket && supermarketId) {
+    productAssignments = applySupermarketProductAssignments({
+      ingredients: visible,
+      productAssignments,
+      catalogueByName,
+      productsByIngredientId,
+      supermarketId,
+    });
+  }
   for (const productId of Object.values(productAssignments)) {
-    if (!productsById.has(productId)) {
+    if (productId && !productsById.has(productId)) {
       const p = db.getProduct(productId);
       if (p) productsById.set(p.id, p);
     }
+  }
+
+  if (persist) {
+    db.setRecipeProductSelection(id, {
+      productAssignments,
+      preferredSupermarketId: supermarketId ?? null,
+    });
   }
 
   const nutrition = computeRecipeNutrition({
@@ -101,6 +125,8 @@ export const POST: APIRoute = async ({ params, request }) => {
       hasAnyData: price.hasAnyData,
       currency: price.currency,
     },
+    productAssignments,
+    supermarketId: supermarketId || null,
   });
 };
 

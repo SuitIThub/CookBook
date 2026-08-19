@@ -1,9 +1,14 @@
 ---
 import type { Recipe } from '../../../types/recipe';
 import { db } from '../../../lib/database';
-import { collectIngredientsFromGroups, computeRecipeNutrition, computeRecipePrice } from '../../../lib/recipeNutrition';
 import type { CatalogueIngredient, Product } from '../../../types/tracker';
 import { NUTRITION_FIELDS } from '../../../lib/nutrition';
+import {
+  collectIngredientsFromGroups,
+  computeRecipeNutrition,
+  computeRecipePrice,
+  resolveAssignedProductId,
+} from '../../../lib/recipeNutrition';
 import {
   filterRecipeBySelection,
   getDefaultSelection,
@@ -43,8 +48,15 @@ for (const cat of catalogueByName.values()) {
     if (dp) productsById.set(dp.id, dp);
   }
 }
+for (const productId of Object.values(recipe.productAssignments || {})) {
+  if (productId && !productsById.has(productId)) {
+    const p = db.getProduct(productId);
+    if (p) productsById.set(p.id, p);
+  }
+}
 
 const supermarkets = db.getAllSupermarkets();
+const savedAssignments = recipe.productAssignments;
 
 const nutritionResult = computeRecipeNutrition({
   recipe,
@@ -52,6 +64,7 @@ const nutritionResult = computeRecipeNutrition({
   servings: recipe.metadata.servings,
   catalogueByName,
   productsById,
+  productAssignments: savedAssignments,
 });
 const priceResult = computeRecipePrice({
   recipe,
@@ -59,6 +72,8 @@ const priceResult = computeRecipePrice({
   servings: recipe.metadata.servings,
   catalogueByName,
   productsById,
+  productAssignments: savedAssignments,
+  supermarketId: recipe.preferredSupermarketId,
 });
 
 const nutritionByIngredient: Record<string, {
@@ -110,7 +125,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
           <select id="live-supermarket-select" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm">
             <option value="">Standardpreis</option>
             {supermarkets.map((s) => (
-              <option value={s.id}>{s.name}</option>
+              <option value={s.id} selected={s.id === recipe.preferredSupermarketId}>{s.name}</option>
             ))}
           </select>
         </label>
@@ -159,6 +174,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
         {visibleIngredients.map((ing) => {
           const info = nutritionByIngredient[ing.id];
           const hasProducts = info.products.length > 0;
+          const selectedProductId = resolveAssignedProductId(ing.id, savedAssignments, info.defaultProductId) || '';
           return (
             <div
               class="flex flex-col gap-2 text-sm not-mobile:flex-row not-mobile:items-center"
@@ -173,9 +189,9 @@ function formatEuroValue(value: number, estimated: boolean): string {
                     data-ingredient-id={ing.id}
                     class="live-product-select w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm not-mobile:w-auto not-mobile:max-w-xs"
                   >
-                    <option value="">Kein Produkt</option>
+                    <option value="" selected={!selectedProductId}>Kein Produkt</option>
                     {info.products.map((p) => (
-                      <option value={p.id} selected={p.id === info.defaultProductId}>
+                      <option value={p.id} selected={p.id === selectedProductId}>
                         {p.brand ? `${p.brand} – ${p.name}` : p.name}
                       </option>
                     ))}
@@ -255,22 +271,44 @@ function formatEuroValue(value: number, estimated: boolean): string {
       return document.querySelectorAll<HTMLSelectElement>('.live-product-select');
     }
 
-    async function recompute() {
+    function collectAssignments(): Record<string, string> {
       const assignments: Record<string, string> = {};
       productSelects().forEach((sel) => {
-        const ingId = sel.dataset.ingredientId!;
-        const value = sel.value;
-        if (value) assignments[ingId] = value;
+        const ingId = sel.dataset.ingredientId;
+        if (!ingId) return;
+        assignments[ingId] = sel.value;
       });
+      return assignments;
+    }
+
+    function applyAssignmentsToSelects(assignments: Record<string, string> | undefined) {
+      if (!assignments) return;
+      productSelects().forEach((sel) => {
+        const ingId = sel.dataset.ingredientId;
+        if (!ingId || !Object.prototype.hasOwnProperty.call(assignments, ingId)) return;
+        const next = assignments[ingId] || '';
+        if (Array.from(sel.options).some((opt) => opt.value === next)) sel.value = next;
+      });
+    }
+
+    async function recompute(opts: { persist?: boolean; applySupermarket?: boolean } = {}) {
+      const assignments = collectAssignments();
       const supermarketId = supermarketSelect?.value || undefined;
       try {
         const res = await fetch(`/api/recipes/${boot!.recipeId}/live-nutrition`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productAssignments: assignments, supermarketId, servings: boot!.servings }),
+          body: JSON.stringify({
+            productAssignments: assignments,
+            supermarketId,
+            servings: boot!.servings,
+            persist: Boolean(opts.persist),
+            applySupermarket: Boolean(opts.applySupermarket),
+          }),
         });
         if (!res.ok) return;
         const data = await res.json();
+        applyAssignmentsToSelects(data.productAssignments);
         updateSummary(data);
       } catch (error) {
         console.warn('Live nutrition recompute failed', error);
@@ -310,7 +348,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
       return estimated ? `~${eur}` : eur;
     }
 
-    supermarketSelect?.addEventListener('change', () => { recompute(); });
+    supermarketSelect?.addEventListener('change', () => { recompute({ persist: true, applySupermarket: true }); });
     const planWhen = document.getElementById('live-plan-when') as HTMLInputElement | null;
     if (planWhen && !planWhen.value) {
       const now = new Date();
@@ -320,7 +358,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
     }
     document.getElementById('live-product-picker')?.addEventListener('change', (e) => {
       const target = e.target as HTMLElement | null;
-      if (target?.classList.contains('live-product-select')) recompute();
+      if (target?.classList.contains('live-product-select')) recompute({ persist: true });
     });
 
     document.getElementById('live-product-picker')?.addEventListener('click', (e) => {
@@ -346,21 +384,26 @@ function formatEuroValue(value: number, estimated: boolean): string {
         const slot = row.querySelector('.live-product-slot');
         const btn = row.querySelector('.live-link-product');
         const ingredientId = row.dataset.ingredientId || '';
+        const currentSelect = row.querySelector('.live-product-select') as HTMLSelectElement | null;
+        const keepId = currentSelect?.value ?? '';
         if (slot) {
           if (products.length === 0) {
             slot.innerHTML = '<span class="text-xs text-gray-500 dark:text-gray-400">kein Produkt hinterlegt</span>';
           } else {
+            const preferred = products.some((p) => p.id === keepId)
+              ? keepId
+              : (products.some((p) => p.id === defaultId) ? defaultId : '');
             const options = products.map((p) => {
               const label = p.brand ? `${p.brand} – ${p.name}` : p.name;
-              const selected = p.id === defaultId ? ' selected' : '';
+              const selected = p.id === preferred ? ' selected' : '';
               return `<option value="${p.id}"${selected}>${escapeHtml(label)}</option>`;
             }).join('');
-            slot.innerHTML = `<select data-ingredient-id="${ingredientId}" class="live-product-select w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm not-mobile:w-auto not-mobile:max-w-xs"><option value="">Kein Produkt</option>${options}</select>`;
+            slot.innerHTML = `<select data-ingredient-id="${ingredientId}" class="live-product-select w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm not-mobile:w-auto not-mobile:max-w-xs"><option value=""${!preferred ? ' selected' : ''}>Kein Produkt</option>${options}</select>`;
           }
         }
         if (btn) btn.textContent = products.length > 0 ? '+ / verwalten' : '+ Produkt verknüpfen';
       });
-      recompute();
+      recompute({ persist: false });
     });
 
     function escapeHtml(s: string): string {
@@ -382,11 +425,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
         ? new Date(`${whenInput.value}T12:00:00`)
         : new Date();
       const servings = Number(servingsInput.value) || boot!.servings;
-      const assignments: Record<string, string> = {};
-      productSelects().forEach((sel) => {
-        const ingId = sel.dataset.ingredientId!;
-        if (sel.value) assignments[ingId] = sel.value;
-      });
+      const assignments = collectAssignments();
       const supermarketId = supermarketSelect?.value || undefined;
       const res = await fetch('/api/tracker/meal-plans', {
         method: 'POST',

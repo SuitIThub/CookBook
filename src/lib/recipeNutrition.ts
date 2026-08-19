@@ -59,6 +59,70 @@ export interface RecipePriceInput extends RecipeNutritionInput {
 }
 
 /**
+ * Resolve which product is assigned to a recipe ingredient.
+ * - Missing key: fall back to the catalogue default.
+ * - Empty string: user explicitly chose "no product".
+ */
+export function resolveAssignedProductId(
+  ingredientId: string,
+  assignments: Record<string, string> | undefined,
+  defaultProductId?: string
+): string | undefined {
+  if (assignments && Object.prototype.hasOwnProperty.call(assignments, ingredientId)) {
+    const value = assignments[ingredientId];
+    return value ? value : undefined;
+  }
+  return defaultProductId || undefined;
+}
+
+/**
+ * When a supermarket is chosen, prefer a linked product that has a price there.
+ * Keeps the current assignment if that product is already priced at the market.
+ */
+export function applySupermarketProductAssignments(input: {
+  ingredients: Ingredient[];
+  productAssignments?: Record<string, string>;
+  catalogueByName?: Map<string, CatalogueIngredient>;
+  productsByIngredientId?: Map<string, Product[]>;
+  supermarketId?: string;
+}): Record<string, string> {
+  const next: Record<string, string> = { ...(input.productAssignments || {}) };
+  if (!input.supermarketId) return next;
+  for (const ingredient of input.ingredients) {
+    const catalogue = input.catalogueByName?.get(ingredient.name.trim().toLowerCase());
+    const products = catalogue ? input.productsByIngredientId?.get(catalogue.id) ?? [] : [];
+    if (products.length === 0) continue;
+    const currentId = resolveAssignedProductId(ingredient.id, next, catalogue?.defaultProductId);
+    const picked = pickProductForSupermarket(products, input.supermarketId, currentId, catalogue?.defaultProductId);
+    if (picked) next[ingredient.id] = picked;
+  }
+  return next;
+}
+
+function pickProductForSupermarket(
+  products: Product[],
+  supermarketId: string,
+  currentId?: string,
+  defaultProductId?: string
+): string | undefined {
+  const hasPrice = (id?: string): string | undefined => {
+    if (!id) return undefined;
+    const product = products.find((p) => p.id === id);
+    if (!product) return undefined;
+    return product.supermarkets.some((s) => s.supermarketId === supermarketId && Number.isFinite(s.price))
+      ? id
+      : undefined;
+  };
+  return (
+    hasPrice(currentId)
+    || hasPrice(defaultProductId)
+    || products.find((p) => p.supermarkets.some((s) => s.supermarketId === supermarketId && Number.isFinite(s.price)))?.id
+    || currentId
+    || defaultProductId
+  );
+}
+
+/**
  * Flatten the visible ingredients of a recipe. Callers should first apply
  * alternative filtering (`filterRecipeBySelection`) so the input already
  * reflects the active alternative selection. Nested ingredient groups are
@@ -101,7 +165,11 @@ function resolveIngredient(
 ): IngredientResolution {
   const nameKey = ingredient.name.trim().toLowerCase();
   const catalogue = catalogueByName?.get(nameKey);
-  const assignedProductId = productAssignments?.[ingredient.id] ?? catalogue?.defaultProductId;
+  const assignedProductId = resolveAssignedProductId(
+    ingredient.id,
+    productAssignments,
+    catalogue?.defaultProductId
+  );
   const product = assignedProductId ? productsById?.get(assignedProductId) : undefined;
 
   const quantities = Array.isArray(ingredient.quantities) ? ingredient.quantities : [];

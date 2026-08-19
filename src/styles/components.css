@@ -155,9 +155,9 @@
   }
 }
 
-/* Mobile layout: tall portrait AND phone-sized width (short side).
-   Fold main (~1968×2184, CSS width typically ≳600) stays tablet via width floor. */
-@media (aspect-ratio <= 3/4) and (width < 600px) {
+/* Mobile layout: tall phones and fold covers (~21:9), even if CSS width ≥ 600
+   (Galaxy Z Fold 7 cover). Fold inner (~10:9) stays tablet. */
+@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px) {
   .nav-header .container {
     position: relative;
   }
@@ -183,7 +183,7 @@
 }
 
 /* Recipe header mobile responsive styles */
-@media (aspect-ratio <= 3/4) and (width < 600px) {
+@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px) {
   /* Mobile buttons should be slightly larger and more touch-friendly */
   #edit-btn-mobile,
   #add-to-shopping-mobile {
@@ -198,7 +198,7 @@
 }
 
 /* Tablet: not-mobile and width < 1280 — hamburger + fixed nav */
-@media (aspect-ratio > 3/4) and (width < 1280px), (width >= 600px) and (width < 1280px) {
+@media (aspect-ratio > 0.84) and (width < 1280px), (aspect-ratio > 0.62) and (width >= 700px) and (width < 1280px) {
   .nav-header .container {
     position: relative;
   }
@@ -371,7 +371,7 @@
 }
 
 /* Show the toggle button only in tablet/desktop (not-mobile) */
-@media (aspect-ratio > 3/4), (width >= 600px) {
+@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px) {
   .timer-sidebar-toggle:not(.hidden) {
     @apply flex flex-col;
   }
@@ -384,7 +384,7 @@
 }
 
 /* Adjust main content when sidebar is visible and expanded (tablet + desktop) */
-@media (aspect-ratio > 3/4), (width >= 600px) {
+@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px) {
   body:has(.timer-sidebar:not(.hidden):not(.collapsed)) main {
     padding-right: 20rem; /* w-80 equivalent */
   }
@@ -395,14 +395,14 @@
   @apply pr-0;
 }
 
-@media (aspect-ratio > 3/4), (width >= 600px) {
+@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px) {
   .timer-sidebar-active main {
     padding-right: 20rem; /* w-80 equivalent */
   }
 }
 
 /* Fallback for timer footer padding in mobile layout */
-@media (aspect-ratio <= 3/4) and (width < 600px) {
+@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px) {
   .timer-footer-active main {
     padding-bottom: 80px; /* Space for collapsed timer footer */
   }
@@ -608,7 +608,7 @@ input[type="number"] {
 }
 
 /* Responsive adjustments — short tablet/desktop viewports (e.g. Fold split-screen) */
-@media (aspect-ratio > 3/4) and (max-height: 600px), (width >= 600px) and (max-height: 600px) {
+@media (aspect-ratio > 0.84) and (max-height: 600px), (aspect-ratio > 0.62) and (width >= 700px) and (max-height: 600px), (width >= 1280px) and (max-height: 600px) {
   .timer-sidebar {
     @apply w-64;
   }

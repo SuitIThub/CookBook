@@ -53,15 +53,19 @@ export default {
   plugins: [
     function ({ addVariant }) {
       // Layout modes — keep in sync with src/lib/layoutMode.ts
-      // mobile: tall portrait AND phone-sized short side (width < 600 in tall mode)
-      // tablet/desktop: everything else (incl. Fold main ~0.9 aspect)
-      addVariant('mobile', '@media (aspect-ratio <= 3/4) and (width < 600px)');
-      // not-mobile = (aspect > 3/4) OR (width >= 600)
-      addVariant('not-mobile', '@media (aspect-ratio > 3/4), (width >= 600px)');
-      // tablet = not-mobile AND width < 1280
+      // mobile: tall phones / fold covers (~21:9), even when CSS width ≥ 600
+      // (Fold 7 cover). Fold inner (~10:9, aspect ~0.9) stays tablet.
+      addVariant(
+        'mobile',
+        '@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px)'
+      );
+      addVariant(
+        'not-mobile',
+        '@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px)'
+      );
       addVariant(
         'tablet',
-        '@media (aspect-ratio > 3/4) and (width < 1280px), (width >= 600px) and (width < 1280px)'
+        '@media (aspect-ratio > 0.84) and (width < 1280px), (aspect-ratio > 0.62) and (width >= 700px) and (width < 1280px)'
       );
       addVariant('desktop', '@media (width >= 1280px)');
     },
