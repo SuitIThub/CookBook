@@ -126,6 +126,7 @@ export interface DiaryEntry {
   grams?: number; // amount consumed
   servings?: number; // for recipe/plan
   nutrition: NutritionData; // absolute snapshot of what was consumed
+  costSnapshot?: number; // EUR cost of this entry, frozen at log time
   createdAt: Date;
 }
 
@@ -144,4 +145,22 @@ export interface CalorieGoal {
   clampedToBmr: boolean;
   /** True when target is below the gender-based low-energy warning. */
   lowEnergyWarning: boolean;
+  /** Whether maintenance (tdee) came from the Mifflin formula or was learned from real data. */
+  tdeeSource: 'formula' | 'learned';
+}
+
+export type TdeeConfidence = 'insufficient' | 'learning' | 'ok';
+
+/**
+ * TDEE learned from actual logged intake + measured weight trend (more accurate
+ * than any formula once enough data exists). See estimateLearnedTdee.
+ */
+export interface LearnedTdee {
+  tdee: number | null; // kcal; null until enough reliable data
+  confidence: TdeeConfidence;
+  avgIntakeKcal: number;
+  completeLogDays: number; // days in window with a plausibly complete food log
+  weighIns: number; // weigh-ins in window
+  spanDays: number; // days between first and last weigh-in in window
+  slopeKgPerDay: number; // smoothed weight trend
 }

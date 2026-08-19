@@ -992,9 +992,11 @@ function performDataMigrations(db) {
       grams REAL,
       servings REAL,
       nutrition_json TEXT NOT NULL,
+      cost_snapshot REAL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  try { db.exec('ALTER TABLE diary_entries ADD COLUMN cost_snapshot REAL'); } catch { /* exists */ }
   db.exec('CREATE INDEX IF NOT EXISTS idx_diary_alias_time ON diary_entries(alias, eaten_at)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_diary_plan ON diary_entries(plan_id)');
   console.log('✅ Nutrition/tracker tables ready.');

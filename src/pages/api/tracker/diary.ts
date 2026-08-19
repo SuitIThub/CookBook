@@ -36,6 +36,7 @@ export const POST: APIRoute = async ({ request }) => {
       grams: Number.isFinite(Number(body?.grams)) ? Number(body.grams) : undefined,
       servings: Number.isFinite(Number(body?.servings)) ? Number(body.servings) : undefined,
       nutrition: coerceNutrition(body?.nutrition),
+      costSnapshot: Number.isFinite(Number(body?.costSnapshot)) && Number(body.costSnapshot) >= 0 ? Number(body.costSnapshot) : undefined,
     });
 
     // Meal-prep: consuming some portions does not finish the batch. Status

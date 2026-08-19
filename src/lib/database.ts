@@ -331,11 +331,18 @@ export class CookbookDatabase {
         grams REAL,
         servings REAL,
         nutrition_json TEXT NOT NULL,
+        cost_snapshot REAL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_diary_alias_time ON diary_entries(alias, eaten_at)`);
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_diary_plan ON diary_entries(plan_id)`);
+    // Cost snapshot column for existing databases (frozen price at log time).
+    try {
+      this.db.exec(`ALTER TABLE diary_entries ADD COLUMN cost_snapshot REAL`);
+    } catch {
+      // column already exists
+    }
   }
 
   // Recipe CRUD operations
@@ -2649,8 +2656,8 @@ export class CookbookDatabase {
     const id = uuidv4();
     this.db
       .prepare(
-        `INSERT INTO diary_entries (id, alias, eaten_at, source, plan_id, recipe_id, product_id, label, grams, servings, nutrition_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO diary_entries (id, alias, eaten_at, source, plan_id, recipe_id, product_id, label, grams, servings, nutrition_json, cost_snapshot)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -2663,7 +2670,8 @@ export class CookbookDatabase {
         input.label ?? null,
         input.grams ?? null,
         input.servings ?? null,
-        JSON.stringify(input.nutrition ?? {})
+        JSON.stringify(input.nutrition ?? {}),
+        input.costSnapshot ?? null
       );
     const entry = this.getDiaryEntry(id)!;
     eventBus.emit(EVENTS.DIARY_UPSERTED, { entry });
@@ -2795,6 +2803,7 @@ function rowToDiaryEntry(row: any): DiaryEntry {
     grams: row.grams ?? undefined,
     servings: row.servings ?? undefined,
     nutrition: row.nutrition_json ? safeParseJson<NutritionData>(row.nutrition_json) ?? {} : {},
+    costSnapshot: row.cost_snapshot ?? undefined,
     createdAt: parseDate(row.created_at),
   };
 }
