@@ -1,6 +1,7 @@
 import { BaseRecipeExtractor, type ExtractedRecipeData } from './base-extractor';
 import type { NutritionData } from '../../types/recipe';
 import { resolveMainCategory } from '../recipeCategories';
+import { hasNutritionValues, nutritionFromJsonLd } from '../nutrition';
 
 export class GaumenfreundinExtractor extends BaseRecipeExtractor {
   readonly name = 'Gaumenfreundin';
@@ -642,69 +643,7 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
   }
 
   private extractNutritionFromJsonLd(recipe: any): NutritionData | undefined {
-    if (!recipe.nutrition) return undefined;
-    
-    const nutrition = recipe.nutrition;
-    console.log('JSON-LD nutrition data:', JSON.stringify(nutrition, null, 2));
-    
-    const result: NutritionData = {};
-    
-    // Extract calories
-    if (nutrition.calories || nutrition.energyContent) {
-      const caloriesStr = nutrition.calories || nutrition.energyContent;
-      if (typeof caloriesStr === 'string') {
-        const match = caloriesStr.match(/(\d+(?:[,\.]\d+)?)/);
-        if (match) {
-          result.calories = parseFloat(match[1].replace(',', '.'));
-        }
-      } else if (typeof caloriesStr === 'number') {
-        result.calories = caloriesStr;
-      }
-    }
-    
-    // Extract macronutrients
-    if (nutrition.carbohydrateContent) {
-      const carbStr = nutrition.carbohydrateContent;
-      if (typeof carbStr === 'string') {
-        const match = carbStr.match(/(\d+(?:[,\.]\d+)?)/);
-        if (match) {
-          result.carbohydrates = parseFloat(match[1].replace(',', '.'));
-        }
-      } else if (typeof carbStr === 'number') {
-        result.carbohydrates = carbStr;
-      }
-    }
-    
-    if (nutrition.proteinContent) {
-      const proteinStr = nutrition.proteinContent;
-      if (typeof proteinStr === 'string') {
-        const match = proteinStr.match(/(\d+(?:[,\.]\d+)?)/);
-        if (match) {
-          result.protein = parseFloat(match[1].replace(',', '.'));
-        }
-      } else if (typeof proteinStr === 'number') {
-        result.protein = proteinStr;
-      }
-    }
-    
-    if (nutrition.fatContent) {
-      const fatStr = nutrition.fatContent;
-      if (typeof fatStr === 'string') {
-        const match = fatStr.match(/(\d+(?:[,\.]\d+)?)/);
-        if (match) {
-          result.fat = parseFloat(match[1].replace(',', '.'));
-        }
-      } else if (typeof fatStr === 'number') {
-        result.fat = fatStr;
-      }
-    }
-    
-    // Only return if we found at least some nutrition data
-    if (Object.keys(result).length > 0) {
-      return result;
-    }
-    
-    return undefined;
+    return nutritionFromJsonLd(recipe?.nutrition ?? recipe);
   }
 
   private extractNutritionFromHtml(html: string): NutritionData | undefined {
@@ -722,7 +661,15 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
       // "Eiweiß: 25g" or "Protein: 25g"
       /(?:Eiweiß|Protein):\s*(\d+(?:[,\.]\d+)?)\s*g/i,
       // "Fett: 15g"
-      /Fett:\s*(\d+(?:[,\.]\d+)?)\s*g/i
+      /Fett:\s*(\d+(?:[,\.]\d+)?)\s*g/i,
+      // "gesättigte Fettsäuren: 4g"
+      /gesättigte Fettsäuren:\s*(\d+(?:[,\.]\d+)?)\s*g/i,
+      // "Zucker: 8g"
+      /Zucker:\s*(\d+(?:[,\.]\d+)?)\s*g/i,
+      // "Ballaststoffe: 5g"
+      /Ballaststoffe:\s*(\d+(?:[,\.]\d+)?)\s*g/i,
+      // "Salz: 1,2g"
+      /Salz:\s*(\d+(?:[,\.]\d+)?)\s*g/i
     ];
     
     // Extract calories
@@ -748,6 +695,26 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     if (fatMatch) {
       result.fat = parseFloat(fatMatch[1].replace(',', '.'));
     }
+
+    const saturatedMatch = html.match(nutritionPatterns[5]);
+    if (saturatedMatch) {
+      result.saturatedFat = parseFloat(saturatedMatch[1].replace(',', '.'));
+    }
+
+    const sugarMatch = html.match(nutritionPatterns[6]);
+    if (sugarMatch) {
+      result.sugar = parseFloat(sugarMatch[1].replace(',', '.'));
+    }
+
+    const fiberMatch = html.match(nutritionPatterns[7]);
+    if (fiberMatch) {
+      result.fiber = parseFloat(fiberMatch[1].replace(',', '.'));
+    }
+
+    const saltMatch = html.match(nutritionPatterns[8]);
+    if (saltMatch) {
+      result.salt = parseFloat(saltMatch[1].replace(',', '.'));
+    }
     
     // Look for nutrition information in recipe cards or structured data
     const nutritionCardMatch = html.match(/<div[^>]*class[^>]*nutrition[^>]*>[\s\S]*?<\/div>/gi);
@@ -767,7 +734,7 @@ export class GaumenfreundinExtractor extends BaseRecipeExtractor {
     }
     
     // Only return if we found at least some nutrition data
-    if (Object.keys(result).length > 0) {
+    if (hasNutritionValues(result)) {
       console.log('Found nutrition data:', result);
       return result;
     }

@@ -1,0 +1,1243 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Tracker">
+  <div id="tracker-root" class="max-w-5xl mx-auto space-y-6">
+    <!-- Alias required -->
+    <div id="tracker-no-alias" class="hidden bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-6 text-center">
+      <h1 class="text-xl font-semibold text-yellow-900 dark:text-yellow-100 mb-2">Tracker benötigt einen Alias</h1>
+      <p class="text-sm text-yellow-800 dark:text-yellow-200 mb-4">
+        Der Kalorien- und Nährwerttracker ist an einen Alias gebunden — Körperprofil,
+        Gewichtsverlauf und Tagebuch werden zusammen mit deinen Geräte-Einstellungen synchronisiert.
+      </p>
+      <button type="button" data-open-alias-settings class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded font-medium">
+        Alias einrichten
+      </button>
+    </div>
+
+    <!-- Main content (shown only with alias) -->
+    <div id="tracker-body" class="hidden space-y-6">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Kalorien- & Nährwerttracker</h1>
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            Angemeldet als <strong id="tracker-alias-label" class="text-orange-500"></strong>
+          </p>
+        </div>
+        <div class="text-xs text-yellow-700 dark:text-yellow-300 max-w-md">
+          <strong>Datenschutz:</strong> Alle Tracker-Daten (Gewicht, Ziel, Tagebuch) hängen am Alias
+          und sind <em>nicht passwortgeschützt</em>. Wer den Alias kennt, sieht auch diese Daten.
+        </div>
+      </div>
+
+      <!-- Day summary + food log -->
+      <section class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 id="tracker-day-heading" class="text-lg font-semibold text-gray-900 dark:text-white">Heute</h2>
+          <div class="flex items-center gap-1">
+            <button type="button" data-action="day-prev" class="w-8 h-8 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" title="Vorheriger Tag">‹</button>
+            <input id="tracker-day-picker" type="date" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm" />
+            <button type="button" data-action="day-next" id="tracker-day-next" class="w-8 h-8 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed" title="Nächster Tag">›</button>
+            <button type="button" data-action="day-today" id="tracker-day-today" class="hidden text-xs px-2 py-1 rounded border border-orange-400 text-orange-600 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20">Heute</button>
+          </div>
+        </div>
+        <div id="tracker-today-rings" class="flex flex-col items-center gap-3"></div>
+        <h3 class="text-sm font-medium text-gray-800 dark:text-gray-200 mt-4 mb-2">Gegessen an diesem Tag</h3>
+        <ul id="tracker-day-log" class="text-sm divide-y divide-gray-100 dark:divide-gray-700"></ul>
+        <div id="tracker-today-empty" class="hidden text-xs text-gray-500 mt-2">
+          Noch keine Einträge — streiche Meal-Prep-Portionen ab oder trage etwas frei ein.
+        </div>
+      </section>
+
+      <!-- Open meal-prep batches -->
+      <section class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Offene Meal-Prep-Portionen</h2>
+          <button id="tracker-enable-reminders" type="button" class="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+            Erinnerungen aktivieren
+          </button>
+        </div>
+        <div id="tracker-today-plans" class="space-y-2"></div>
+        <div id="tracker-today-plans-empty" class="hidden text-xs text-gray-500 mt-2">Keine offenen Portionen — plane ein Rezept als Meal Prep (Portionen ab einem Datum).</div>
+        <p id="tracker-reminder-note" class="text-[11px] text-gray-500 mt-2">
+          Erinnerungen funktionieren nur best‑effort, solange die App geöffnet oder kürzlich aktiv war
+          (kein Push‑Server). Für zuverlässige Weckzeiten Kalender oder Wecker nutzen.
+        </p>
+      </section>
+
+      <!-- Quick add diary -->
+      <section class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <details id="tracker-free-entry">
+          <summary class="flex items-center justify-between gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Freier Eintrag</h2>
+            <span class="text-gray-400 text-sm transition-transform" aria-hidden="true">▼</span>
+          </summary>
+          <form id="tracker-diary-form" class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm items-end mt-3">
+            <label class="block sm:col-span-2">Bezeichnung
+              <input id="td-label" required placeholder="z.B. Kaffee mit Milch" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+            </label>
+            <label class="block">kcal
+              <input id="td-kcal" type="number" step="1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+            </label>
+            <label class="block">Datum/Zeit
+              <input id="td-time" type="datetime-local" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+            </label>
+            <label class="block">KH (g)
+              <input id="td-carbs" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+            </label>
+            <label class="block">Eiweiß (g)
+              <input id="td-protein" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+            </label>
+            <label class="block">Fett (g)
+              <input id="td-fat" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+            </label>
+            <div class="sm:col-span-1 flex justify-end">
+              <button type="submit" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">Eintragen</button>
+            </div>
+          </form>
+        </details>
+      </section>
+
+      <!-- Weight tracker -->
+      <section class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Gewicht</h2>
+          <span id="tracker-current-weight" class="text-sm text-gray-600 dark:text-gray-300"></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <div id="tracker-weight-ranges" class="inline-flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden text-xs">
+            <button type="button" data-weight-range="7d" class="px-2 py-1 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">1 Woche</button>
+            <button type="button" data-weight-range="30d" class="px-2 py-1 border-l border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">1 Monat</button>
+            <button type="button" data-weight-range="90d" class="px-2 py-1 border-l border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">3 Monate</button>
+            <button type="button" data-weight-range="365d" class="px-2 py-1 border-l border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">1 Jahr</button>
+            <button type="button" data-weight-range="all" class="px-2 py-1 border-l border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Alles</button>
+          </div>
+          <label id="tw-bmi-label" class="ml-auto text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
+            <input id="tw-bmi" type="checkbox" class="rounded border-gray-300 dark:border-gray-600" checked />
+            BMI-Grenzen
+          </label>
+        </div>
+        <div id="tracker-weight-chart" class="w-full h-52 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40"></div>
+        <div id="tracker-weight-legend" class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 mt-1.5"></div>
+        <p id="tracker-weight-forecast" class="hidden text-xs mt-1"></p>
+        <form id="tracker-weight-form" class="flex gap-2 items-center mb-3 mt-3 flex-wrap">
+          <label class="text-sm text-gray-700 dark:text-gray-200 flex items-center gap-1">
+            Gewicht (kg)
+            <input id="tw-weight" type="number" step="0.1" required class="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm" />
+          </label>
+          <label class="text-sm text-gray-700 dark:text-gray-200 flex items-center gap-1">
+            Datum
+            <input id="tw-date" type="date" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm" />
+          </label>
+          <button type="submit" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">Loggen</button>
+        </form>
+        <ul id="tracker-weight-list" class="text-sm max-h-40 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700"></ul>
+      </section>
+
+      <!-- Body profile -->
+      <section class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Körperprofil & Ziel</h2>
+          <span id="tracker-goal-summary" class="text-xs text-gray-600 dark:text-gray-300"></span>
+        </div>
+        <form id="tracker-profile-form" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <label class="block">Größe (cm)
+            <input id="tp-height" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+          </label>
+          <label class="block">Alter (Jahre)
+            <input id="tp-age" type="number" step="1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+          </label>
+          <label class="block">Geschlecht
+            <select id="tp-gender" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900">
+              <option value="">–</option>
+              <option value="female">weiblich</option>
+              <option value="male">männlich</option>
+              <option value="other">divers</option>
+            </select>
+          </label>
+          <label class="block">Aktivität
+            <select id="tp-activity" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900">
+              <option value="1.2">Sitzend PAL 1.2</option>
+              <option value="1.375">Wenig PAL 1.375</option>
+              <option value="1.55" selected>Moderat PAL 1.55</option>
+              <option value="1.725">Aktiv PAL 1.725</option>
+              <option value="1.9">Sehr aktiv PAL 1.9</option>
+            </select>
+          </label>
+          <label class="block">Ziel-Änderung (kg / Woche)
+            <input id="tp-weekly" type="number" step="0.05" min="-1" max="0.5" placeholder="z.B. -0.5" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+            <span class="text-[11px] text-gray-500">max. −1 kg / +0,5 kg pro Woche</span>
+          </label>
+          <label class="block">Zielgewicht (kg)
+            <input id="tp-target" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+          </label>
+          <div class="sm:col-span-3 flex justify-end">
+            <button type="submit" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">Profil speichern</button>
+          </div>
+        </form>
+      </section>
+
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { calculateCalorieGoal, addNutrition, scaleNutrition, calculateBmi, weightForBmi, bmiCategoryLabel, BMI_BANDS, BMI_BOUNDARIES } from '../lib/calorieGoal';
+  import { NUTRITION_FIELDS } from '../lib/nutrition';
+  import type { BodyProfile, DiaryEntry, MealPlan, WeightLog } from '../types/tracker';
+
+  const PROFILE_KEY = 'cookbook.tracker.profile';
+  const WEIGHT_RANGE_KEY = 'cookbook.tracker.weightRange';
+  const WEIGHT_BMI_KEY = 'cookbook.tracker.weightBmi';
+  type WeightRange = '7d' | '30d' | '90d' | '365d' | 'all';
+  const WEIGHT_RANGE_MS: Record<Exclude<WeightRange, 'all'>, number> = {
+    '7d': 7 * 86400000,
+    '30d': 30 * 86400000,
+    '90d': 90 * 86400000,
+    '365d': 365 * 86400000,
+  };
+  const FORECAST_MS = 30 * 86400000;
+  const WEEK_MS = 7 * 86400000;
+  const TREND_WINDOW_MS = 28 * 86400000;
+
+  let weightLogs: WeightLog[] = [];
+  let weightRange: WeightRange = readWeightRange();
+  let showBmiBands = readShowBmi();
+  let weightChartThemeWatch = false;
+
+  function readAlias(): string {
+    try { return (localStorage.getItem('cookbook.alias') || '').trim(); } catch { return ''; }
+  }
+
+  function readProfile(): BodyProfile {
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      return raw ? (JSON.parse(raw) as BodyProfile) : {};
+    } catch { return {}; }
+  }
+
+  function writeProfile(profile: BodyProfile): void {
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+      // Ping alias sync engine so it uploads to the server.
+      window.dispatchEvent(new StorageEvent('storage', { key: PROFILE_KEY }));
+    } catch { /* ignore */ }
+  }
+
+  function readWeightRange(): WeightRange {
+    try {
+      const raw = localStorage.getItem(WEIGHT_RANGE_KEY);
+      if (raw === '7d' || raw === '30d' || raw === '90d' || raw === '365d' || raw === 'all') return raw;
+    } catch { /* ignore */ }
+    return '90d';
+  }
+
+  function writeWeightRange(range: WeightRange): void {
+    weightRange = range;
+    try { localStorage.setItem(WEIGHT_RANGE_KEY, range); } catch { /* ignore */ }
+  }
+
+  function readShowBmi(): boolean {
+    try {
+      const raw = localStorage.getItem(WEIGHT_BMI_KEY);
+      if (raw === '0') return false;
+      if (raw === '1') return true;
+    } catch { /* ignore */ }
+    return true;
+  }
+
+  function writeShowBmi(on: boolean): void {
+    showBmiBands = on;
+    try { localStorage.setItem(WEIGHT_BMI_KEY, on ? '1' : '0'); } catch { /* ignore */ }
+  }
+
+  let selectedDay = startOfLocalDay(new Date());
+
+  function startOfLocalDay(d: Date): Date {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
+
+  function endOfLocalDay(d: Date): Date {
+    const x = new Date(d);
+    x.setHours(23, 59, 59, 999);
+    return x;
+  }
+
+  function isSelectedToday(): boolean {
+    return startOfLocalDay(selectedDay).getTime() === startOfLocalDay(new Date()).getTime();
+  }
+
+  function toDateInputValue(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function toDateTimeLocalValue(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${toDateInputValue(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function defaultEatenAt(): Date {
+    if (isSelectedToday()) return new Date();
+    const d = startOfLocalDay(selectedDay);
+    d.setHours(12, 0, 0, 0);
+    return d;
+  }
+
+  function startOfSelectedDayIso(): string {
+    return startOfLocalDay(selectedDay).toISOString();
+  }
+
+  function endOfSelectedDayIso(): string {
+    return endOfLocalDay(selectedDay).toISOString();
+  }
+
+  function syncDayControls(): void {
+    const picker = document.getElementById('tracker-day-picker') as HTMLInputElement | null;
+    const todayBtn = document.getElementById('tracker-day-today');
+    const nextBtn = document.getElementById('tracker-day-next') as HTMLButtonElement | null;
+    const heading = document.getElementById('tracker-day-heading');
+    const today = startOfLocalDay(new Date());
+    const viewingToday = isSelectedToday();
+    if (picker) {
+      picker.value = toDateInputValue(selectedDay);
+      picker.max = toDateInputValue(today);
+    }
+    todayBtn?.classList.toggle('hidden', viewingToday);
+    if (nextBtn) nextBtn.disabled = viewingToday;
+    if (heading) {
+      const dateLabel = selectedDay.toLocaleDateString('de-DE', {
+        weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+      });
+      heading.textContent = viewingToday ? `Heute · ${dateLabel}` : dateLabel;
+    }
+    const timeInput = document.getElementById('td-time') as HTMLInputElement | null;
+    if (timeInput) timeInput.value = toDateTimeLocalValue(defaultEatenAt());
+  }
+
+  function shiftSelectedDay(delta: number): void {
+    const next = startOfLocalDay(selectedDay);
+    next.setDate(next.getDate() + delta);
+    const today = startOfLocalDay(new Date());
+    selectedDay = next.getTime() > today.getTime() ? today : next;
+    syncDayControls();
+    Promise.all([refreshDiary(), refreshPlans()]).catch(() => undefined);
+  }
+
+  async function fetchJson<T>(url: string, init?: RequestInit): Promise<T | null> {
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) return null;
+      return (await res.json()) as T;
+    } catch { return null; }
+  }
+
+  async function loadTracker() {
+    const alias = readAlias();
+    const noAlias = document.getElementById('tracker-no-alias')!;
+    const body = document.getElementById('tracker-body')!;
+    if (!alias) {
+      noAlias.classList.remove('hidden');
+      body.classList.add('hidden');
+      return;
+    }
+    noAlias.classList.add('hidden');
+    body.classList.remove('hidden');
+    (document.getElementById('tracker-alias-label') as HTMLElement).textContent = alias;
+    syncDayControls();
+    const twDate = document.getElementById('tw-date') as HTMLInputElement | null;
+    if (twDate && !twDate.value) twDate.value = toDateInputValue(new Date());
+    renderProfile();
+    await Promise.all([refreshWeight(), refreshDiary(), refreshPlans()]);
+    recomputeGoal();
+  }
+
+  function renderProfile() {
+    const profile = readProfile();
+    (document.getElementById('tp-height') as HTMLInputElement).value = profile.heightCm != null ? String(profile.heightCm) : '';
+    (document.getElementById('tp-age') as HTMLInputElement).value = profile.ageYears != null ? String(profile.ageYears) : '';
+    (document.getElementById('tp-gender') as HTMLSelectElement).value = profile.gender || '';
+    (document.getElementById('tp-activity') as HTMLSelectElement).value = profile.activity ? String(profile.activity) : '1.55';
+    (document.getElementById('tp-weekly') as HTMLInputElement).value = profile.weeklyChangeKg != null ? String(profile.weeklyChangeKg) : '';
+    (document.getElementById('tp-target') as HTMLInputElement).value = profile.targetWeightKg != null ? String(profile.targetWeightKg) : '';
+  }
+
+  async function refreshWeight() {
+    const alias = readAlias();
+    const data = await fetchJson<{ logs: WeightLog[] }>(`/api/tracker/weight?alias=${encodeURIComponent(alias)}`);
+    const list = document.getElementById('tracker-weight-list')!;
+    const currentEl = document.getElementById('tracker-current-weight') as HTMLElement;
+    list.innerHTML = '';
+    weightLogs = data?.logs || [];
+    if (weightLogs.length === 0) {
+      list.innerHTML = '<li class="py-2 text-gray-500 text-xs">Noch keine Einträge.</li>';
+      currentEl.textContent = 'Aktuell: – kg';
+      renderWeightChart();
+      return;
+    }
+    const current = weightLogs[0];
+    const profile = readProfile();
+    const bmi = calculateBmi(current.weightKg, profile.heightCm || 0);
+    const bmiText = bmi != null ? ` · BMI ${bmi} (${bmiCategoryLabel(bmi)})` : '';
+    currentEl.textContent = `Aktuell: ${current.weightKg} kg (${new Date(current.loggedAt).toLocaleDateString('de-DE')})${bmiText}`;
+    for (const log of weightLogs.slice(0, 25)) {
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between py-1.5';
+      const when = new Date(log.loggedAt).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      li.innerHTML = `<span>${when}</span><span class="flex items-center gap-2"><strong>${log.weightKg} kg</strong><button data-action="del-weight" data-id="${log.id}" class="text-red-500 text-xs">×</button></span>`;
+      list.appendChild(li);
+    }
+    renderWeightChart();
+    recomputeGoal();
+  }
+
+  function syncWeightRangeButtons(): void {
+    document.querySelectorAll<HTMLButtonElement>('[data-weight-range]').forEach((btn) => {
+      const active = btn.dataset.weightRange === weightRange;
+      btn.classList.toggle('bg-orange-500', active);
+      btn.classList.toggle('text-white', active);
+      btn.classList.toggle('hover:bg-orange-600', active);
+      btn.classList.toggle('text-gray-700', !active);
+      btn.classList.toggle('dark:text-gray-200', !active);
+      btn.classList.toggle('hover:bg-gray-100', !active);
+      btn.classList.toggle('dark:hover:bg-gray-700', !active);
+    });
+    const checkbox = document.getElementById('tw-bmi') as HTMLInputElement | null;
+    if (checkbox) checkbox.checked = showBmiBands;
+  }
+
+  function chartRangeWindow(logs: WeightLog[], forecastMs = 0): { from: number; to: number; now: number } {
+    const now = Date.now();
+    let from: number;
+    let to: number;
+    if (weightRange === 'all') {
+      const times = logs.map((l) => new Date(l.loggedAt).getTime()).filter((t) => Number.isFinite(t));
+      if (times.length === 0) {
+        from = now - WEIGHT_RANGE_MS['90d'];
+        to = now;
+      } else {
+        from = Math.min(...times);
+        to = Math.max(now, Math.max(...times));
+      }
+    } else {
+      from = now - WEIGHT_RANGE_MS[weightRange];
+      to = now;
+    }
+    if (forecastMs > 0) to += forecastMs;
+    return { from, to, now };
+  }
+
+  function formatSignedKg(n: number): string {
+    const r = Math.round(n * 10) / 10;
+    if (Object.is(r, -0) || r === 0) return '0 kg';
+    return `${r > 0 ? '+' : ''}${r} kg`;
+  }
+
+  function trendSlopeKgPerMs(logs: WeightLog[], now: number): number {
+    const pts = logs
+      .map((l) => ({ t: new Date(l.loggedAt).getTime(), kg: Number(l.weightKg) }))
+      .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.kg) && p.t <= now && p.t >= now - TREND_WINDOW_MS)
+      .sort((a, b) => a.t - b.t);
+    if (pts.length < 2) return 0;
+    const n = pts.length;
+    let sumT = 0;
+    let sumK = 0;
+    for (const p of pts) {
+      sumT += p.t;
+      sumK += p.kg;
+    }
+    const meanT = sumT / n;
+    const meanK = sumK / n;
+    let num = 0;
+    let den = 0;
+    for (const p of pts) {
+      const dt = p.t - meanT;
+      num += dt * (p.kg - meanK);
+      den += dt * dt;
+    }
+    if (den === 0) return 0;
+    return num / den;
+  }
+
+  function niceYTicks(min: number, max: number, count = 5): number[] {
+    const span = Math.max(0.5, max - min);
+    const raw = span / Math.max(1, count - 1);
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+    const start = Math.floor(min / step) * step;
+    const ticks: number[] = [];
+    for (let v = start; v <= max + step * 0.01; v += step) {
+      ticks.push(Math.round(v * 10) / 10);
+    }
+    return ticks;
+  }
+
+  function renderWeightChart(): void {
+    const host = document.getElementById('tracker-weight-chart');
+    const legend = document.getElementById('tracker-weight-legend');
+    if (!host) return;
+    syncWeightRangeButtons();
+    if (!weightChartThemeWatch) {
+      weightChartThemeWatch = true;
+      new MutationObserver(() => renderWeightChart()).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    const profile = readProfile();
+    const heightCm = profile.heightCm && profile.heightCm > 0 ? profile.heightCm : 0;
+    const hasHeight = heightCm > 0;
+    const bmiOn = showBmiBands && hasHeight;
+    const bmiLabel = document.getElementById('tw-bmi-label');
+    if (bmiLabel) {
+      bmiLabel.classList.toggle('opacity-50', !hasHeight);
+      bmiLabel.title = hasHeight ? '' : 'Größe im Körperprofil eintragen, um BMI-Grenzen zu zeigen';
+    }
+
+    const dark = document.documentElement.classList.contains('dark');
+    const axis = dark ? '#9ca3af' : '#6b7280';
+    const grid = dark ? 'rgba(156,163,175,0.18)' : 'rgba(107,114,128,0.2)';
+    const line = '#f97316';
+    const text = dark ? '#e5e7eb' : '#374151';
+    const weeklyChange = Number.isFinite(profile.weeklyChangeKg) ? Number(profile.weeklyChangeKg) : null;
+    const forecastOn = weeklyChange != null && weightLogs.length > 0;
+    const lastLog = weightLogs[0];
+    const lastKg = lastLog ? Number(lastLog.weightKg) : null;
+    const forecastNote = document.getElementById('tracker-weight-forecast');
+    if (forecastNote) {
+      forecastNote.classList.add('hidden');
+      forecastNote.textContent = '';
+    }
+
+    if (legend) {
+      const items: string[] = [
+        `<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-orange-500"></span>Gewicht</span>`,
+      ];
+      if (forecastOn) {
+        items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-px border-t border-dashed border-teal-500"></span>Ziel ${formatSignedKg(weeklyChange!)} / Woche</span>`);
+        items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-px border-t border-dotted border-orange-400"></span>Trend (4 Wochen)</span>`);
+      }
+      if (profile.targetWeightKg && profile.targetWeightKg > 0) {
+        items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-px border-t border-dashed border-indigo-500"></span>Zielgewicht ${profile.targetWeightKg} kg</span>`);
+      }
+      if (bmiOn) {
+        for (const band of BMI_BANDS) {
+          const lo = band.from <= 0 ? null : weightForBmi(band.from, heightCm);
+          const hi = band.to === Infinity ? null : weightForBmi(band.to, heightCm);
+          let rangeLabel = band.label;
+          if (lo == null && hi != null) rangeLabel = `${band.label} &lt; ${hi} kg`;
+          else if (lo != null && hi == null) rangeLabel = `${band.label} ≥ ${lo} kg`;
+          else if (lo != null && hi != null) rangeLabel = `${band.label} ${lo}–${hi} kg`;
+          items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:${dark ? band.darkFill : band.fill};box-shadow:inset 0 0 0 1px ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}"></span>${rangeLabel}</span>`);
+        }
+      }
+      legend.innerHTML = items.join('');
+    }
+
+    if (weightLogs.length === 0) {
+      host.innerHTML = '<div class="h-full flex items-center justify-center text-xs text-gray-500">Noch keine Gewichtseinträge.</div>';
+      return;
+    }
+
+    const { from, to, now } = chartRangeWindow(weightLogs, forecastOn ? FORECAST_MS : 0);
+    const inRange = weightLogs
+      .map((l) => ({ t: new Date(l.loggedAt).getTime(), kg: Number(l.weightKg), log: l }))
+      .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.kg) && p.t >= from && p.t <= now)
+      .sort((a, b) => a.t - b.t);
+
+    const slope = forecastOn ? trendSlopeKgPerMs(weightLogs, now) : 0;
+    const goalEndKg = forecastOn && lastKg != null ? lastKg + weeklyChange! * (FORECAST_MS / WEEK_MS) : null;
+    const trendEndKg = forecastOn && lastKg != null ? lastKg + slope * FORECAST_MS : null;
+
+    const W = 720;
+    const H = 208;
+    const pad = { l: 42, r: bmiOn ? 86 : forecastOn ? 36 : 16, t: 14, b: 28 };
+    const innerW = W - pad.l - pad.r;
+    const innerH = H - pad.t - pad.b;
+    let tMin = from;
+    let tMax = to;
+    if (tMax <= tMin) tMax = tMin + 86400000;
+
+    const weights = inRange.map((p) => p.kg);
+    let yMin = weights.length ? Math.min(...weights) : (lastKg ?? 50);
+    let yMax = weights.length ? Math.max(...weights) : (lastKg ?? 90);
+    if (profile.targetWeightKg && profile.targetWeightKg > 0) {
+      yMin = Math.min(yMin, profile.targetWeightKg);
+      yMax = Math.max(yMax, profile.targetWeightKg);
+    }
+    if (forecastOn && lastKg != null) {
+      yMin = Math.min(yMin, lastKg);
+      yMax = Math.max(yMax, lastKg);
+    }
+    if (goalEndKg != null) {
+      yMin = Math.min(yMin, goalEndKg);
+      yMax = Math.max(yMax, goalEndKg);
+    }
+    if (trendEndKg != null) {
+      yMin = Math.min(yMin, trendEndKg);
+      yMax = Math.max(yMax, trendEndKg);
+    }
+    if (bmiOn) {
+      const dataLo = weights.length ? Math.min(...weights) : yMin;
+      const dataHi = weights.length ? Math.max(...weights) : yMax;
+      const dataMid = weights.length ? weights[weights.length - 1] : (dataLo + dataHi) / 2;
+      const boundsKg = BMI_BOUNDARIES
+        .map((b) => weightForBmi(b.bmi, heightCm))
+        .filter((kg): kg is number => kg != null);
+      const include = boundsKg.filter((k) => k >= dataLo - 8 && k <= dataHi + 8);
+      const lower = [...boundsKg].filter((k) => k <= dataMid).pop();
+      const upper = boundsKg.find((k) => k >= dataMid);
+      if (lower != null) include.push(lower);
+      if (upper != null) include.push(upper);
+      if (include.length) {
+        yMin = Math.min(yMin, ...include);
+        yMax = Math.max(yMax, ...include);
+      }
+    }
+    const padY = Math.max(0.6, (yMax - yMin) * 0.12);
+    yMin -= padY;
+    yMax += padY;
+    if (yMax - yMin < 2) {
+      const mid = (yMin + yMax) / 2;
+      yMin = mid - 1;
+      yMax = mid + 1;
+    }
+
+    const xOf = (t: number) => pad.l + ((t - tMin) / (tMax - tMin)) * innerW;
+    const yOf = (kg: number) => pad.t + (1 - (kg - yMin) / (yMax - yMin)) * innerH;
+    const clipY = (kg: number) => Math.min(yMax, Math.max(yMin, kg));
+
+    const parts: string[] = [];
+    parts.push(`<svg viewBox="0 0 ${W} ${H}" class="w-full h-full" role="img" aria-label="Gewichtsverlauf">`);
+
+    if (bmiOn) {
+      for (const band of BMI_BANDS) {
+        const loKg = band.from <= 0 ? yMin : weightForBmi(band.from, heightCm);
+        const hiKg = band.to === Infinity ? yMax : weightForBmi(band.to, heightCm);
+        if (loKg == null || hiKg == null) continue;
+        const top = Math.min(yMax, Math.max(yMin, hiKg));
+        const bot = Math.max(yMin, Math.min(yMax, loKg));
+        if (top <= bot) continue;
+        const y = yOf(top);
+        const h = yOf(bot) - y;
+        parts.push(`<rect x="${pad.l}" y="${y}" width="${innerW}" height="${Math.max(0, h)}" fill="${dark ? band.darkFill : band.fill}" />`);
+      }
+      for (const bound of BMI_BOUNDARIES) {
+        const kg = weightForBmi(bound.bmi, heightCm);
+        if (kg == null || kg < yMin || kg > yMax) continue;
+        const y = yOf(kg);
+        parts.push(`<line x1="${pad.l}" y1="${y}" x2="${pad.l + innerW}" y2="${y}" stroke="${axis}" stroke-width="0.75" stroke-dasharray="3 3" opacity="0.55" />`);
+        parts.push(`<text x="${pad.l + innerW + 4}" y="${y + 3}" fill="${axis}" font-size="9">BMI ${bound.bmi}</text>`);
+      }
+    }
+
+    if (forecastOn) {
+      const xNow = xOf(now);
+      const xEnd = xOf(now + FORECAST_MS);
+      parts.push(`<rect x="${xNow}" y="${pad.t}" width="${Math.max(0, xEnd - xNow)}" height="${innerH}" fill="${dark ? 'rgba(13,148,136,0.08)' : 'rgba(13,148,136,0.07)'}" />`);
+    }
+
+    const yTicks = niceYTicks(yMin, yMax);
+    for (const tick of yTicks) {
+      if (tick < yMin || tick > yMax) continue;
+      const y = yOf(tick);
+      parts.push(`<line x1="${pad.l}" y1="${y}" x2="${pad.l + innerW}" y2="${y}" stroke="${grid}" stroke-width="1" />`);
+      parts.push(`<text x="${pad.l - 6}" y="${y + 3}" fill="${axis}" font-size="10" text-anchor="end">${tick}</text>`);
+    }
+
+    const tickCount = weightRange === '7d' ? 7 : 5;
+    for (let i = 0; i < tickCount; i++) {
+      const t = tMin + ((tMax - tMin) * i) / Math.max(1, tickCount - 1);
+      const x = xOf(t);
+      const d = new Date(t);
+      const label = weightRange === '365d' || weightRange === 'all'
+        ? d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' })
+        : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+      parts.push(`<text x="${x}" y="${H - 8}" fill="${axis}" font-size="10" text-anchor="middle">${escapeHtml(label)}</text>`);
+    }
+
+    if (profile.targetWeightKg && profile.targetWeightKg > 0 && profile.targetWeightKg >= yMin && profile.targetWeightKg <= yMax) {
+      const y = yOf(profile.targetWeightKg);
+      parts.push(`<line x1="${pad.l}" y1="${y}" x2="${pad.l + innerW}" y2="${y}" stroke="#6366f1" stroke-width="1.25" stroke-dasharray="5 4" />`);
+    }
+
+    if (inRange.length === 0 && !forecastOn) {
+      parts.push(`<text x="${W / 2}" y="${H / 2}" fill="${axis}" font-size="12" text-anchor="middle">Keine Einträge in diesem Zeitraum</text>`);
+    } else {
+      if (inRange.length === 0) {
+        parts.push(`<text x="${xOf((tMin + now) / 2)}" y="${pad.t + innerH / 2}" fill="${axis}" font-size="11" text-anchor="middle">Keine Einträge in diesem Zeitraum</text>`);
+      } else {
+        const pts = inRange.map((p) => `${xOf(p.t).toFixed(1)},${yOf(p.kg).toFixed(1)}`).join(' ');
+        if (inRange.length > 1) {
+          parts.push(`<polyline fill="none" stroke="${line}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${pts}" />`);
+        }
+        for (const p of inRange) {
+          const when = new Date(p.t).toLocaleDateString('de-DE');
+          parts.push(`<circle cx="${xOf(p.t).toFixed(1)}" cy="${yOf(p.kg).toFixed(1)}" r="3.2" fill="${line}"><title>${when}: ${p.kg} kg</title></circle>`);
+        }
+      }
+    }
+
+    if (forecastOn && lastKg != null && goalEndKg != null && trendEndKg != null) {
+      const xNow = xOf(now);
+      const xEnd = xOf(now + FORECAST_MS);
+      const yNow = yOf(clipY(lastKg));
+      const yGoal = yOf(clipY(goalEndKg));
+      const yTrend = yOf(clipY(trendEndKg));
+      const lastPt = inRange.length ? inRange[inRange.length - 1] : null;
+      if (lastPt && now - lastPt.t > 60_000) {
+        parts.push(`<line x1="${xOf(lastPt.t).toFixed(1)}" y1="${yOf(lastPt.kg).toFixed(1)}" x2="${xNow.toFixed(1)}" y2="${yNow.toFixed(1)}" stroke="${line}" stroke-width="1.5" stroke-dasharray="3 4" opacity="0.45" />`);
+      }
+      const behind = weeklyChange! < 0
+        ? trendEndKg > goalEndKg + 0.05
+        : weeklyChange! > 0
+          ? trendEndKg < goalEndKg - 0.05
+          : Math.abs(trendEndKg - goalEndKg) > 0.05;
+      const onTrack = Math.abs(trendEndKg - goalEndKg) <= 0.05;
+      const fill = onTrack
+        ? (dark ? 'rgba(16,185,129,0.22)' : 'rgba(16,185,129,0.28)')
+        : behind
+          ? (dark ? 'rgba(239,68,68,0.22)' : 'rgba(239,68,68,0.22)')
+          : (dark ? 'rgba(16,185,129,0.24)' : 'rgba(16,185,129,0.3)');
+      parts.push(`<polygon points="${xNow.toFixed(1)},${yNow.toFixed(1)} ${xEnd.toFixed(1)},${yGoal.toFixed(1)} ${xEnd.toFixed(1)},${yTrend.toFixed(1)}" fill="${fill}" />`);
+      parts.push(`<line x1="${xNow.toFixed(1)}" y1="${pad.t}" x2="${xNow.toFixed(1)}" y2="${pad.t + innerH}" stroke="${axis}" stroke-width="1" stroke-dasharray="2 3" />`);
+      parts.push(`<text x="${xNow.toFixed(1)}" y="${pad.t + 10}" fill="${axis}" font-size="9" text-anchor="middle">Heute</text>`);
+      parts.push(`<line x1="${xNow.toFixed(1)}" y1="${yNow.toFixed(1)}" x2="${xEnd.toFixed(1)}" y2="${yGoal.toFixed(1)}" stroke="#0d9488" stroke-width="1.75" stroke-dasharray="6 4" stroke-linecap="round" />`);
+      parts.push(`<line x1="${xNow.toFixed(1)}" y1="${yNow.toFixed(1)}" x2="${xEnd.toFixed(1)}" y2="${yTrend.toFixed(1)}" stroke="#fb923c" stroke-width="1.75" stroke-dasharray="2 4" stroke-linecap="round" />`);
+      parts.push(`<circle cx="${xEnd.toFixed(1)}" cy="${yGoal.toFixed(1)}" r="3" fill="#0d9488"><title>Ziel in 4 Wochen: ${Math.round(goalEndKg * 10) / 10} kg</title></circle>`);
+      parts.push(`<circle cx="${xEnd.toFixed(1)}" cy="${yTrend.toFixed(1)}" r="3" fill="#fb923c"><title>Trend in 4 Wochen: ${Math.round(trendEndKg * 10) / 10} kg</title></circle>`);
+      const deltaKg = Math.round((trendEndKg - goalEndKg) * 10) / 10;
+      const maintain = weeklyChange === 0;
+      let deltaLabel: string;
+      if (onTrack) deltaLabel = maintain ? 'Gewicht gehalten' : 'im Plan';
+      else if (maintain) deltaLabel = `Abweichung ${formatSignedKg(deltaKg)}`;
+      else deltaLabel = `${behind ? 'hinter Ziel' : 'vor dem Ziel'} ${Math.abs(deltaKg)} kg`;
+      const labelY = Math.min(yGoal, yTrend) - 8;
+      const labelFill = behind && !onTrack
+        ? (dark ? '#fca5a5' : '#dc2626')
+        : (dark ? '#5eead4' : '#0f766e');
+      parts.push(`<text x="${((xNow + xEnd) / 2).toFixed(1)}" y="${labelY.toFixed(1)}" fill="${labelFill}" font-size="10" font-weight="600" text-anchor="middle">${escapeHtml(deltaLabel)}</text>`);
+
+      const goalDelta = goalEndKg - lastKg;
+      const trendDelta = trendEndKg - lastKg;
+      if (forecastNote) {
+        const status = onTrack ? 'im Plan' : maintain ? `Abweichung ${formatSignedKg(deltaKg)}` : behind ? 'hinter dem Ziel' : 'vor dem Ziel';
+        forecastNote.classList.remove('hidden');
+        forecastNote.className = `text-xs mt-1 ${behind && !onTrack ? 'text-red-600 dark:text-red-400' : 'text-teal-700 dark:text-teal-300'}`;
+        forecastNote.textContent = `In 4 Wochen: Ziel ${Math.round(goalEndKg * 10) / 10} kg (${formatSignedKg(goalDelta)}) · bisheriger Trend ${Math.round(trendEndKg * 10) / 10} kg (${formatSignedKg(trendDelta)}) · Differenz ${Math.abs(deltaKg)} kg · ${status}`;
+      }
+    }
+
+    parts.push(`<text x="12" y="12" fill="${text}" font-size="9">kg</text>`);
+    parts.push('</svg>');
+    host.innerHTML = parts.join('');
+  }
+
+  async function refreshDiary() {
+    const alias = readAlias();
+    const data = await fetchJson<{ entries: DiaryEntry[] }>(`/api/tracker/diary?alias=${encodeURIComponent(alias)}&from=${encodeURIComponent(startOfSelectedDayIso())}&to=${encodeURIComponent(endOfSelectedDayIso())}`);
+    const entries = data?.entries || [];
+    const total = entries.reduce((sum, e) => addNutrition(sum, e.nutrition), {} as any);
+    renderTodayRings(total, entries.length);
+    renderDayLog(entries);
+  }
+
+  function diaryEntryTitle(entry: DiaryEntry): string {
+    if (entry.source === 'product') return entry.productName || entry.label || 'Produkt';
+    if (entry.source === 'free') return entry.label || 'Freier Eintrag';
+    return entry.recipeTitle || entry.label || 'Rezept';
+  }
+
+  function diarySourceLabel(source: DiaryEntry['source']): string {
+    if (source === 'plan') return 'Meal Prep';
+    if (source === 'product') return 'Produkt';
+    if (source === 'free') return 'Frei';
+    return 'Rezept';
+  }
+
+  function diaryAmountLabel(entry: DiaryEntry): string {
+    if (entry.servings != null && Number.isFinite(Number(entry.servings))) {
+      return `${formatPortions(Number(entry.servings))} Portion${Number(entry.servings) === 1 ? '' : 'en'}`;
+    }
+    if (entry.grams != null && Number.isFinite(Number(entry.grams))) {
+      return `${Math.round(Number(entry.grams))} g`;
+    }
+    return '';
+  }
+
+  function renderDayLog(entries: DiaryEntry[]): void {
+    const list = document.getElementById('tracker-day-log');
+    if (!list) return;
+    list.innerHTML = '';
+    for (const entry of entries) {
+      const li = document.createElement('li');
+      li.className = 'flex items-start justify-between gap-2 py-2';
+      const when = new Date(entry.eatenAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const title = diaryEntryTitle(entry);
+      const href = entry.recipeId ? `/rezept/${entry.recipeId}` : '';
+      const kcal = Math.round(Number(entry.nutrition?.calories || 0));
+      const protein = Number(entry.nutrition?.protein || 0);
+      const carbs = Number(entry.nutrition?.carbohydrates || 0);
+      const fat = Number(entry.nutrition?.fat || 0);
+      const amount = diaryAmountLabel(entry);
+      const macros = [kcal ? `${kcal} kcal` : '', protein ? `E ${Math.round(protein)} g` : '', carbs ? `KH ${Math.round(carbs)} g` : '', fat ? `F ${Math.round(fat)} g` : '']
+        .filter(Boolean)
+        .join(' · ');
+      const titleHtml = href
+        ? `<a href="${href}" class="hover:underline">${escapeHtml(title)}</a>`
+        : escapeHtml(title);
+      li.innerHTML = `
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs text-gray-500 tabular-nums w-10 flex-shrink-0">${when}</span>
+            <span class="font-medium text-gray-900 dark:text-white truncate">${titleHtml}</span>
+            <span class="text-[10px] uppercase tracking-wide text-gray-400 flex-shrink-0">${diarySourceLabel(entry.source)}</span>
+          </div>
+          <div class="text-xs text-gray-500 ml-12">${[amount, macros].filter(Boolean).join(' · ') || 'ohne Nährwerte'}</div>
+        </div>
+        <button type="button" data-action="del-diary" data-id="${entry.id}" class="text-red-500 text-xs flex-shrink-0" title="Eintrag löschen">×</button>
+      `;
+      list.appendChild(li);
+    }
+  }
+
+  async function refreshPlans() {
+    const alias = readAlias();
+    const data = await fetchJson<{ plans: MealPlan[] }>(`/api/tracker/meal-plans?alias=${encodeURIComponent(alias)}&activeOn=${encodeURIComponent(endOfSelectedDayIso())}`);
+    const plans = data?.plans || [];
+    const list = document.getElementById('tracker-today-plans')!;
+    const empty = document.getElementById('tracker-today-plans-empty')!;
+    list.innerHTML = '';
+    if (plans.length === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    schedulePlanReminders(plans);
+    for (const plan of plans) {
+      const li = document.createElement('div');
+      li.className = 'flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 rounded border border-gray-200 dark:border-gray-700';
+      li.dataset.planRow = plan.id;
+      const from = new Date(plan.scheduledAt).toLocaleDateString('de-DE');
+      const remaining = Number(plan.servingsRemaining ?? plan.servings);
+      const total = Number(plan.servings) || 1;
+      const consumed = Number(plan.servingsConsumed ?? Math.max(0, total - remaining));
+      const pct = total > 0 ? Math.min(100, Math.round((consumed / total) * 100)) : 0;
+      const title = plan.recipeTitle || 'Rezept';
+      const defaultEat = Math.min(1, remaining);
+      li.innerHTML = `
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
+            <a href="/rezept/${plan.recipeId}" class="hover:underline">${escapeHtml(title)}</a>
+          </div>
+          <div class="text-xs text-gray-500">ab ${from} · noch ${formatPortions(remaining)} von ${formatPortions(total)} Portionen</div>
+          <div class="h-1.5 w-full max-w-xs bg-gray-200 dark:bg-gray-700 rounded overflow-hidden mt-1">
+            <div class="bg-emerald-500" style="height:100%;width:${pct}%"></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <label class="text-xs text-gray-500 flex items-center gap-1">
+            <input type="number" class="eat-portions w-14 px-1 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm" min="0.5" step="0.5" max="${remaining}" value="${defaultEat}" />
+            Portion(en)
+          </label>
+          <button data-action="mark-eaten" data-id="${plan.id}" class="text-xs px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded">Abstreichen</button>
+          <button data-action="plan-to-list" data-id="${plan.id}" data-recipe-id="${plan.recipeId}" data-servings="${total}" title="Als Einkaufsliste erstellen" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded">Zur Liste</button>
+        </div>
+      `;
+      list.appendChild(li);
+    }
+  }
+
+  function formatPortions(n: number): string {
+    if (!Number.isFinite(n)) return '0';
+    return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10);
+  }
+
+  function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
+  function ringColor(consumed: number, target: number, over: string, ok: string): string {
+    if (target <= 0) return ok;
+    const pct = consumed / target;
+    if (pct > 1.1) return over;
+    if (pct > 1) return '#eab308';
+    return ok;
+  }
+
+  function donutSvg(opts: {
+    size: number;
+    consumed: number;
+    target: number;
+    label: string;
+    unit: string;
+    color: string;
+    overlay?: { value: number; color: string; label: string };
+    showOverlay: boolean;
+  }): string {
+    const { size, consumed, target, label, unit, color } = opts;
+    const cx = size / 2;
+    const cy = size / 2;
+    const showOverlay = opts.showOverlay && opts.overlay && opts.overlay.value > 0 && consumed > target + 1;
+    const outerR = showOverlay ? size * 0.42 : size * 0.38;
+    const innerR = showOverlay ? size * 0.32 : outerR;
+    const track = document.documentElement.classList.contains('dark') ? '#374151' : '#e5e7eb';
+    const text = document.documentElement.classList.contains('dark') ? '#f9fafb' : '#111827';
+    const muted = document.documentElement.classList.contains('dark') ? '#9ca3af' : '#6b7280';
+    const circ = (r: number) => 2 * Math.PI * r;
+    const dash = (r: number, pct: number) => {
+      const c = circ(r);
+      const p = Math.max(0, Math.min(pct, 1));
+      return `${(p * c).toFixed(2)} ${c.toFixed(2)}`;
+    };
+    const targetPct = target > 0 ? consumed / target : 0;
+    const parts: string[] = [];
+    parts.push(`<svg viewBox="0 0 ${size} ${size}" class="mx-auto" width="${size}" height="${size}" role="img" aria-label="${escapeHtml(label)}">`);
+    if (showOverlay && opts.overlay) {
+      const overPct = consumed / opts.overlay.value;
+      parts.push(`<circle cx="${cx}" cy="${cy}" r="${outerR}" fill="none" stroke="${track}" stroke-width="${size * 0.07}" />`);
+      parts.push(`<circle cx="${cx}" cy="${cy}" r="${outerR}" fill="none" stroke="${opts.overlay.color}" stroke-width="${size * 0.07}" stroke-linecap="round" stroke-dasharray="${dash(outerR, overPct)}" transform="rotate(-90 ${cx} ${cy})" />`);
+    }
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${innerR}" fill="none" stroke="${track}" stroke-width="${size * 0.09}" />`);
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${innerR}" fill="none" stroke="${color}" stroke-width="${size * 0.09}" stroke-linecap="round" stroke-dasharray="${dash(innerR, targetPct)}" transform="rotate(-90 ${cx} ${cy})" />`);
+    const consumedLabel = Number.isInteger(consumed) ? String(Math.round(consumed)) : String(Math.round(consumed * 10) / 10);
+    const targetLabel = String(Math.round(target));
+    parts.push(`<text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="${text}" font-size="${size * 0.13}" font-weight="700">${escapeHtml(consumedLabel)}</text>`);
+    parts.push(`<text x="${cx}" y="${cy + size * 0.09}" text-anchor="middle" fill="${muted}" font-size="${size * 0.07}">/ ${escapeHtml(targetLabel)}${escapeHtml(unit)}</text>`);
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  function renderTodayRings(total: Record<string, number>, entryCount: number) {
+    const goal = getGoal();
+    const rings = document.getElementById('tracker-today-rings')!;
+    const empty = document.getElementById('tracker-today-empty')!;
+    rings.innerHTML = '';
+
+    const kcal = Number(total.calories || 0);
+    const overTarget = goal.targetKcal > 0 && kcal > goal.targetKcal + 1;
+    const showMaintain = overTarget && goal.tdee > 0 && Math.abs(goal.tdee - goal.targetKcal) > 15;
+    const kcalColor = ringColor(kcal, goal.targetKcal, '#ef4444', '#f97316');
+
+    const kcalWrap = document.createElement('div');
+    kcalWrap.className = 'text-center';
+    kcalWrap.innerHTML = `
+      ${donutSvg({
+        size: 196,
+        consumed: kcal,
+        target: goal.targetKcal,
+        label: 'Kalorien',
+        unit: ' kcal',
+        color: kcalColor,
+        overlay: { value: goal.tdee, color: '#6366f1', label: 'Erhalt' },
+        showOverlay: showMaintain,
+      })}
+      <div class="text-sm font-medium text-gray-800 dark:text-gray-100 -mt-1">Kalorien</div>
+      <div class="text-[11px] text-gray-500 dark:text-gray-400">
+        Ziel ${goal.targetKcal} kcal
+        ${goal.tdee > 0 ? ` · Erhalt ${goal.tdee} kcal` : ''}
+        ${goal.minKcal > 0 ? ` · Min. ${goal.minKcal} kcal` : ''}
+      </div>
+      ${showMaintain ? '<div class="text-[11px] text-indigo-500 mt-0.5">Ziel überschritten — äußerer Ring: Erhaltungsbedarf</div>' : ''}
+    `;
+    rings.appendChild(kcalWrap);
+
+    const macros = document.createElement('div');
+    macros.className = 'grid grid-cols-3 gap-2 w-full max-w-md';
+    const macroFields = [
+      { key: 'protein', label: 'Eiweiß', target: goal.targetProteinG, unit: ' g', ok: '#0ea5e9' },
+      { key: 'carbohydrates', label: 'Kohlenhydrate', target: goal.targetCarbsG, unit: ' g', ok: '#eab308' },
+      { key: 'fat', label: 'Fett', target: goal.targetFatG, unit: ' g', ok: '#f43f5e' },
+    ] as const;
+    for (const f of macroFields) {
+      const consumed = Number(total[f.key] || 0);
+      const cell = document.createElement('div');
+      cell.className = 'text-center';
+      cell.innerHTML = `
+        ${donutSvg({
+          size: 112,
+          consumed,
+          target: f.target,
+          label: f.label,
+          unit: f.unit,
+          color: ringColor(consumed, f.target, '#ef4444', f.ok),
+          showOverlay: false,
+        })}
+        <div class="text-xs font-medium text-gray-800 dark:text-gray-100 -mt-1">${f.label}</div>
+      `;
+      macros.appendChild(cell);
+    }
+    rings.appendChild(macros);
+
+    if (goal.lowEnergyWarning || goal.clampedToBmr) {
+      const note = document.createElement('p');
+      note.className = 'text-[11px] text-amber-700 dark:text-amber-300 max-w-md text-center';
+      note.textContent = goal.clampedToBmr
+        ? `Ziel liegt am geschätzten Grundumsatz (${goal.minKcal} kcal). Darunter nur mit ärztlicher Begleitung.`
+        : `Kalorienziel unter ${goal.warningLowKcal} kcal — als Warnschwelle, nicht als individuelle Empfehlung.`;
+      rings.appendChild(note);
+    }
+
+    empty.classList.toggle('hidden', entryCount > 0);
+  }
+
+  let currentWeight = 0;
+
+  function getGoal() {
+    const profile = readProfile();
+    return calculateCalorieGoal(profile, currentWeight || (profile.targetWeightKg || 70));
+  }
+
+  function recomputeGoal() {
+    fetch(`/api/tracker/weight?alias=${encodeURIComponent(readAlias())}`)
+      .then((r) => r.ok ? r.json() : { logs: [] })
+      .then((data) => {
+        currentWeight = data?.logs?.[0]?.weightKg || 0;
+        const goal = getGoal();
+        const summary = document.getElementById('tracker-goal-summary');
+        if (summary) {
+          summary.textContent = goal.targetKcal > 0
+            ? `Grundumsatz ~${goal.bmr} · Erhalt ~${goal.tdee} · Ziel ~${goal.targetKcal} kcal · E ${goal.targetProteinG} g · KH ${goal.targetCarbsG} g · F ${goal.targetFatG} g`
+            : '';
+        }
+        refreshDiary().catch(() => undefined);
+      })
+      .catch(() => undefined);
+  }
+
+  document.getElementById('tracker-profile-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const profile: BodyProfile = {
+      heightCm: parseNumOr((document.getElementById('tp-height') as HTMLInputElement).value),
+      ageYears: parseNumOr((document.getElementById('tp-age') as HTMLInputElement).value),
+      gender: ((document.getElementById('tp-gender') as HTMLSelectElement).value as any) || undefined,
+      activity: parseNumOr((document.getElementById('tp-activity') as HTMLSelectElement).value) || 1.55,
+      weeklyChangeKg: parseNumOr((document.getElementById('tp-weekly') as HTMLInputElement).value),
+      targetWeightKg: parseNumOr((document.getElementById('tp-target') as HTMLInputElement).value),
+    };
+    writeProfile(profile);
+    recomputeGoal();
+    renderWeightChart();
+  });
+
+  document.getElementById('tracker-weight-ranges')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement | null)?.closest('[data-weight-range]') as HTMLElement | null;
+    const range = btn?.dataset.weightRange;
+    if (range !== '7d' && range !== '30d' && range !== '90d' && range !== '365d' && range !== 'all') return;
+    writeWeightRange(range);
+    renderWeightChart();
+  });
+
+  document.getElementById('tw-bmi')?.addEventListener('change', (e) => {
+    writeShowBmi((e.target as HTMLInputElement).checked);
+    renderWeightChart();
+  });
+
+  document.getElementById('tracker-weight-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const alias = readAlias();
+    const weightKg = Number((document.getElementById('tw-weight') as HTMLInputElement).value);
+    const dateRaw = (document.getElementById('tw-date') as HTMLInputElement).value;
+    const body: any = { alias, weightKg };
+    const day = dateRaw || toDateInputValue(new Date());
+    body.loggedAt = new Date(`${day}T12:00:00`).toISOString();
+    const res = await fetch('/api/tracker/weight', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      (document.getElementById('tw-weight') as HTMLInputElement).value = '';
+      await refreshWeight();
+    }
+  });
+
+  document.getElementById('tracker-diary-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const alias = readAlias();
+    const label = (document.getElementById('td-label') as HTMLInputElement).value.trim();
+    if (!label) return;
+    const body: any = {
+      alias,
+      source: 'free',
+      label,
+      eatenAt: (document.getElementById('td-time') as HTMLInputElement).value
+        ? new Date((document.getElementById('td-time') as HTMLInputElement).value).toISOString()
+        : defaultEatenAt().toISOString(),
+      nutrition: {
+        calories: parseNumOr((document.getElementById('td-kcal') as HTMLInputElement).value),
+        carbohydrates: parseNumOr((document.getElementById('td-carbs') as HTMLInputElement).value),
+        protein: parseNumOr((document.getElementById('td-protein') as HTMLInputElement).value),
+        fat: parseNumOr((document.getElementById('td-fat') as HTMLInputElement).value),
+      },
+    };
+    const res = await fetch('/api/tracker/diary', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      (document.getElementById('td-label') as HTMLInputElement).value = '';
+      (document.getElementById('td-kcal') as HTMLInputElement).value = '';
+      (document.getElementById('td-carbs') as HTMLInputElement).value = '';
+      (document.getElementById('td-protein') as HTMLInputElement).value = '';
+      (document.getElementById('td-fat') as HTMLInputElement).value = '';
+      const eaten = body.eatenAt ? startOfLocalDay(new Date(body.eatenAt)) : selectedDay;
+      const today = startOfLocalDay(new Date());
+      selectedDay = eaten.getTime() > today.getTime() ? today : eaten;
+      syncDayControls();
+      await refreshDiary();
+    }
+  });
+
+  document.getElementById('tracker-day-picker')?.addEventListener('change', () => {
+    const picker = document.getElementById('tracker-day-picker') as HTMLInputElement;
+    const parsed = picker.value ? startOfLocalDay(new Date(`${picker.value}T00:00:00`)) : startOfLocalDay(new Date());
+    const today = startOfLocalDay(new Date());
+    selectedDay = parsed.getTime() > today.getTime() ? today : parsed;
+    syncDayControls();
+    Promise.all([refreshDiary(), refreshPlans()]).catch(() => undefined);
+  });
+
+  document.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    if (!target) return;
+    const action = target.dataset.action;
+    const id = target.dataset.id;
+    if (action === 'day-prev') {
+      shiftSelectedDay(-1);
+      return;
+    }
+    if (action === 'day-next') {
+      if (!isSelectedToday()) shiftSelectedDay(1);
+      return;
+    }
+    if (action === 'day-today') {
+      selectedDay = startOfLocalDay(new Date());
+      syncDayControls();
+      Promise.all([refreshDiary(), refreshPlans()]).catch(() => undefined);
+      return;
+    }
+    if (action === 'del-weight' && id) {
+      if (!confirm('Gewichtseintrag löschen?')) return;
+      const res = await fetch(`/api/tracker/weight?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) await refreshWeight();
+      return;
+    }
+    if (action === 'del-diary' && id) {
+      if (!confirm('Eintrag aus dem Tagebuch löschen?')) return;
+      const res = await fetch(`/api/tracker/diary?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) await Promise.all([refreshDiary(), refreshPlans()]);
+      return;
+    }
+    if (action === 'mark-eaten' && id) {
+      const alias = readAlias();
+      const row = target.closest('[data-plan-row]') as HTMLElement | null;
+      const portionsInput = row?.querySelector('.eat-portions') as HTMLInputElement | null;
+      const requested = Number(portionsInput?.value || '1');
+      const dataRes = await fetch(`/api/tracker/meal-plans?alias=${encodeURIComponent(alias)}&activeOn=${encodeURIComponent(endOfSelectedDayIso())}`);
+      const plans = dataRes.ok ? (await dataRes.json()).plans as MealPlan[] : [];
+      const plan = plans.find((p) => p.id === id);
+      if (!plan) return;
+      const remaining = Number(plan.servingsRemaining ?? plan.servings);
+      const eatenCount = Math.min(remaining, Math.max(0.5, Number.isFinite(requested) ? requested : 1));
+      if (eatenCount <= 0) return;
+      const live = await fetch(`/api/recipes/${plan.recipeId}/live-nutrition`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productAssignments: plan.productAssignments || {} }),
+      });
+      const liveData = live.ok ? await live.json() : null;
+      const perServing = liveData?.nutrition?.perServing || {};
+      const snapshot = scaleNutrition(perServing, eatenCount);
+      const diaryRes = await fetch('/api/tracker/diary', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alias, source: 'plan', planId: plan.id, recipeId: plan.recipeId,
+          servings: eatenCount, nutrition: snapshot, eatenAt: defaultEatenAt().toISOString(),
+        }),
+      });
+      if (diaryRes.ok) { await Promise.all([refreshPlans(), refreshDiary()]); }
+      return;
+    }
+    if (action === 'plan-to-list' && id) {
+      const recipeId = target.dataset.recipeId;
+      const servings = Number(target.dataset.servings || '0') || undefined;
+      if (!recipeId) return;
+      const alias = readAlias();
+      const dataRes = await fetch(`/api/tracker/meal-plans?alias=${encodeURIComponent(alias)}&activeOn=${encodeURIComponent(endOfSelectedDayIso())}`);
+      const plans = dataRes.ok ? (await dataRes.json()).plans as MealPlan[] : [];
+      const plan = plans.find((p) => p.id === id);
+      const supermarketId = plan?.supermarketId;
+      const listTitle = `Plan ${new Date(plan?.scheduledAt || Date.now()).toLocaleDateString('de-DE')}`;
+      const create = await fetch('/api/shopping-lists', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: listTitle,
+          recipeIds: [recipeId],
+          recipeServingsById: servings ? { [recipeId]: servings } : undefined,
+        }),
+      });
+      if (!create.ok) { alert('Einkaufsliste konnte nicht erstellt werden.'); return; }
+      const list = await create.json();
+      if (supermarketId) {
+        await fetch(`/api/shopping-lists?id=${encodeURIComponent(list.id)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preferredSupermarketId: supermarketId }),
+        });
+      }
+      location.href = `/einkaufsliste/${list.id}`;
+      return;
+    }
+  });
+
+  async function ensureNotificationPermission(): Promise<NotificationPermission> {
+    if (!('Notification' in window)) return 'denied';
+    if (Notification.permission !== 'default') return Notification.permission;
+    try { return await Notification.requestPermission(); } catch { return 'denied'; }
+  }
+
+  async function schedulePlanReminders(plans: MealPlan[]) {
+    if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sw = reg?.active || navigator.serviceWorker.controller;
+    if (!sw) return;
+    for (const plan of plans) {
+      if (plan.status !== 'planned') continue;
+      const leadMin = Number(plan.reminderMinutes ?? 0);
+      const at = new Date(plan.scheduledAt).getTime() - leadMin * 60_000;
+      if (at <= Date.now()) continue;
+      sw.postMessage({
+        type: 'schedule-reminder',
+        reminder: {
+          id: plan.id,
+          at: new Date(at).toISOString(),
+          title: 'Geplante Mahlzeit',
+          body: `In ${leadMin || 'wenigen'} Minuten fällig.`,
+          data: { url: '/tracker' },
+        },
+      });
+    }
+  }
+
+  document.getElementById('tracker-enable-reminders')?.addEventListener('click', async () => {
+    const perm = await ensureNotificationPermission();
+    const btn = document.getElementById('tracker-enable-reminders')!;
+    if (perm === 'granted') {
+      btn.textContent = 'Erinnerungen aktiv';
+      btn.setAttribute('disabled', 'true');
+      await refreshPlans();
+    } else {
+      btn.textContent = 'Erinnerungen blockiert';
+    }
+  });
+
+  function parseNumOr(v: string): number | undefined {
+    if (!v) return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  }
+
+  loadTracker();
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'cookbook.alias' || e.key === PROFILE_KEY) loadTracker();
+  });
+</script>

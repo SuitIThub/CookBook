@@ -455,3 +455,62 @@ export function getUnitVariations(): Array<{ unit: string; variations: string[] 
   }));
 }
 
+/**
+ * Global ml-equivalents for common volume units that are NOT base ml units in
+ * `units.ts` (deliberately kept independent from the base-unit graph — spoons
+ * and cups vary too much per ingredient to be a hard conversion). These are
+ * used ONLY in nutrition/price calculation as a fallback (density path) when
+ * no ingredient-specific `gramsByUnit[unit]` is set.
+ *
+ * Values are conventional Central-European kitchen defaults.
+ */
+export const ML_EQUIVALENTS: Record<string, number> = {
+  TL: 5,
+  EL: 15,
+  Tasse: 250,
+  Becher: 375, // 1.5 Tassen
+  Glas: 375,
+};
+
+/**
+ * Convert an amount + unit to ml, using base-unit conversion first
+ * (l → ml, ml → ml) and falling back to ML_EQUIVALENTS (TL/EL/Tasse/…).
+ * Returns null if there is no ml interpretation for the unit.
+ */
+export function convertToMl(amount: number, unitName: string): number | null {
+  if (!Number.isFinite(amount)) return null;
+  const unit = findUnit(unitName);
+  if (!unit) {
+    if (typeof unitName === 'string' && unitName in ML_EQUIVALENTS) {
+      return amount * ML_EQUIVALENTS[unitName];
+    }
+    return null;
+  }
+  const canonical = unit.name;
+  if (canonical === 'ml') return amount;
+  if (unit.baseUnit === 'ml' && unit.conversionFactor) {
+    return amount * unit.conversionFactor;
+  }
+  if (canonical in ML_EQUIVALENTS) {
+    return amount * ML_EQUIVALENTS[canonical];
+  }
+  return null;
+}
+
+/**
+ * Convert an amount + unit to grams, using base-unit conversion.
+ * Returns null if the unit is not a weight (i.e., cannot be converted to
+ * grams without additional info like density or gramsByUnit).
+ */
+export function convertToGrams(amount: number, unitName: string): number | null {
+  if (!Number.isFinite(amount)) return null;
+  const unit = findUnit(unitName);
+  if (!unit) return null;
+  const canonical = unit.name;
+  if (canonical === 'g') return amount;
+  if (unit.baseUnit === 'g' && unit.conversionFactor) {
+    return amount * unit.conversionFactor;
+  }
+  return null;
+}
+

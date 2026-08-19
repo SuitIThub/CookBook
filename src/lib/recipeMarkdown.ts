@@ -31,9 +31,13 @@ export function metadataToMarkdown(meta: RecipeMetadata): string {
     const n = meta.nutrition;
     const parts: string[] = [];
     if (n.calories != null) parts.push(`${n.calories} kcal`);
-    if (n.carbohydrates != null) parts.push(`${n.carbohydrates} g Kohlenhydrate`);
-    if (n.protein != null) parts.push(`${n.protein} g Protein`);
     if (n.fat != null) parts.push(`${n.fat} g Fett`);
+    if (n.saturatedFat != null) parts.push(`${n.saturatedFat} g gesättigte Fettsäuren`);
+    if (n.carbohydrates != null) parts.push(`${n.carbohydrates} g Kohlenhydrate`);
+    if (n.sugar != null) parts.push(`${n.sugar} g Zucker`);
+    if (n.fiber != null) parts.push(`${n.fiber} g Ballaststoffe`);
+    if (n.protein != null) parts.push(`${n.protein} g Protein`);
+    if (n.salt != null) parts.push(`${n.salt} g Salz`);
     if (parts.length) lines.push(`Nährwerte (pro Portion): ${parts.join(', ')}`);
   }
   return lines.join('\n');

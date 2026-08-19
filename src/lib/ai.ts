@@ -668,7 +668,11 @@ export const RECIPE_VARIANT_FORMAT = {
                 calories: { type: 'number' },
                 carbohydrates: { type: 'number' },
                 protein: { type: 'number' },
-                fat: { type: 'number' }
+                fat: { type: 'number' },
+                saturatedFat: { type: 'number' },
+                sugar: { type: 'number' },
+                fiber: { type: 'number' },
+                salt: { type: 'number' }
               }
             }
           },

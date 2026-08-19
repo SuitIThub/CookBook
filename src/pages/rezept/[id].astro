@@ -9,6 +9,7 @@ import RecipeHeader from '../../components/recipe/details/RecipeHeader.astro';
 import RecipeTags from '../../components/recipe/details/RecipeTags.astro';
 import IngredientsList from '../../components/recipe/details/IngredientsList.astro';
 import PreparationSteps from '../../components/recipe/details/PreparationSteps.astro';
+import LiveNutritionPanel from '../../components/recipe/details/LiveNutritionPanel.astro';
 import EditRecipeForm from '../../components/recipe/edit/EditRecipeForm.astro';
 import RecipeImageGallery from '../../components/recipe/RecipeImageGallery.astro';
 import EditFormActions from '../../components/recipe/edit/EditFormActions.astro';
@@ -145,7 +146,10 @@ try {
       
       <!-- Tags Section -->
       <RecipeTags recipe={recipe} />
-      
+
+      <!-- Live nutrition & price panel (shows if any ingredient has catalogue data or products) -->
+      <LiveNutritionPanel recipe={recipe} />
+
       <!-- Image Gallery -->
       <RecipeImageGallery recipe={recipe} mode="view" />
       

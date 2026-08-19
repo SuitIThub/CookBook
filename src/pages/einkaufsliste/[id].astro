@@ -7,6 +7,7 @@ import GroupingSuggestionModal from '../../components/shopping_list/GroupingSugg
 import ViewNotesModal from '../../components/modals/ViewNotesModal.astro';
 import AddNoteModal from '../../components/modals/AddNoteModal.astro';
 import ImageGalleryModal from '../../components/modals/ImageGalleryModal.astro';
+import ShoppingListMarketPanel from '../../components/shopping_list/ShoppingListMarketPanel.astro';
 
 const { id } = Astro.params;
 
@@ -133,6 +134,11 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
         </p>
       </div>
     </div>
+
+    <ShoppingListMarketPanel
+      listId={shoppingList.id}
+      initialSupermarketId={shoppingList.preferredSupermarketId ?? null}
+    />
 
     <!-- Sammelliste-Erinnerung nach dem ersten Import-Prompt (wenn noch Inhalt vorhanden) -->
     {showTransferBanner && permanentListSummary && (

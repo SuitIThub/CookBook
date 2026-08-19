@@ -1,0 +1,204 @@
+---
+// Barcode / EAN scan modal.
+// Uses the native `BarcodeDetector` where available (Chrome desktop/Android),
+// falls back to manual entry when unavailable. On success it dispatches a
+// `barcode-scanned` CustomEvent with `detail.ean` and closes the modal.
+//
+// The modal is intentionally self-contained so it can be embedded anywhere:
+//   <BarcodeScanModal /> in a page, then `window.openBarcodeScanner()`.
+---
+
+<div
+  id="barcode-scan-modal"
+  class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70]"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="barcode-scan-title"
+>
+  <div class="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 max-w-lg w-full mx-3 sm:mx-4 shadow-xl">
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="barcode-scan-title" class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+        Barcode scannen
+      </h2>
+      <button
+        type="button"
+        id="barcode-scan-close"
+        class="btn-icon text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-white"
+        aria-label="Schließen"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="barcode-scan-status" class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+      Bereit zum Scannen.
+    </div>
+
+    <div class="relative bg-black rounded overflow-hidden aspect-[4/3] mb-3">
+      <video id="barcode-scan-video" playsinline muted autoplay class="w-full h-full object-cover"></video>
+      <div class="absolute inset-4 border-2 border-orange-400/70 rounded pointer-events-none"></div>
+    </div>
+
+    <div class="mb-3">
+      <label class="block text-xs text-gray-600 dark:text-gray-300 mb-1" for="barcode-scan-manual">
+        Oder EAN eintippen
+      </label>
+      <div class="flex gap-2">
+        <input
+          id="barcode-scan-manual"
+          type="text"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          placeholder="z.B. 4000539500001"
+          class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+        <button
+          type="button"
+          id="barcode-scan-manual-submit"
+          class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded"
+        >
+          Übernehmen
+        </button>
+      </div>
+    </div>
+
+    <p id="barcode-scan-note" class="text-[11px] text-gray-500 dark:text-gray-400">
+      Der Kamerazugriff funktioniert nur in HTTPS-Kontexten. Auf iOS ist das
+      Scannen im Browser nicht überall verfügbar – dann manuell eingeben.
+    </p>
+  </div>
+</div>
+
+<script>
+  interface WindowWithScanner extends Window {
+    openBarcodeScanner?: () => void;
+    closeBarcodeScanner?: () => void;
+  }
+
+  interface BarcodeDetectorLike {
+    detect(image: CanvasImageSource): Promise<Array<{ rawValue?: string }>>;
+  }
+
+  const w = window as WindowWithScanner & { BarcodeDetector?: new (opts?: any) => BarcodeDetectorLike };
+
+  let stream: MediaStream | null = null;
+  let detector: BarcodeDetectorLike | null = null;
+  let scanTimer: number | null = null;
+  let isOpen = false;
+
+  const modal = document.getElementById('barcode-scan-modal') as HTMLElement | null;
+  const video = document.getElementById('barcode-scan-video') as HTMLVideoElement | null;
+  const status = document.getElementById('barcode-scan-status') as HTMLElement | null;
+  const closeBtn = document.getElementById('barcode-scan-close') as HTMLButtonElement | null;
+  const manualInput = document.getElementById('barcode-scan-manual') as HTMLInputElement | null;
+  const manualBtn = document.getElementById('barcode-scan-manual-submit') as HTMLButtonElement | null;
+
+  function setStatus(msg: string) {
+    if (status) status.textContent = msg;
+  }
+
+  async function open() {
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    isOpen = true;
+    setStatus('Kamera wird gestartet …');
+
+    if (!w.BarcodeDetector) {
+      setStatus('Barcode-Erkennung nicht verfügbar. Bitte EAN manuell eingeben.');
+    } else if (!detector) {
+      try {
+        detector = new w.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+      } catch (error) {
+        detector = null;
+        setStatus('Barcode-Detektor konnte nicht initialisiert werden.');
+      }
+    }
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+      });
+      if (video) {
+        video.srcObject = stream;
+        await video.play().catch(() => undefined);
+      }
+      setStatus(detector ? 'Kamera aktiv. Barcode ins Fenster halten.' : 'Kamera aktiv. Manuelle EAN-Eingabe unten.');
+      if (detector) startScanLoop();
+    } catch (error) {
+      setStatus('Kamera nicht verfügbar. Bitte EAN manuell eingeben.');
+    }
+  }
+
+  function startScanLoop() {
+    if (!detector || !video) return;
+    stopScanLoop();
+    const tick = async () => {
+      if (!isOpen || !detector || !video || video.readyState < 2) return;
+      try {
+        const barcodes = await detector.detect(video);
+        if (barcodes && barcodes.length > 0) {
+          const raw = barcodes[0]?.rawValue;
+          if (raw && /^\d{6,14}$/.test(raw)) {
+            emit(raw);
+            return;
+          }
+        }
+      } catch (error) {
+        // ignore transient detection errors
+      }
+      scanTimer = window.setTimeout(tick, 250);
+    };
+    scanTimer = window.setTimeout(tick, 250);
+  }
+
+  function stopScanLoop() {
+    if (scanTimer != null) {
+      window.clearTimeout(scanTimer);
+      scanTimer = null;
+    }
+  }
+
+  function close() {
+    if (!modal) return;
+    modal.classList.add('hidden');
+    isOpen = false;
+    stopScanLoop();
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+    }
+    if (video) video.srcObject = null;
+  }
+
+  function emit(ean: string) {
+    window.dispatchEvent(new CustomEvent('barcode-scanned', { detail: { ean } }));
+    close();
+  }
+
+  closeBtn?.addEventListener('click', close);
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) close();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isOpen) close();
+  });
+  manualBtn?.addEventListener('click', () => {
+    const value = (manualInput?.value ?? '').trim();
+    if (!/^\d{6,14}$/.test(value)) {
+      setStatus('Bitte 6–14 Ziffern eintippen.');
+      return;
+    }
+    emit(value);
+  });
+  manualInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      manualBtn?.click();
+    }
+  });
+
+  w.openBarcodeScanner = open;
+  w.closeBarcodeScanner = close;
+</script>

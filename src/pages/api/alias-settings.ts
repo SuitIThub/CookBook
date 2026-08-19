@@ -8,6 +8,10 @@ const ALLOWED_KEYS = new Set([
   'cookbook.ai.settings',
   'cookbook.recipes.layout',
   'cookbook.recipes.favorites',
+  // Tracker profile: height/gender/age/activity/target — health data, but
+  // stored per-alias by design. The alias modal + tracker page surface a
+  // privacy warning to make expectations explicit.
+  'cookbook.tracker.profile',
 ]);
 
 function normalizeAlias(value: unknown): string {

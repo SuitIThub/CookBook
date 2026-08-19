@@ -59,6 +59,13 @@ try {
           </div>
           <div class="flex items-center space-x-2">
             <button
+              class="catalogue-btn px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors text-sm font-medium"
+              data-ingredient-name={ingredient.name}
+              title="Nährwerte, Dichte, Gramm pro Einheit"
+            >
+              Nährwerte
+            </button>
+            <button
               class="recipes-btn px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm font-medium"
               data-ingredient-name={ingredient.name}
             >
@@ -189,17 +196,32 @@ try {
     let allIngredients: Array<{ name: string; usageCount: number }> = [];
     let currentOldIngredient: string = '';
 
-    // Load ingredients on page load
     document.addEventListener('DOMContentLoaded', async () => {
       await loadIngredients();
       setupSearch();
       setupRecipesButtons();
       setupRenameButtons();
       setupUnifyButtons();
+      setupCatalogueButtons();
       setupRenameModal();
       setupModal();
       setupMergeSuggestionsButton();
+      const params = new URLSearchParams(location.search);
+      const autoOpen = params.get('openCatalogue');
+      if (autoOpen) {
+        await (window as any).openCatalogueModal?.(autoOpen);
+      }
     });
+
+    function setupCatalogueButtons() {
+      const btns = document.querySelectorAll('.catalogue-btn');
+      btns.forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          const name = (e.currentTarget as HTMLElement).getAttribute('data-ingredient-name') || '';
+          await (window as any).openCatalogueModal?.(name);
+        });
+      });
+    }
 
     async function loadIngredients() {
       try {

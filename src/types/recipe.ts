@@ -16,6 +16,10 @@ export interface NutritionData {
   carbohydrates?: number; // grams per serving
   protein?: number; // grams per serving
   fat?: number; // grams per serving
+  saturatedFat?: number; // grams per serving (saturated fatty acids)
+  sugar?: number; // grams per serving (sugars, of which carbohydrates)
+  fiber?: number; // grams per serving
+  salt?: number; // grams per serving
 }
 
 export interface Quantity {
@@ -41,6 +45,11 @@ export interface Ingredient {
   isAlternativeDefault?: boolean;
   alternativeGroupLabel?: string; // Optional label for the alternative set (e.g. "Mehl-Variante")
   visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
+  // Product-driven visibility: shown only if one of the referenced products is
+  // currently assigned to any ingredient in the recipe (runtime view state).
+  // Kept as a separate axis so alternatives.ts / shopping list / cooking mode
+  // don't need to know about the product selection.
+  visibleWhenProducts?: ProductVisibilityCondition;
 }
 
 export interface IngredientGroup {
@@ -48,6 +57,12 @@ export interface IngredientGroup {
   title?: string;
   ingredients: (Ingredient | IngredientGroup)[];
   visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
+  visibleWhenProducts?: ProductVisibilityCondition; // Optional product-driven visibility
+}
+
+// Runtime product-selection visibility (view-only, not affecting shopping list).
+export interface ProductVisibilityCondition {
+  productIds: string[];
 }
 
 export interface IntermediateIngredient {
@@ -70,6 +85,7 @@ export interface PreparationStep {
   timeInSeconds?: number;
   timer?: number; // Timer duration in minutes
   visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
+  visibleWhenProducts?: ProductVisibilityCondition; // Optional product-driven visibility
 }
 
 export interface PreparationGroup {
@@ -77,6 +93,7 @@ export interface PreparationGroup {
   title?: string;
   steps: (PreparationStep | PreparationGroup)[];
   visibleWhen?: VisibilityCondition; // Optional dependency on a selected alternative option
+  visibleWhenProducts?: ProductVisibilityCondition; // Optional product-driven visibility
 }
 
 export interface RecipeImage {
@@ -118,6 +135,8 @@ export interface ShoppingListItem {
   note?: string; // Optional: rich text note for this product (HTML from TinyMCE)
   alternativeGroupId?: string; // Optional: marks item as belonging to an alternative set
   alternativeOptionId?: string; // Optional: the selected option (Ingredient.id) this item came from
+  productId?: string; // Optional: linked catalogue product for price/nutrition
+  estimatedPrice?: number; // Optional: estimated price for this item (in the list's currency, EUR)
 }
 
 // Persisted alternative selection for a recipe within a shopping list.
@@ -149,6 +168,7 @@ export interface ShoppingList {
   permanentType?: number;
   isPermanent?: boolean; // Convenience flag: true when permanentType > 0
   hasSeenGlobalTemplatePrompt?: boolean; // First-open import modal seen (Sammelliste + Vorlage)
+  preferredSupermarketId?: string; // Optional: supermarket used to look up product prices
   createdAt: Date;
   updatedAt: Date;
 }

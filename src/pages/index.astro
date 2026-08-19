@@ -47,7 +47,7 @@ import AliasSettingsModal from '../components/modals/AliasSettingsModal.astro';
     </button>
     <button
       type="button"
-      id="ai-settings-open-btn"
+      data-open-ai-settings
       class="btn-icon text-gray-700 dark:text-gray-300 hover:text-indigo-500 dark:hover:text-indigo-400"
       aria-label="KI-Einstellungen öffnen"
       title="KI-Einstellungen"
@@ -105,3 +105,16 @@ import AliasSettingsModal from '../components/modals/AliasSettingsModal.astro';
   <AISettingsModal />
   <AliasSettingsModal />
 </HomeLayout>
+
+<script is:inline>
+  // When an alias is set, the homepage automatically forwards to /tracker.
+  // This keeps the tracker the natural landing page for people who use the
+  // calorie feature, while keeping the welcome page for unauthenticated
+  // (alias-less) sessions.
+  try {
+    var alias = (localStorage.getItem('cookbook.alias') || '').trim();
+    if (alias && !location.search.includes('welcome=1')) {
+      location.replace('/tracker');
+    }
+  } catch (e) {}
+</script>

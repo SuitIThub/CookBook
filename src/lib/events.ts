@@ -47,4 +47,11 @@ export const EVENTS = {
   GLOBAL_TIMER_UPDATED: 'global-timer-updated',
   GLOBAL_TIMER_DELETED: 'global-timer-deleted',
   ALIAS_SETTINGS_UPDATED: 'alias-settings-updated',
-} as const; 
+  PRODUCT_UPSERTED: 'product-upserted',
+  PRODUCT_DELETED: 'product-deleted',
+  SUPERMARKET_UPSERTED: 'supermarket-upserted',
+  INGREDIENT_UPDATED: 'ingredient-updated',
+  MEAL_PLAN_UPSERTED: 'meal-plan-upserted',
+  DIARY_UPSERTED: 'diary-upserted',
+  WEIGHT_LOGGED: 'weight-logged',
+} as const;
