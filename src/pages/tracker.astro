@@ -47,7 +47,7 @@ import Layout from '../layouts/Layout.astro';
         <h3 class="text-sm font-medium text-gray-800 dark:text-gray-200 mt-4 mb-2">Gegessen an diesem Tag</h3>
         <ul id="tracker-day-log" class="text-sm divide-y divide-gray-100 dark:divide-gray-700"></ul>
         <div id="tracker-today-empty" class="hidden text-xs text-gray-500 mt-2">
-          Noch keine Einträge — streiche Meal-Prep-Portionen ab oder trage etwas frei ein.
+          Noch keine Einträge — streiche Meal-Prep-Portionen ab oder trage ein Produkt / etwas Freies ein.
         </div>
       </section>
 
@@ -74,27 +74,73 @@ import Layout from '../layouts/Layout.astro';
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Freier Eintrag</h2>
             <span class="text-gray-400 text-sm transition-transform" aria-hidden="true">▼</span>
           </summary>
-          <form id="tracker-diary-form" class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm items-end mt-3">
-            <label class="block sm:col-span-2">Bezeichnung
-              <input id="td-label" required placeholder="z.B. Kaffee mit Milch" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
-            </label>
-            <label class="block">kcal
-              <input id="td-kcal" type="number" step="1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
-            </label>
-            <label class="block">Datum/Zeit
-              <input id="td-time" type="datetime-local" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
-            </label>
-            <label class="block">KH (g)
-              <input id="td-carbs" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
-            </label>
-            <label class="block">Eiweiß (g)
-              <input id="td-protein" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
-            </label>
-            <label class="block">Fett (g)
-              <input id="td-fat" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
-            </label>
-            <div class="sm:col-span-1 flex justify-end">
-              <button type="submit" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">Eintragen</button>
+          <form id="tracker-diary-form" class="space-y-3 mt-3">
+            <div>
+              <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Produkt (Register, Barcode oder Open Food Facts)</div>
+              <div class="flex gap-2 flex-wrap">
+                <input
+                  id="td-product-search"
+                  type="search"
+                  placeholder="Name, Marke oder EAN …"
+                  class="flex-1 min-w-[12rem] px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"
+                />
+                <button type="button" id="td-off-search" class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
+                  Online suchen
+                </button>
+                <button type="button" id="td-scan" class="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">
+                  Barcode scannen
+                </button>
+              </div>
+              <p id="td-product-status" class="text-[11px] text-gray-500 mt-1"></p>
+              <div id="td-product-results" class="mt-2 space-y-1 max-h-56 overflow-y-auto"></div>
+              <button
+                type="button"
+                id="td-product-more"
+                class="hidden mt-2 w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"
+              >
+                Weitere Ergebnisse laden
+              </button>
+              <div id="td-product-selected" class="hidden mt-2 p-2 border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 rounded"></div>
+            </div>
+
+            <div id="td-amount-wrap" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+              <label class="block">Menge
+                <input id="td-amount" type="number" step="0.1" min="0" value="100" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+              </label>
+              <label class="block">Einheit
+                <select id="td-unit" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900">
+                  <option value="g">Gramm</option>
+                </select>
+              </label>
+              <p id="td-preview" class="text-xs text-gray-600 dark:text-gray-300 self-end pb-1"></p>
+            </div>
+
+            <p class="text-[11px] text-gray-500">
+              Ohne Produkt wie bisher: Bezeichnung und kcal von Hand. Mit Produkt werden die Nährwerte aus 100&nbsp;g und der Menge berechnet — Portionsangaben (z.&nbsp;B. Scheibe) nur, wenn Open Food Facts sie hinterlegt hat.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm items-end">
+              <label class="block sm:col-span-2">Bezeichnung
+                <input id="td-label" required placeholder="z.B. Kaffee mit Milch" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+              </label>
+              <label class="block">kcal
+                <input id="td-kcal" type="number" step="1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+              </label>
+              <label class="block">Datum/Zeit
+                <input id="td-time" type="datetime-local" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+              </label>
+              <label class="block">KH (g)
+                <input id="td-carbs" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+              </label>
+              <label class="block">Eiweiß (g)
+                <input id="td-protein" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+              </label>
+              <label class="block">Fett (g)
+                <input id="td-fat" type="number" step="0.1" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+              </label>
+              <div class="sm:col-span-1 flex justify-end">
+                <button type="submit" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">Eintragen</button>
+              </div>
             </div>
           </form>
         </details>
@@ -185,7 +231,9 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
   import { calculateCalorieGoal, addNutrition, scaleNutrition, calculateBmi, weightForBmi, bmiCategoryLabel, BMI_BANDS, BMI_BOUNDARIES } from '../lib/calorieGoal';
+  import { lookupGramsPerUnit, servingUnitName } from '../lib/units';
   import { NUTRITION_FIELDS } from '../lib/nutrition';
+  import type { NutritionData } from '../types/recipe';
   import type { BodyProfile, DiaryEntry, MealPlan, WeightLog } from '../types/tracker';
 
   const PROFILE_KEY = 'cookbook.tracker.profile';
@@ -1053,11 +1101,486 @@ import Layout from '../layouts/Layout.astro';
     }
   });
 
+  type PickedProduct = {
+    id?: string;
+    ean?: string;
+    name: string;
+    brand?: string;
+    netGrams?: number;
+    servingGrams?: number;
+    servingLabel?: string;
+    packageLabel?: string;
+    nutritionPer100g?: NutritionData;
+    gramsByUnit?: Record<string, number>;
+    source: 'local' | 'openfoodfacts';
+    offCode?: string;
+    imageUrl?: string;
+  };
+
+  let pickedProduct: PickedProduct | null = null;
+  let tdLocalTimer: number | undefined;
+  let tdOffQuery = '';
+  let tdOffPage = 0;
+  let tdOffHasMore = false;
+  let tdResultPicks: PickedProduct[] = [];
+
+  function tdStatus(text: string): void {
+    const el = document.getElementById('td-product-status');
+    if (el) el.textContent = text;
+  }
+
+  function tdSetMoreVisible(visible: boolean, loading = false): void {
+    const btn = document.getElementById('td-product-more') as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.classList.toggle('hidden', !visible);
+    btn.toggleAttribute('disabled', loading);
+    btn.textContent = loading ? 'Weitere Ergebnisse werden geladen …' : 'Weitere Ergebnisse laden';
+  }
+
+  function displayProductName(p: PickedProduct): string {
+    return p.brand ? `${p.brand} – ${p.name}` : p.name;
+  }
+
+  function gramsByUnitFromOff(p: any): Record<string, number> | undefined {
+    if (p.gramsByUnit && typeof p.gramsByUnit === 'object') return { ...p.gramsByUnit };
+    const serving = Number(p.servingGrams);
+    if (!Number.isFinite(serving) || serving <= 0) return undefined;
+    return { [servingUnitName(p.servingLabel)]: serving };
+  }
+
+  function asLocalPick(p: any): PickedProduct {
+    return {
+      id: p.id,
+      ean: p.ean || undefined,
+      name: p.name || (p.ean ? `Produkt ${p.ean}` : 'Produkt'),
+      brand: p.brand || undefined,
+      netGrams: Number.isFinite(Number(p.netGrams)) ? Number(p.netGrams) : undefined,
+      packageLabel: p.packageLabel || undefined,
+      servingGrams: Number.isFinite(Number(p.servingGrams)) ? Number(p.servingGrams) : undefined,
+      servingLabel: p.servingLabel || undefined,
+      nutritionPer100g: p.nutritionPer100g || undefined,
+      gramsByUnit: p.gramsByUnit && typeof p.gramsByUnit === 'object' ? { ...p.gramsByUnit } : undefined,
+      source: 'local',
+      offCode: p.offCode || undefined,
+      imageUrl: p.imageUrl || undefined,
+    };
+  }
+
+  function asOffPick(p: any): PickedProduct {
+    return {
+      ean: p.ean || undefined,
+      name: p.name || (p.ean ? `Produkt ${p.ean}` : 'Produkt'),
+      brand: p.brand || undefined,
+      netGrams: Number.isFinite(Number(p.netGrams)) ? Number(p.netGrams) : undefined,
+      packageLabel: p.packageLabel || undefined,
+      servingGrams: Number.isFinite(Number(p.servingGrams)) ? Number(p.servingGrams) : undefined,
+      servingLabel: p.servingLabel || undefined,
+      nutritionPer100g: p.nutritionPer100g || undefined,
+      gramsByUnit: gramsByUnitFromOff(p),
+      source: 'openfoodfacts',
+      offCode: p.offCode || undefined,
+      imageUrl: p.imageUrl || undefined,
+    };
+  }
+
+  function productMetaLine(p: PickedProduct): string {
+    const parts: string[] = [];
+    if (p.brand) parts.push(p.brand);
+    if (p.packageLabel) parts.push(p.packageLabel);
+    else if (p.netGrams) parts.push(`${p.netGrams} g Packung`);
+    if (p.servingGrams) {
+      const slice = p.servingLabel ? `${p.servingLabel}` : `Portion ${p.servingGrams} g`;
+      parts.push(slice);
+    }
+    const kcal = p.nutritionPer100g?.calories;
+    if (kcal != null) parts.push(`${Math.round(kcal)} kcal / 100 g`);
+    return parts.join(' · ');
+  }
+
+  function renderProductRow(p: PickedProduct, origin: 'lokal' | 'OFF'): string {
+    const originClass = origin === 'lokal'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : 'text-blue-600 dark:text-blue-400';
+    const pickIndex = tdResultPicks.length;
+    tdResultPicks.push(p);
+    const meta = productMetaLine(p);
+    return `
+      <div class="flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded">
+        <div class="flex items-start gap-2 min-w-0">
+          <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+            ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white break-words">${escapeHtml(p.name)}</div>
+            <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+              <span class="uppercase font-semibold ${originClass} shrink-0">${origin}</span>
+              ${meta ? `<span class="break-words min-w-0">${escapeHtml(meta)}</span>` : ''}
+              ${p.ean ? `<span class="font-mono text-gray-400">EAN ${escapeHtml(p.ean)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <button type="button" data-pick-index="${pickIndex}" class="text-xs px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded w-full not-mobile:w-auto">Übernehmen</button>
+      </div>`;
+  }
+
+  function fillUnitSelect(p: PickedProduct): void {
+    const select = document.getElementById('td-unit') as HTMLSelectElement | null;
+    if (!select) return;
+    const previous = select.value;
+    const options: string[] = ['<option value="g">Gramm</option>'];
+    if (p.netGrams && p.netGrams > 0) {
+      const pack = p.packageLabel ? `Packung (${p.packageLabel})` : `Packung (${p.netGrams} g)`;
+      options.push(`<option value="pack">${escapeHtml(pack)}</option>`);
+    }
+    if (p.gramsByUnit) {
+      for (const [unit, grams] of Object.entries(p.gramsByUnit)) {
+        if (!Number.isFinite(grams) || grams <= 0) continue;
+        options.push(`<option value="u:${escapeHtml(unit)}">${escapeHtml(unit)} (${grams} g)</option>`);
+      }
+    }
+    const servingAlreadyMapped = lookupGramsPerUnit(p.gramsByUnit, servingUnitName(p.servingLabel)) != null
+      || lookupGramsPerUnit(p.gramsByUnit, 'Portion') != null;
+    if (p.servingGrams && p.servingGrams > 0 && !servingAlreadyMapped) {
+      const label = p.servingLabel
+        ? `Portion (${p.servingLabel})`
+        : `Portion (${p.servingGrams} g)`;
+      options.push(`<option value="serving">${escapeHtml(label)}</option>`);
+    }
+    select.innerHTML = options.join('');
+
+    const keyForPreferred = (name: string): string | undefined => {
+      if (!p.gramsByUnit || lookupGramsPerUnit(p.gramsByUnit, name) == null) return undefined;
+      return Object.keys(p.gramsByUnit).find((key) => lookupGramsPerUnit({ [key]: p.gramsByUnit![key] }, name) != null);
+    };
+    let pickedUnit = 'g';
+    for (const name of ['Scheibe', 'Stück', 'Portion']) {
+      const key = keyForPreferred(name);
+      if (key) { pickedUnit = `u:${key}`; break; }
+    }
+    if (pickedUnit === 'g' && p.gramsByUnit) {
+      const first = Object.keys(p.gramsByUnit).find((key) => Number(p.gramsByUnit![key]) > 0);
+      if (first) pickedUnit = `u:${first}`;
+    }
+    if (pickedUnit === 'g' && p.servingGrams && !servingAlreadyMapped) pickedUnit = 'serving';
+    const values = Array.from(select.options).map((o) => o.value);
+    if (previous && values.includes(previous)) select.value = previous;
+    else select.value = values.includes(pickedUnit) ? pickedUnit : 'g';
+  }
+
+  function resolvePickedGrams(): number | undefined {
+    if (!pickedProduct) return undefined;
+    const amount = Number((document.getElementById('td-amount') as HTMLInputElement | null)?.value);
+    if (!Number.isFinite(amount) || amount <= 0) return undefined;
+    const unit = (document.getElementById('td-unit') as HTMLSelectElement | null)?.value || 'g';
+    if (unit === 'pack') {
+      const net = pickedProduct.netGrams;
+      return net && net > 0 ? amount * net : undefined;
+    }
+    if (unit === 'serving') {
+      const serving = pickedProduct.servingGrams;
+      return serving && serving > 0 ? amount * serving : undefined;
+    }
+    if (unit.startsWith('u:')) {
+      const key = unit.slice(2);
+      const per = pickedProduct.gramsByUnit?.[key] ?? lookupGramsPerUnit(pickedProduct.gramsByUnit, key);
+      return per && per > 0 ? amount * per : undefined;
+    }
+    return amount;
+  }
+
+  function formatNutriField(n: number | undefined, integers = false): string {
+    if (n == null || !Number.isFinite(n)) return '';
+    return integers ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
+  }
+
+  function applyScaledNutrition(): void {
+    const grams = resolvePickedGrams();
+    const preview = document.getElementById('td-preview');
+    if (!pickedProduct) {
+      if (preview) preview.textContent = '';
+      return;
+    }
+    const per100 = pickedProduct.nutritionPer100g || {};
+    const scaled = grams != null ? scaleNutrition(per100, grams / 100) : {};
+    (document.getElementById('td-kcal') as HTMLInputElement).value = formatNutriField(scaled.calories, true);
+    (document.getElementById('td-carbs') as HTMLInputElement).value = formatNutriField(scaled.carbohydrates);
+    (document.getElementById('td-protein') as HTMLInputElement).value = formatNutriField(scaled.protein);
+    (document.getElementById('td-fat') as HTMLInputElement).value = formatNutriField(scaled.fat);
+    if (preview) {
+      if (grams == null) {
+        preview.textContent = 'Menge angeben';
+      } else {
+        const kcal = scaled.calories != null ? `${Math.round(scaled.calories)} kcal` : 'ohne kcal';
+        preview.textContent = `≈ ${kcal} für ${Math.round(grams * 10) / 10} g`;
+      }
+    }
+  }
+
+  function selectPickedProduct(p: PickedProduct): void {
+    pickedProduct = p;
+    const wrap = document.getElementById('td-amount-wrap');
+    const selected = document.getElementById('td-product-selected');
+    const results = document.getElementById('td-product-results');
+    wrap?.classList.remove('hidden');
+    if (results) results.innerHTML = '';
+    tdResultPicks = [];
+    tdSetMoreVisible(false);
+    const meta = productMetaLine(p);
+    if (selected) {
+      selected.classList.remove('hidden');
+      selected.innerHTML = `
+        <div class="flex items-start gap-2">
+          <div class="w-12 h-12 flex-shrink-0 bg-white dark:bg-gray-800 rounded overflow-hidden flex items-center justify-center">
+            ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" />` : '<span class="text-lg">🥫</span>'}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(displayProductName(p))}</div>
+            <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">${escapeHtml(meta || (p.source === 'local' ? 'lokales Produkt' : 'Open Food Facts'))}</div>
+          </div>
+          <button type="button" id="td-product-clear" class="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Entfernen</button>
+        </div>`;
+      selected.querySelector('#td-product-clear')?.addEventListener('click', clearPickedProduct);
+    }
+    const labelEl = document.getElementById('td-label') as HTMLInputElement;
+    if (labelEl) labelEl.value = displayProductName(p);
+    fillUnitSelect(p);
+    const amountEl = document.getElementById('td-amount') as HTMLInputElement;
+    const unitEl = document.getElementById('td-unit') as HTMLSelectElement;
+    const unitValue = unitEl.value;
+    if (unitValue.startsWith('u:') || unitValue === 'serving' || unitValue === 'pack') {
+      amountEl.value = '1';
+    } else {
+      amountEl.value = '100';
+    }
+    tdStatus(p.source === 'local' ? 'Produkt aus dem Register übernommen.' : 'Open-Food-Facts-Produkt übernommen.');
+    applyScaledNutrition();
+  }
+
+  function clearPickedProduct(): void {
+    pickedProduct = null;
+    document.getElementById('td-amount-wrap')?.classList.add('hidden');
+    const selected = document.getElementById('td-product-selected');
+    if (selected) {
+      selected.classList.add('hidden');
+      selected.innerHTML = '';
+    }
+    (document.getElementById('td-kcal') as HTMLInputElement).value = '';
+    (document.getElementById('td-carbs') as HTMLInputElement).value = '';
+    (document.getElementById('td-protein') as HTMLInputElement).value = '';
+    (document.getElementById('td-fat') as HTMLInputElement).value = '';
+    const preview = document.getElementById('td-preview');
+    if (preview) preview.textContent = '';
+    tdStatus('');
+  }
+
+  function resetDiaryForm(): void {
+    clearPickedProduct();
+    (document.getElementById('td-label') as HTMLInputElement).value = '';
+    (document.getElementById('td-product-search') as HTMLInputElement).value = '';
+    const results = document.getElementById('td-product-results');
+    if (results) results.innerHTML = '';
+    tdResultPicks = [];
+    tdSetMoreVisible(false);
+  }
+
+  function renderLocalResults(products: any[]): void {
+    const results = document.getElementById('td-product-results');
+    if (!results) return;
+    results.innerHTML = '';
+    tdResultPicks = [];
+    if (!products.length) {
+      results.innerHTML = '<p class="text-[11px] text-gray-500">Keine lokalen Treffer — „Online suchen“ für Open Food Facts.</p>';
+      return;
+    }
+    for (const raw of products) {
+      results.insertAdjacentHTML('beforeend', renderProductRow(asLocalPick(raw), 'lokal'));
+    }
+  }
+
+  async function searchLocalProducts(query: string): Promise<void> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      const results = document.getElementById('td-product-results');
+      if (results) results.innerHTML = '';
+      tdResultPicks = [];
+      tdSetMoreVisible(false);
+      tdStatus('');
+      return;
+    }
+    tdStatus('Lokales Register …');
+    try {
+      const res = await fetch(`/api/products?q=${encodeURIComponent(trimmed)}&limit=12`);
+      if (!res.ok) throw new Error('search failed');
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      renderLocalResults(list);
+      tdStatus(list.length ? `${list.length} Treffer im Register` : 'Nichts im Register — optional online suchen.');
+    } catch {
+      tdStatus('Lokale Suche fehlgeschlagen.');
+    }
+  }
+
+  async function searchOffProducts(append = false): Promise<void> {
+    const input = document.getElementById('td-product-search') as HTMLInputElement | null;
+    const results = document.getElementById('td-product-results');
+    if (!input || !results) return;
+    const query = input.value.trim();
+    if (!query) return;
+    if (/^\d{6,14}$/.test(query)) {
+      await lookupEan(query);
+      return;
+    }
+    if (!append) {
+      tdOffQuery = query;
+      tdOffPage = 0;
+      results.innerHTML = '';
+      tdResultPicks = [];
+    } else if (query !== tdOffQuery) {
+      return searchOffProducts(false);
+    }
+    const nextPage = append ? tdOffPage + 1 : 1;
+    tdStatus(append ? 'Weitere Ergebnisse werden geladen …' : 'Open Food Facts …');
+    tdSetMoreVisible(append && tdOffHasMore, true);
+    try {
+      const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}&page=${nextPage}&pageSize=20`);
+      if (!res.ok) throw new Error('search failed');
+      const data = await res.json();
+      if (data?.error && !Array.isArray(data.results)) {
+        tdStatus(String(data.error));
+        tdSetMoreVisible(false);
+        return;
+      }
+      const localHits = append ? [] : (Array.isArray(data.local) ? data.local : []);
+      const remoteHits = Array.isArray(data.results) ? data.results : [];
+      if (!append) {
+        for (const raw of localHits) {
+          results.insertAdjacentHTML('beforeend', renderProductRow(asLocalPick(raw), 'lokal'));
+        }
+      }
+      for (const raw of remoteHits) {
+        results.insertAdjacentHTML('beforeend', renderProductRow(asOffPick(raw), 'OFF'));
+      }
+      tdOffPage = Number(data.page) || nextPage;
+      tdOffHasMore = Boolean(data.hasMore) && remoteHits.length > 0;
+      const localCount = localHits.length;
+      const remoteCount = remoteHits.length;
+      if (!append && localCount === 0 && remoteCount === 0) {
+        tdStatus(data.error ? String(data.error) : 'Keine Treffer.');
+      } else {
+        tdStatus(`${localCount ? `${localCount} lokal` : ''}${localCount && remoteCount ? ' · ' : ''}${remoteCount ? `${remoteCount} Open Food Facts` : ''}${tdOffHasMore ? ' …' : ''}`.trim() || 'Keine Treffer.');
+      }
+      tdSetMoreVisible(tdOffHasMore);
+    } catch {
+      tdStatus('Online-Suche fehlgeschlagen. Bitte später erneut versuchen.');
+      tdSetMoreVisible(append && tdOffHasMore);
+    }
+  }
+
+  async function lookupEan(ean: string): Promise<void> {
+    const results = document.getElementById('td-product-results');
+    tdStatus(`Barcode ${ean}: Produkt wird geholt …`);
+    tdSetMoreVisible(false);
+    try {
+      const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(ean)}`);
+      if (!res.ok) throw new Error('lookup failed');
+      const data = await res.json();
+      if (data.source === 'local' && data.product) {
+        if (results) results.innerHTML = '';
+        tdResultPicks = [];
+        selectPickedProduct(asLocalPick(data.product));
+        return;
+      }
+      if (data.source === 'openfoodfacts' && data.product) {
+        if (results) results.innerHTML = '';
+        tdResultPicks = [];
+        selectPickedProduct(asOffPick(data.product));
+        return;
+      }
+      tdStatus(`Kein Produkt zu EAN ${ean} gefunden.`);
+    } catch {
+      tdStatus('Barcode-Lookup fehlgeschlagen.');
+    }
+  }
+
+  async function ensureSavedProduct(p: PickedProduct): Promise<string | undefined> {
+    if (p.id) return p.id;
+    try {
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ean: p.ean ?? null,
+          name: p.name,
+          brand: p.brand ?? null,
+          netGrams: p.netGrams ?? null,
+          packageLabel: p.packageLabel ?? null,
+          imageUrl: p.imageUrl ?? null,
+          source: p.source === 'openfoodfacts' ? 'openfoodfacts' : 'manual',
+          offCode: p.offCode ?? null,
+          nutritionPer100g: p.nutritionPer100g ?? null,
+        }),
+      });
+      if (!res.ok) return undefined;
+      const created = await res.json();
+      if (created?.id) p.id = created.id;
+      return created?.id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  document.getElementById('td-product-search')?.addEventListener('input', () => {
+    const query = (document.getElementById('td-product-search') as HTMLInputElement).value;
+    window.clearTimeout(tdLocalTimer);
+    tdLocalTimer = window.setTimeout(() => { searchLocalProducts(query); }, 250);
+  });
+  document.getElementById('td-product-search')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    searchOffProducts(false);
+  });
+  document.getElementById('td-off-search')?.addEventListener('click', () => searchOffProducts(false));
+  document.getElementById('td-product-more')?.addEventListener('click', () => searchOffProducts(true));
+  document.getElementById('td-scan')?.addEventListener('click', () => {
+    (window as any).__cbTrackerScanTarget = true;
+    (window as any).openBarcodeScanner?.();
+  });
+  document.getElementById('td-amount')?.addEventListener('input', applyScaledNutrition);
+  document.getElementById('td-unit')?.addEventListener('change', () => {
+    const unit = (document.getElementById('td-unit') as HTMLSelectElement).value;
+    const amount = document.getElementById('td-amount') as HTMLInputElement;
+    if (unit === 'g' && (amount.value === '1' || amount.value === '')) amount.value = '100';
+    if ((unit === 'pack' || unit === 'serving' || unit.startsWith('u:')) && (amount.value === '100' || amount.value === '')) amount.value = '1';
+    applyScaledNutrition();
+  });
+  document.getElementById('td-product-results')?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const btn = target.closest('button[data-pick-index]') as HTMLButtonElement | null;
+    if (btn?.dataset.pickIndex == null) return;
+    const picked = tdResultPicks[Number(btn.dataset.pickIndex)];
+    if (picked) selectPickedProduct(picked);
+  });
+  window.addEventListener('barcode-scanned', (event) => {
+    if (!(window as any).__cbTrackerScanTarget) return;
+    (window as any).__cbTrackerScanTarget = false;
+    const ean = (event as CustomEvent).detail?.ean?.trim();
+    if (!ean) return;
+    const search = document.getElementById('td-product-search') as HTMLInputElement | null;
+    if (search) search.value = ean;
+    lookupEan(ean);
+  });
+
   document.getElementById('tracker-diary-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const alias = readAlias();
     const label = (document.getElementById('td-label') as HTMLInputElement).value.trim();
     if (!label) return;
+    const nutrition = {
+      calories: parseNumOr((document.getElementById('td-kcal') as HTMLInputElement).value),
+      carbohydrates: parseNumOr((document.getElementById('td-carbs') as HTMLInputElement).value),
+      protein: parseNumOr((document.getElementById('td-protein') as HTMLInputElement).value),
+      fat: parseNumOr((document.getElementById('td-fat') as HTMLInputElement).value),
+    };
     const body: any = {
       alias,
       source: 'free',
@@ -1065,22 +1588,33 @@ import Layout from '../layouts/Layout.astro';
       eatenAt: (document.getElementById('td-time') as HTMLInputElement).value
         ? new Date((document.getElementById('td-time') as HTMLInputElement).value).toISOString()
         : defaultEatenAt().toISOString(),
-      nutrition: {
-        calories: parseNumOr((document.getElementById('td-kcal') as HTMLInputElement).value),
-        carbohydrates: parseNumOr((document.getElementById('td-carbs') as HTMLInputElement).value),
-        protein: parseNumOr((document.getElementById('td-protein') as HTMLInputElement).value),
-        fat: parseNumOr((document.getElementById('td-fat') as HTMLInputElement).value),
-      },
+      nutrition,
     };
+    if (pickedProduct) {
+      const grams = resolvePickedGrams();
+      if (grams == null || grams <= 0) {
+        alert('Bitte eine Menge größer 0 angeben.');
+        return;
+      }
+      const productId = await ensureSavedProduct(pickedProduct);
+      const scaled = scaleNutrition(pickedProduct.nutritionPer100g || {}, grams / 100);
+      body.source = 'product';
+      body.productId = productId;
+      body.grams = grams;
+      body.label = label;
+      body.nutrition = {
+        ...scaled,
+        calories: nutrition.calories ?? scaled.calories,
+        carbohydrates: nutrition.carbohydrates ?? scaled.carbohydrates,
+        protein: nutrition.protein ?? scaled.protein,
+        fat: nutrition.fat ?? scaled.fat,
+      };
+    }
     const res = await fetch('/api/tracker/diary', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     if (res.ok) {
-      (document.getElementById('td-label') as HTMLInputElement).value = '';
-      (document.getElementById('td-kcal') as HTMLInputElement).value = '';
-      (document.getElementById('td-carbs') as HTMLInputElement).value = '';
-      (document.getElementById('td-protein') as HTMLInputElement).value = '';
-      (document.getElementById('td-fat') as HTMLInputElement).value = '';
+      resetDiaryForm();
       const eaten = body.eatenAt ? startOfLocalDay(new Date(body.eatenAt)) : selectedDay;
       const today = startOfLocalDay(new Date());
       selectedDay = eaten.getTime() > today.getTime() ? today : eaten;

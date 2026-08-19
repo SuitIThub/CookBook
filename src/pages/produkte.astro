@@ -101,6 +101,17 @@ function formatEuro(v: number): string {
                   <button type="button" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded" data-action="edit" data-id={p.id}>
                     Bearbeiten
                   </button>
+                  {p.source === 'openfoodfacts' && (!p.gramsByUnit || Object.keys(p.gramsByUnit).length === 0) && (
+                    <button
+                      type="button"
+                      class="text-xs px-2 py-1 rounded border border-amber-400 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                      data-action="edit"
+                      data-id={p.id}
+                      title="Mengen-Umrechnung ergänzen (z.B. 1 Scheibe = 30 g)"
+                    >
+                      Umrechnung ergänzen
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -140,6 +151,7 @@ function formatEuro(v: number): string {
     defaultPrice?: number;
     imageUrl?: string;
     source: 'manual' | 'openfoodfacts';
+    gramsByUnit?: Record<string, number>;
     supermarkets: Array<{ supermarketId: string; price: number }>;
   }
   interface Supermarket { id: string; name: string; }
@@ -218,6 +230,9 @@ function formatEuro(v: number): string {
             </div>
             <div class="mt-2 flex gap-2 flex-wrap">
               <button type="button" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded" data-action="edit" data-id="${p.id}">Bearbeiten</button>
+              ${p.source === 'openfoodfacts' && (!p.gramsByUnit || Object.keys(p.gramsByUnit).length === 0)
+                ? `<button type="button" class="text-xs px-2 py-1 rounded border border-amber-400 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20" data-action="edit" data-id="${p.id}" title="Mengen-Umrechnung ergänzen (z.B. 1 Scheibe = 30 g)">Umrechnung ergänzen</button>`
+                : ''}
             </div>
           </div>
         </div>

@@ -14,10 +14,10 @@ export interface Supermarket {
  * Catalogue ingredient (autocomplete + nutrition defaults).
  * Nutrition is stored per 100 g (LMIV/OFF convention).
  *
- * gramsByUnit is a map from a canonical unit name (see src/lib/units.ts) to
- * the gram weight of ONE unit of that kind for this ingredient. Used for
- * ingredients where converting via base units alone is impossible
- * (e.g. `Stück`, `Zehe`, `Kopf`, `Bund`, `TL`, `EL`, `Tasse`).
+ * gramsByUnit is a map from a unit name (see src/lib/units.ts) to
+ * the gram weight of ONE unit of that kind. Used where converting via base
+ * units alone is impossible (e.g. `Stück`, `Scheibe`, `Zehe`, `EL`).
+ * Product maps take priority over the ingredient map for the same unit.
  * These values are estimates — nutrition/price calculations mark the whole
  * recipe as `~ estimated` as soon as any ingredient uses one.
  *
@@ -48,6 +48,8 @@ export interface Product {
   netGrams?: number;
   packageLabel?: string;
   nutritionPer100g?: NutritionData;
+  /** Grams of one unit for this specific product, e.g. `{ Scheibe: 30 }`. */
+  gramsByUnit?: Record<string, number>;
   defaultPrice?: number; // EUR per package (netGrams)
   imageUrl?: string;
   source: 'manual' | 'openfoodfacts';

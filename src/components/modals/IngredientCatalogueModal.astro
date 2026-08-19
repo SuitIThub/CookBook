@@ -110,7 +110,7 @@
             <input id="cat-gbu-grams" type="number" step="0.1" placeholder="Gramm" class="w-28 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600 text-sm" />
             <button type="button" id="cat-gbu-add" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-sm">Hinzufügen</button>
           </div>
-          <p class="text-[11px] text-gray-500 mt-2">Beispiele: „Stück“ 110, „Zehe“ 5, „Kopf“ 800, „EL“ 15, „Tasse“ 120. Werte sind Schätzungen → Rezeptnährwerte werden mit „~“ markiert.</p>
+          <p class="text-[11px] text-gray-500 mt-2">Beispiele: „Stück“ 110, „Zehe“ 5, „Kopf“ 800, „EL“ 15, „Tasse“ 120. Werte sind Schätzungen → Rezeptnährwerte werden mit „~“ markiert. Ist ein Produkt zugewiesen, gilt zuerst dessen Umrechnung für dieselbe Einheit.</p>
         </fieldset>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" id="cat-cancel" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Abbrechen</button>
@@ -127,6 +127,7 @@
     setIngredientDefault,
     clearIngredientDefaultIfProduct,
   } from '../../lib/ingredientDefaults';
+  import { servingUnitName } from '../../lib/units';
 
   interface ProductLite {
     id: string;
@@ -427,6 +428,7 @@
       if (p.brand) metaParts.push(p.brand);
       if (p.packageLabel) metaParts.push(p.packageLabel);
       else if (p.netGrams) metaParts.push(`${p.netGrams} g`);
+      if (p.servingGrams) metaParts.push(p.servingLabel || `Portion ${p.servingGrams} g`);
       const meta = metaParts.join(' · ');
       const row = document.createElement('div');
       row.className = 'flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded';
@@ -521,6 +523,9 @@
           source: 'openfoodfacts',
           offCode: data.product.offCode ?? null,
           nutritionPer100g: data.product.nutritionPer100g ?? null,
+          gramsByUnit: data.product.servingGrams
+            ? { [servingUnitName(data.product.servingLabel)]: data.product.servingGrams }
+            : undefined,
         };
         const create = await fetch('/api/products', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
