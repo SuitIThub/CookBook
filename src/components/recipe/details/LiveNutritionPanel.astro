@@ -260,7 +260,75 @@ function formatEuroValue(value: number, estimated: boolean): string {
   </div>
 )}
 
+<style is:inline>
+  /* Inlined so PWA-cached /_astro CSS cannot keep the old one-row picker. */
+  .live-product-row { display: flex; flex-direction: column; gap: 0.5rem; }
+  .live-product-row .live-product-slot,
+  .live-product-row .live-product-select,
+  .live-product-row .live-link-product { width: 100%; }
+  .live-product-row .live-product-name { overflow-wrap: anywhere; }
+  @media (min-width: 1024px) {
+    .live-product-row { flex-direction: row; align-items: center; }
+    .live-product-row .live-product-name { flex: 1 1 auto; min-width: 0; }
+    .live-product-row .live-product-slot { width: auto; }
+    .live-product-row .live-product-select { width: auto; max-width: 20rem; }
+    .live-product-row .live-link-product { width: auto; white-space: nowrap; }
+  }
+</style>
+
 <script is:inline set:html={`window.__cbLiveNutrition = ${JSON.stringify(bootstrap)};`}></script>
+<script is:inline>
+  (function () {
+    if (window.__cbProductAssignBound) return;
+    window.__cbProductAssignBound = true;
+    var boot = window.__cbLiveNutrition;
+    if (!boot || !boot.recipeId) return;
+    function selects() { return document.querySelectorAll('.live-product-select'); }
+    function assignments() {
+      var out = {};
+      selects().forEach(function (sel) {
+        if (sel.dataset.ingredientId) out[sel.dataset.ingredientId] = sel.value;
+      });
+      return out;
+    }
+    function apply(map) {
+      if (!map) return;
+      selects().forEach(function (sel) {
+        var id = sel.dataset.ingredientId;
+        if (!id || !Object.prototype.hasOwnProperty.call(map, id)) return;
+        var next = map[id] || '';
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === next) { sel.value = next; break; }
+        }
+      });
+    }
+    apply(boot.productAssignments);
+    var market = document.getElementById('live-supermarket-select');
+    if (market && boot.preferredSupermarketId) market.value = boot.preferredSupermarketId;
+    function persist(applyMarket) {
+      var marketId = market && market.value ? market.value : '';
+      fetch('/api/recipes/' + encodeURIComponent(boot.recipeId) + '/live-nutrition', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productAssignments: assignments(),
+          supermarketId: marketId || undefined,
+          servings: boot.servings,
+          persist: true,
+          applySupermarket: !!applyMarket
+        })
+      }).then(function (res) { return res.ok ? res.json() : null; }).then(function (data) {
+        if (data && data.productAssignments) apply(data.productAssignments);
+      }).catch(function () {});
+    }
+    var picker = document.getElementById('live-product-picker');
+    if (picker) picker.addEventListener('change', function (e) {
+      if (e.target && e.target.classList && e.target.classList.contains('live-product-select')) persist(false);
+    });
+    if (market) market.addEventListener('change', function () { persist(true); });
+  })();
+</script>
 
 <script>
   interface Bootstrap {
@@ -311,6 +379,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
       try {
         const res = await fetch(`/api/recipes/${boot!.recipeId}/live-nutrition`, {
           method: 'POST',
+          cache: 'no-store',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             productAssignments: assignments,
