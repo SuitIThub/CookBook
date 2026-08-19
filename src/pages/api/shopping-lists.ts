@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../lib/database';
+import { parseIngredientDefaults } from '../../lib/ingredientDefaults';
 
 export const GET: APIRoute = async ({ url }) => {
   try {
@@ -57,7 +58,8 @@ export const GET: APIRoute = async ({ url }) => {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const data = await request.json();
-    const { title, description, recipeIds, recipeServingsById } = data;
+    const { title, description, recipeIds, recipeServingsById, catalogueDefaults } = data;
+    const defaults = parseIngredientDefaults(catalogueDefaults);
     
     if (!title) {
       return new Response(JSON.stringify({ error: 'Title is required' }), {
@@ -72,7 +74,7 @@ export const POST: APIRoute = async ({ request }) => {
     // Add recipes if provided
     if (recipeIds && Array.isArray(recipeIds) && recipeIds.length > 0) {
       for (const recipeId of recipeIds) {
-        db.addRecipeToShoppingList(newShoppingList.id, recipeId);
+        db.addRecipeToShoppingList(newShoppingList.id, recipeId, defaults);
         const desiredServingsRaw = recipeServingsById && typeof recipeServingsById === 'object'
           ? (recipeServingsById as Record<string, unknown>)[recipeId]
           : undefined;
@@ -140,7 +142,11 @@ export const PUT: APIRoute = async ({ request, url }) => {
 
     // Handle add-recipe action
     if (requestData.action === 'add-recipe' && requestData.recipeId) {
-      const updatedShoppingList = db.addRecipeToShoppingList(id, requestData.recipeId);
+      const updatedShoppingList = db.addRecipeToShoppingList(
+        id,
+        requestData.recipeId,
+        parseIngredientDefaults(requestData.catalogueDefaults)
+      );
       
       if (!updatedShoppingList) {
         return new Response(JSON.stringify({ error: 'Shopping list or recipe not found' }), {

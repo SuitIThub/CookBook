@@ -60,9 +60,9 @@
               <button type="button" id="cat-product-link" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-sm">
                 Verknüpfen
               </button>
-              <a id="cat-product-new" href="/produkte" class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm no-underline">
+              <button type="button" id="cat-product-new" class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
                 Neues Produkt anlegen
-              </a>
+              </button>
             </div>
           </div>
 
@@ -99,7 +99,7 @@
           </div>
 
           <p class="text-[11px] text-gray-500 mt-2">
-            Ein Standardprodukt (⭐) wird im Rezept vorausgewählt und liefert Nährwerte, wenn die Zutat keine eigenen hat.
+            Ein Standardprodukt (⭐) gilt für deinen Alias — in jedem Rezept, das diese Zutat verwendet. Die Verknüpfung selbst liegt im Zutatenregister.
           </p>
         </fieldset>
         <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
@@ -122,6 +122,12 @@
 </div>
 
 <script>
+  import {
+    getIngredientDefault,
+    setIngredientDefault,
+    clearIngredientDefaultIfProduct,
+  } from '../../lib/ingredientDefaults';
+
   interface ProductLite {
     id: string;
     name: string;
@@ -129,10 +135,13 @@
     ean?: string;
     imageUrl?: string;
     ingredientIds?: string[];
+    nutritionPer100g?: Record<string, number>;
   }
 
   interface WindowWithCatalogue extends Window {
     openCatalogueModal?: (name: string) => Promise<void>;
+    openProductModal?: (product?: object | null, opts?: { prelinkIngredientName?: string }) => Promise<void>;
+    openProductModalById?: (id: string) => Promise<void>;
   }
 
   let currentCatalogueName = '';
@@ -178,16 +187,14 @@
         if (el) el.value = nut[k] != null ? String(nut[k]) : '';
       });
       (document.getElementById('cat-density') as HTMLInputElement).value = catalogue?.densityGPerMl != null ? String(catalogue.densityGPerMl) : '';
-      (document.getElementById('cat-default-product-id') as HTMLInputElement).value = catalogue?.defaultProductId || '';
       currentGramsByUnit = catalogue?.gramsByUnit ? { ...catalogue.gramsByUnit } : {};
       currentCatalogueId = catalogue?.id || '';
-      currentDefaultProductId = catalogue?.defaultProductId || '';
+      currentDefaultProductId = getIngredientDefault(currentCatalogueId, catalogue?.defaultProductId || '');
+      (document.getElementById('cat-default-product-id') as HTMLInputElement).value = currentDefaultProductId;
     } catch (error) {
       console.error('Failed to load catalogue for', name, error);
     }
     renderGramsByUnit();
-    const newBtn = document.getElementById('cat-product-new') as HTMLAnchorElement | null;
-    if (newBtn) newBtn.href = `/produkte?linkIngredient=${encodeURIComponent(name)}`;
     const offInput = document.getElementById('cat-off-input') as HTMLInputElement | null;
     if (offInput) offInput.value = name;
     const offResults = document.getElementById('cat-off-results');
@@ -206,7 +213,13 @@
     if (productInput) productInput.value = '';
     await refreshLinkedProducts();
     await refreshProductsDatalist();
-    document.getElementById('catalogue-modal')?.classList.remove('hidden');
+    const modal = document.getElementById('catalogue-modal');
+    if (modal) {
+      modal.style.zIndex = '80';
+      const productModal = document.getElementById('product-modal') as HTMLElement | null;
+      if (productModal && !productModal.classList.contains('hidden')) productModal.style.zIndex = '60';
+      modal.classList.remove('hidden');
+    }
   }
 
   async function refreshLinkedProducts() {
@@ -232,13 +245,18 @@
       const isDefault = product.id === currentDefaultProductId;
       const row = document.createElement('div');
       row.className = 'flex flex-col gap-2 px-2 py-2 border border-gray-200 dark:border-gray-700 rounded not-mobile:flex-row not-mobile:items-center';
+      const kcal = product.nutritionPer100g?.calories;
       const label = product.brand ? `${product.brand} – ${product.name}` : product.name;
       row.innerHTML = `
         <div class="min-w-0 flex-1">
-          <div class="text-gray-800 dark:text-gray-100 break-words">${isDefault ? '⭐ ' : ''}${escapeHtml(label)}</div>
-          ${product.ean ? `<div class="text-[11px] text-gray-500 mt-0.5">EAN ${escapeHtml(product.ean)}</div>` : ''}
+          <button type="button" class="cat-open-product text-left text-gray-800 dark:text-gray-100 break-words hover:underline" data-product-id="${product.id}" title="Produktdaten öffnen">${isDefault ? '⭐ ' : ''}${escapeHtml(label)}</button>
+          <div class="text-[11px] text-gray-500 mt-0.5 flex flex-wrap gap-x-2">
+            ${product.ean ? `<span>EAN ${escapeHtml(product.ean)}</span>` : ''}
+            ${kcal != null ? `<span>${Math.round(kcal)} kcal/100 g</span>` : ''}
+          </div>
         </div>
         <div class="flex flex-wrap gap-2 not-mobile:shrink-0">
+          <button type="button" class="cat-open-product text-[11px] px-2 py-1 rounded flex-1 not-mobile:flex-none border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30" data-product-id="${product.id}">Daten</button>
           <button type="button" class="cat-set-default text-[11px] px-2 py-1 rounded flex-1 not-mobile:flex-none ${isDefault ? 'bg-yellow-500 text-white' : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}" data-product-id="${product.id}" title="Als Standard">${isDefault ? 'Standard' : 'Als Standard'}</button>
           <button type="button" class="cat-unlink text-[11px] px-2 py-1 text-red-500 hover:text-red-700 not-mobile:px-0" data-product-id="${product.id}">Entfernen</button>
         </div>
@@ -275,7 +293,6 @@
       name: currentCatalogueName,
       nutritionPer100g: null,
       densityGPerMl: null,
-      defaultProductId: null,
       gramsByUnit: Object.keys(currentGramsByUnit).length > 0 ? currentGramsByUnit : null,
     };
     const res = await fetch('/api/ingredients/catalogue', {
@@ -295,7 +312,18 @@
     });
     if (!res.ok) { alert('Aktion fehlgeschlagen.'); return false; }
     const data = await res.json();
-    currentDefaultProductId = data?.ingredient?.defaultProductId || '';
+    if (data?.ingredient?.id) currentCatalogueId = data.ingredient.id;
+    if (action === 'setDefault') {
+      setIngredientDefault(currentCatalogueId, productId);
+      currentDefaultProductId = productId;
+    } else if (action === 'clearDefault') {
+      setIngredientDefault(currentCatalogueId, '');
+      currentDefaultProductId = '';
+    } else if (action === 'unlink') {
+      clearIngredientDefaultIfProduct(currentCatalogueId, productId);
+      currentDefaultProductId = getIngredientDefault(currentCatalogueId, '');
+    }
+    (document.getElementById('cat-default-product-id') as HTMLInputElement).value = currentDefaultProductId;
     await refreshLinkedProducts();
     await refreshProductsDatalist();
     notifyCatalogueUpdated();
@@ -461,7 +489,6 @@
         name: currentCatalogueName,
         nutritionPer100g: Object.keys(mergedNutrition).length > 0 ? mergedNutrition : null,
         densityGPerMl: densityRaw ? Number(densityRaw) : null,
-        defaultProductId: currentDefaultProductId || null,
         gramsByUnit: Object.keys(currentGramsByUnit).length > 0 ? currentGramsByUnit : null,
       };
       const save = await fetch('/api/ingredients/catalogue', {
@@ -515,9 +542,16 @@
     if (!modal) return;
     listenersBound = true;
 
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
-    document.getElementById('catalogue-close')?.addEventListener('click', () => modal.classList.add('hidden'));
-    document.getElementById('cat-cancel')?.addEventListener('click', () => modal.classList.add('hidden'));
+    document.addEventListener('cookbook:ingredient-defaults-changed', () => {
+      if (!currentCatalogueId) return;
+      currentDefaultProductId = getIngredientDefault(currentCatalogueId, currentDefaultProductId);
+      (document.getElementById('cat-default-product-id') as HTMLInputElement).value = currentDefaultProductId;
+      renderLinkedProducts();
+    });
+
+    modal.addEventListener('click', (e) => { if (e.target === modal) { modal.classList.add('hidden'); modal.style.zIndex = ''; } });
+    document.getElementById('catalogue-close')?.addEventListener('click', () => { modal.classList.add('hidden'); modal.style.zIndex = ''; });
+    document.getElementById('cat-cancel')?.addEventListener('click', () => { modal.classList.add('hidden'); modal.style.zIndex = ''; });
 
     document.getElementById('cat-gbu-add')?.addEventListener('click', () => {
       const unitInput = document.getElementById('cat-gbu-unit') as HTMLInputElement;
@@ -545,6 +579,10 @@
       const target = e.target as HTMLElement;
       const productId = target?.dataset?.productId;
       if (!productId) return;
+      if (target.classList.contains('cat-open-product')) {
+        await (window as WindowWithCatalogue).openProductModalById?.(productId);
+        return;
+      }
       if (target.classList.contains('cat-unlink')) {
         if (!confirm('Verknüpfung entfernen?')) return;
         await callLinkProduct('unlink', productId);
@@ -576,6 +614,13 @@
       if (ok) input.value = '';
     };
 
+    document.getElementById('cat-product-new')?.addEventListener('click', async () => {
+      const ingredientId = await ensureCatalogueId();
+      await (window as WindowWithCatalogue).openProductModal?.(
+        { ingredientIds: [ingredientId], supermarkets: [] },
+        { prelinkIngredientName: currentCatalogueName }
+      );
+    });
     document.getElementById('cat-product-link')?.addEventListener('click', productLinkHandler);
     document.getElementById('cat-product-input')?.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); productLinkHandler(); }
@@ -680,12 +725,10 @@
         }
       });
       const densityInput = document.getElementById('cat-density') as HTMLInputElement;
-      const dpi = document.getElementById('cat-default-product-id') as HTMLInputElement;
       const payload = {
         name: currentCatalogueName,
         nutritionPer100g: Object.keys(nutrition).length > 0 ? nutrition : null,
         densityGPerMl: densityInput.value.trim() ? Number(densityInput.value) : null,
-        defaultProductId: dpi.value.trim() || null,
         gramsByUnit: Object.keys(currentGramsByUnit).length > 0 ? currentGramsByUnit : null,
       };
       const res = await fetch('/api/ingredients/catalogue', {
@@ -694,6 +737,7 @@
       if (!res.ok) { alert('Speichern fehlgeschlagen.'); return; }
       notifyCatalogueUpdated();
       modal.classList.add('hidden');
+      modal.style.zIndex = '';
     });
 
     window.addEventListener('barcode-scanned', async (event) => {
@@ -719,6 +763,13 @@
       }
     });
   }
+
+  window.addEventListener('product-saved', () => {
+    if (document.getElementById('catalogue-modal')?.classList.contains('hidden')) return;
+    refreshLinkedProducts().catch(() => undefined);
+    refreshProductsDatalist().catch(() => undefined);
+    notifyCatalogueUpdated();
+  });
 
   bindListeners();
   const w = window as WindowWithCatalogue;

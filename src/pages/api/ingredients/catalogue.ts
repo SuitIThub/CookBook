@@ -32,7 +32,9 @@ export const POST: APIRoute = async ({ request }) => {
       nutritionPer100g: nutrition,
       densityGPerMl: numeric(body.densityGPerMl),
       gramsByUnit,
-      defaultProductId: typeof body.defaultProductId === 'string' ? body.defaultProductId : null,
+      defaultProductId: body.defaultProductId === undefined
+        ? undefined
+        : (typeof body.defaultProductId === 'string' ? body.defaultProductId : null),
     });
     return json(ingredient);
   } catch (error) {

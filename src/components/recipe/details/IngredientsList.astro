@@ -270,6 +270,13 @@ const hasAlternatives = groups.size > 0;
 
     document.addEventListener('change', onSelectChange);
 
+    container.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement | null)?.closest('.recipe-open-catalogue') as HTMLElement | null;
+      if (!btn || !container.contains(btn)) return;
+      const name = btn.dataset.ingredientName || '';
+      if (name) (window as any).openCatalogueModal?.(name);
+    });
+
     // Expose current selection for other scripts (e.g. persistence in the page).
     (window as any).getAlternativeSelection = () => ({ ...selection });
 

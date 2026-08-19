@@ -839,7 +839,7 @@ export class CookbookDatabase {
   }
 
   // Recipe management for shopping lists
-  addRecipeToShoppingList(listId: string, recipeId: string): ShoppingList | null {
+  addRecipeToShoppingList(listId: string, recipeId: string, catalogueDefaults?: Record<string, string>): ShoppingList | null {
     const shoppingList = this.getShoppingList(listId);
     const recipe = this.getRecipe(recipeId);
     
@@ -898,7 +898,13 @@ export class CookbookDatabase {
                   recipeId: recipe.id,
                   recipeIngredientId: item.id
                 };
-                const assignedProductId = recipe.productAssignments?.[item.id];
+                const cat = this.getCatalogueIngredientByName(item.name);
+                const aliasPick = cat && catalogueDefaults && Object.prototype.hasOwnProperty.call(catalogueDefaults, cat.id)
+                  ? catalogueDefaults[cat.id]
+                  : undefined;
+                const assignedProductId = aliasPick !== undefined
+                  ? aliasPick
+                  : (cat?.defaultProductId || recipe.productAssignments?.[item.id]);
                 if (assignedProductId) shoppingItem.productId = assignedProductId;
                 if (item.alternativeGroupId) {
                   shoppingItem.alternativeGroupId = item.alternativeGroupId;
@@ -2051,24 +2057,43 @@ export class CookbookDatabase {
     const gramsByUnitJson = input.gramsByUnit == null ? null : JSON.stringify(input.gramsByUnit);
 
     if (existing) {
-      this.db
-        .prepare(
-          `UPDATE ingredients SET
-             description = COALESCE(?, description),
-             nutrition_json = ?,
-             density_g_per_ml = ?,
-             grams_by_unit_json = ?,
-             default_product_id = ?
-           WHERE id = ?`
-        )
-        .run(
-          input.description ?? null,
-          nutritionJson,
-          input.densityGPerMl ?? null,
-          gramsByUnitJson,
-          input.defaultProductId ?? null,
-          existing.id
-        );
+      if (input.defaultProductId === undefined) {
+        this.db
+          .prepare(
+            `UPDATE ingredients SET
+               description = COALESCE(?, description),
+               nutrition_json = ?,
+               density_g_per_ml = ?,
+               grams_by_unit_json = ?
+             WHERE id = ?`
+          )
+          .run(
+            input.description ?? null,
+            nutritionJson,
+            input.densityGPerMl ?? null,
+            gramsByUnitJson,
+            existing.id
+          );
+      } else {
+        this.db
+          .prepare(
+            `UPDATE ingredients SET
+               description = COALESCE(?, description),
+               nutrition_json = ?,
+               density_g_per_ml = ?,
+               grams_by_unit_json = ?,
+               default_product_id = ?
+             WHERE id = ?`
+          )
+          .run(
+            input.description ?? null,
+            nutritionJson,
+            input.densityGPerMl ?? null,
+            gramsByUnitJson,
+            input.defaultProductId,
+            existing.id
+          );
+      }
       eventBus.emit(EVENTS.INGREDIENT_UPDATED, { id: existing.id, name });
       return this.getCatalogueIngredientById(existing.id)!;
     }

@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../../lib/database';
+import { parseIngredientDefaults } from '../../../../lib/ingredientDefaults';
 
 export const POST: APIRoute = async ({ request, params }) => {
   try {
@@ -11,7 +12,8 @@ export const POST: APIRoute = async ({ request, params }) => {
       });
     }
 
-    const { recipeIds, recipeServingsById } = await request.json();
+    const { recipeIds, recipeServingsById, catalogueDefaults } = await request.json();
+    const defaults = parseIngredientDefaults(catalogueDefaults);
     if (!Array.isArray(recipeIds) || recipeIds.length === 0) {
       return new Response(JSON.stringify({ error: 'Recipe IDs required' }), {
         status: 400,
@@ -30,7 +32,7 @@ export const POST: APIRoute = async ({ request, params }) => {
 
     // Add each recipe
     for (const recipeId of recipeIds) {
-      db.addRecipeToShoppingList(id, recipeId);
+      db.addRecipeToShoppingList(id, recipeId, defaults);
       const desiredServingsRaw = recipeServingsById && typeof recipeServingsById === 'object'
         ? (recipeServingsById as Record<string, unknown>)[recipeId]
         : undefined;

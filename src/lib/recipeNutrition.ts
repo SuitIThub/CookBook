@@ -67,14 +67,26 @@ export function resolveAssignedProductId(
   ingredientId: string,
   assignments: Record<string, string> | undefined,
   defaultProductId?: string,
-  ingredientProductId?: string
+  _ingredientProductId?: string
 ): string | undefined {
   if (assignments && Object.prototype.hasOwnProperty.call(assignments, ingredientId)) {
     const value = assignments[ingredientId];
     return value ? value : undefined;
   }
-  if (ingredientProductId) return ingredientProductId;
   return defaultProductId || undefined;
+}
+
+/** recipeIngredientId → catalogue default product (shared register, not recipe-specific). */
+export function assignmentsFromCatalogueDefaults(
+  ingredients: Ingredient[],
+  catalogueByName: Map<string, CatalogueIngredient>
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const ing of ingredients) {
+    const cat = catalogueByName.get(ing.name.trim().toLowerCase());
+    if (cat?.defaultProductId) map[ing.id] = cat.defaultProductId;
+  }
+  return map;
 }
 
 /** Write recipeIngredientId → productId onto the matching ingredients in the recipe JSON. */
@@ -207,8 +219,7 @@ function resolveIngredient(
   const assignedProductId = resolveAssignedProductId(
     ingredient.id,
     productAssignments,
-    catalogue?.defaultProductId,
-    ingredient.productId
+    catalogue?.defaultProductId
   );
   const product = assignedProductId ? productsById?.get(assignedProductId) : undefined;
 

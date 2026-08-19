@@ -12,6 +12,10 @@ const ALLOWED_KEYS = new Set([
   // stored per-alias by design. The alias modal + tracker page surface a
   // privacy warning to make expectations explicit.
   'cookbook.tracker.profile',
+  // Default product per catalogue ingredient, plus preferred supermarket
+  // for live price/nutrition. Per-alias so two users don't overwrite each other.
+  'cookbook.ingredient.defaults',
+  'cookbook.preferredSupermarket',
 ]);
 
 function normalizeAlias(value: unknown): string {

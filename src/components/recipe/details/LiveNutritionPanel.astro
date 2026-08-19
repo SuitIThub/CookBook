@@ -8,7 +8,7 @@ import {
   computeRecipeNutrition,
   computeRecipePrice,
   resolveAssignedProductId,
-  productAssignmentsFromRecipe,
+  assignmentsFromCatalogueDefaults,
 } from '../../../lib/recipeNutrition';
 import {
   filterRecipeBySelection,
@@ -49,15 +49,9 @@ for (const cat of catalogueByName.values()) {
     if (dp) productsById.set(dp.id, dp);
   }
 }
-for (const productId of Object.values(recipe.productAssignments || {})) {
-  if (productId && !productsById.has(productId)) {
-    const p = db.getProduct(productId);
-    if (p) productsById.set(p.id, p);
-  }
-}
 
 const supermarkets = db.getAllSupermarkets();
-const savedAssignments = productAssignmentsFromRecipe(recipe);
+const savedAssignments = assignmentsFromCatalogueDefaults(visibleIngredients, catalogueByName);
 
 const nutritionResult = computeRecipeNutrition({
   recipe,
@@ -74,7 +68,7 @@ const priceResult = computeRecipePrice({
   catalogueByName,
   productsById,
   productAssignments: savedAssignments,
-  supermarketId: recipe.preferredSupermarketId,
+  supermarketId: undefined,
 });
 
 const nutritionByIngredient: Record<string, {
@@ -106,7 +100,7 @@ const bootstrap = {
       return [ing.id, resolveAssignedProductId(ing.id, savedAssignments, info?.defaultProductId) || ''];
     })
   ),
-  preferredSupermarketId: recipe.preferredSupermarketId || '',
+  preferredSupermarketId: '',
 };
 
 const showPanel = visibleIngredients.length > 0;
@@ -133,7 +127,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
           <select id="live-supermarket-select" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm">
             <option value="">Standardpreis</option>
             {supermarkets.map((s) => (
-              <option value={s.id} selected={s.id === recipe.preferredSupermarketId}>{s.name}</option>
+              <option value={s.id}>{s.name}</option>
             ))}
           </select>
         </label>
@@ -182,7 +176,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
         {visibleIngredients.map((ing) => {
           const info = nutritionByIngredient[ing.id];
           const hasProducts = info.products.length > 0;
-          const selectedProductId = resolveAssignedProductId(ing.id, savedAssignments, info.defaultProductId, ing.productId) || '';
+          const selectedProductId = resolveAssignedProductId(ing.id, savedAssignments, info.defaultProductId) || '';
           return (
             <div
               class="live-product-row text-sm"
@@ -190,12 +184,14 @@ function formatEuroValue(value: number, estimated: boolean): string {
               data-ingredient-row
               data-ingredient-id={ing.id}
               data-ingredient-name={info.name}
+              data-catalogue-id={info.catalogueId || ''}
             >
-              <span class="live-product-name font-medium text-gray-800 dark:text-gray-100" style="overflow-wrap:anywhere">{info.name}</span>
+              <span class="live-product-name font-medium text-gray-800 dark:text-gray-100 hover:underline cursor-pointer" style="overflow-wrap:anywhere" data-open-catalogue={info.name} title="Zutat im Register öffnen">{info.name}</span>
               <div class="live-product-slot" style="width:100%;min-width:0">
                 {hasProducts ? (
                   <select
                     data-ingredient-id={ing.id}
+                    data-catalogue-id={info.catalogueId || ''}
                     class="live-product-select px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"
                     style="width:100%"
                   >
@@ -283,58 +279,48 @@ function formatEuroValue(value: number, estimated: boolean): string {
 <script is:inline set:html={`window.__cbLiveNutrition = ${JSON.stringify(bootstrap)};`}></script>
 <script is:inline>
   (function () {
-    if (window.__cbProductAssignBound) return;
-    window.__cbProductAssignBound = true;
+    var DEFAULTS_KEY = 'cookbook.ingredient.defaults';
+    var MARKET_KEY = 'cookbook.preferredSupermarket';
     var boot = window.__cbLiveNutrition;
     if (!boot || !boot.recipeId) return;
     function selects() { return document.querySelectorAll('.live-product-select'); }
-    function assignments() {
-      var out = {};
-      selects().forEach(function (sel) {
-        if (sel.dataset.ingredientId) out[sel.dataset.ingredientId] = sel.value;
-      });
-      return out;
+    function readDefaults() {
+      try { return JSON.parse(localStorage.getItem(DEFAULTS_KEY) || '{}') || {}; } catch (e) { return {}; }
     }
-    function apply(map) {
-      if (!map) return;
+    function hasOption(sel, value) {
+      for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === value) return true;
+      }
+      return value === '';
+    }
+    function applyAliasDefaults() {
+      var map = readDefaults();
       selects().forEach(function (sel) {
-        var id = sel.dataset.ingredientId;
-        if (!id || !Object.prototype.hasOwnProperty.call(map, id)) return;
-        var next = map[id] || '';
-        for (var i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].value === next) { sel.value = next; break; }
-        }
+        var catId = sel.dataset.catalogueId;
+        if (!catId || !Object.prototype.hasOwnProperty.call(map, catId)) return;
+        var next = map[catId] || '';
+        if (hasOption(sel, next)) sel.value = next;
       });
     }
-    apply(boot.productAssignments);
+    applyAliasDefaults();
     var market = document.getElementById('live-supermarket-select');
-    if (market && boot.preferredSupermarketId) market.value = boot.preferredSupermarketId;
-    function persist(applyMarket) {
-      var marketId = market && market.value ? market.value : '';
-      fetch('/api/recipes/' + encodeURIComponent(boot.recipeId) + '/live-nutrition', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productAssignments: assignments(),
-          supermarketId: marketId || undefined,
-          servings: boot.servings,
-          persist: true,
-          applySupermarket: !!applyMarket
-        })
-      }).then(function (res) { return res.ok ? res.json() : null; }).then(function (data) {
-        if (data && data.productAssignments) apply(data.productAssignments);
-      }).catch(function () {});
-    }
-    var picker = document.getElementById('live-product-picker');
-    if (picker) picker.addEventListener('change', function (e) {
-      if (e.target && e.target.classList && e.target.classList.contains('live-product-select')) persist(false);
-    });
-    if (market) market.addEventListener('change', function () { persist(true); });
+    try {
+      var preferred = (localStorage.getItem(MARKET_KEY) || '').trim();
+      if (market && preferred) market.value = preferred;
+    } catch (e) {}
   })();
 </script>
 
 <script>
+  import {
+    getIngredientDefault,
+    setIngredientDefault,
+    readIngredientDefaults,
+    writeIngredientDefaults,
+    readPreferredSupermarket,
+    writePreferredSupermarket,
+  } from '../../../lib/ingredientDefaults';
+
   interface Bootstrap {
     recipeId: string;
     servings: number;
@@ -372,12 +358,48 @@ function formatEuroValue(value: number, estimated: boolean): string {
       });
     }
 
-    if (boot.preferredSupermarketId && supermarketSelect) {
-      supermarketSelect.value = boot.preferredSupermarketId;
+    function applyAliasDefaultsToSelects() {
+      productSelects().forEach((sel) => {
+        const catId = sel.dataset.catalogueId || '';
+        if (!catId) return;
+        const fallback = boot!.ingredients[sel.dataset.ingredientId || '']?.defaultProductId || '';
+        const next = getIngredientDefault(catId, fallback);
+        if (Array.from(sel.options).some((opt) => opt.value === next) || next === '') sel.value = next;
+      });
     }
-    applyAssignmentsToSelects(boot.productAssignments);
 
-    async function recompute(opts: { persist?: boolean; applySupermarket?: boolean } = {}) {
+    function persistAliasDefaultsFromSelects() {
+      writeIngredientDefaults({
+        ...readIngredientDefaults(),
+        ...readIngredientDefaultsFromSelects(),
+      });
+    }
+
+    function readIngredientDefaultsFromSelects() {
+      const map: Record<string, string> = {};
+      productSelects().forEach((sel) => {
+        const catId = sel.dataset.catalogueId;
+        if (!catId) return;
+        map[catId] = sel.value;
+      });
+      return map;
+    }
+
+    function syncSelectsForCatalogue(catalogueId: string, productId: string) {
+      if (!catalogueId) return;
+      productSelects().forEach((sel) => {
+        if (sel.dataset.catalogueId !== catalogueId) return;
+        if (Array.from(sel.options).some((opt) => opt.value === productId) || productId === '') {
+          sel.value = productId;
+        }
+      });
+    }
+
+    const preferredMarket = readPreferredSupermarket();
+    if (preferredMarket && supermarketSelect) supermarketSelect.value = preferredMarket;
+    applyAliasDefaultsToSelects();
+
+    async function recompute(opts: { applySupermarket?: boolean; saveDefaults?: boolean } = {}) {
       const assignments = collectAssignments();
       const supermarketId = supermarketSelect?.value || undefined;
       try {
@@ -389,13 +411,13 @@ function formatEuroValue(value: number, estimated: boolean): string {
             productAssignments: assignments,
             supermarketId,
             servings: boot!.servings,
-            persist: Boolean(opts.persist),
             applySupermarket: Boolean(opts.applySupermarket),
           }),
         });
         if (!res.ok) return;
         const data = await res.json();
         applyAssignmentsToSelects(data.productAssignments);
+        if (opts.saveDefaults) persistAliasDefaultsFromSelects();
         updateSummary(data);
       } catch (error) {
         console.warn('Live nutrition recompute failed', error);
@@ -435,7 +457,10 @@ function formatEuroValue(value: number, estimated: boolean): string {
       return estimated ? `~${eur}` : eur;
     }
 
-    supermarketSelect?.addEventListener('change', () => { recompute({ persist: true, applySupermarket: true }); });
+    supermarketSelect?.addEventListener('change', () => {
+      writePreferredSupermarket(supermarketSelect.value);
+      recompute({ applySupermarket: true, saveDefaults: true });
+    });
     const planWhen = document.getElementById('live-plan-when') as HTMLInputElement | null;
     if (planWhen && !planWhen.value) {
       const now = new Date();
@@ -444,53 +469,75 @@ function formatEuroValue(value: number, estimated: boolean): string {
       planWhen.value = `${now.getFullYear()}-${mm}-${dd}`;
     }
     document.getElementById('live-product-picker')?.addEventListener('change', (e) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.classList.contains('live-product-select')) recompute({ persist: true });
+      const target = e.target as HTMLSelectElement | null;
+      if (!target?.classList.contains('live-product-select')) return;
+      const catId = target.dataset.catalogueId || '';
+      if (catId) {
+        syncSelectsForCatalogue(catId, target.value);
+        setIngredientDefault(catId, target.value);
+      }
+      recompute();
     });
 
     document.getElementById('live-product-picker')?.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement | null)?.closest('.live-link-product') as HTMLElement | null;
-      if (!btn) return;
-      const name = btn.dataset.ingredientName || '';
+      const el = (e.target as HTMLElement | null);
+      const btn = el?.closest('.live-link-product') as HTMLElement | null;
+      const nameBtn = el?.closest('[data-open-catalogue]') as HTMLElement | null;
+      const name = btn?.dataset.ingredientName || nameBtn?.getAttribute('data-open-catalogue') || '';
       if (name) (window as any).openCatalogueModal?.(name);
     });
 
     window.addEventListener('catalogue-updated', (event) => {
       const detail = (event as CustomEvent).detail as {
         ingredientName?: string;
+        catalogueId?: string;
         defaultProductId?: string;
         products?: Array<{ id: string; name: string; brand?: string }>;
       };
       const name = (detail?.ingredientName || '').trim().toLowerCase();
       if (!name) return;
       const products = detail.products || [];
-      const defaultId = detail.defaultProductId || '';
+      const catalogueId = detail.catalogueId || '';
       document.querySelectorAll<HTMLElement>('[data-ingredient-row]').forEach((row) => {
         const rowName = (row.dataset.ingredientName || '').trim().toLowerCase();
         if (rowName !== name) return;
+        if (catalogueId) row.dataset.catalogueId = catalogueId;
+        const rowCatalogueId = row.dataset.catalogueId || catalogueId;
         const slot = row.querySelector('.live-product-slot');
         const btn = row.querySelector('.live-link-product');
         const ingredientId = row.dataset.ingredientId || '';
         const currentSelect = row.querySelector('.live-product-select') as HTMLSelectElement | null;
         const keepId = currentSelect?.value ?? '';
+        const defaults = readIngredientDefaults();
+        const hasAliasPick = !!rowCatalogueId && Object.prototype.hasOwnProperty.call(defaults, rowCatalogueId);
+        const aliasDefault = hasAliasPick ? defaults[rowCatalogueId] : (detail.defaultProductId || '');
         if (slot) {
           if (products.length === 0) {
             slot.innerHTML = '<span class="text-xs text-gray-500 dark:text-gray-400">kein Produkt hinterlegt</span>';
           } else {
-            const preferred = products.some((p) => p.id === keepId)
-              ? keepId
-              : (products.some((p) => p.id === defaultId) ? defaultId : '');
+            const preferred = hasAliasPick && (products.some((p) => p.id === aliasDefault) || aliasDefault === '')
+              ? aliasDefault
+              : (products.some((p) => p.id === keepId)
+                ? keepId
+                : (products.some((p) => p.id === aliasDefault) ? aliasDefault : ''));
             const options = products.map((p) => {
               const label = p.brand ? `${p.brand} – ${p.name}` : p.name;
               const selected = p.id === preferred ? ' selected' : '';
               return `<option value="${p.id}"${selected}>${escapeHtml(label)}</option>`;
             }).join('');
-            slot.innerHTML = `<select data-ingredient-id="${ingredientId}" class="live-product-select px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"><option value=""${!preferred ? ' selected' : ''}>Kein Produkt</option>${options}</select>`;
+            slot.innerHTML = `<select data-ingredient-id="${ingredientId}" data-catalogue-id="${rowCatalogueId}" class="live-product-select px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"><option value=""${!preferred ? ' selected' : ''}>Kein Produkt</option>${options}</select>`;
           }
         }
         if (btn) btn.textContent = products.length > 0 ? '+ / verwalten' : '+ Produkt verknüpfen';
       });
-      recompute({ persist: false });
+      recompute();
+    });
+
+    document.addEventListener('cookbook:ingredient-defaults-changed', () => {
+      const preferred = readPreferredSupermarket();
+      if (supermarketSelect && preferred) supermarketSelect.value = preferred;
+      applyAliasDefaultsToSelects();
+      recompute();
     });
 
     function escapeHtml(s: string): string {
@@ -530,5 +577,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
         ? 'Meal Prep gespeichert — Portionen können ab diesem Tag im Tracker abgestrichen werden.'
         : 'Speichern fehlgeschlagen.';
     });
+
+    recompute();
   }
 </script>
