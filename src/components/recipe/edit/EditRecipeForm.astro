@@ -8,6 +8,7 @@ import IngredientLinkingScript from './IngredientLinkingScript.astro';
 import IngredientSuggestionScript from './IngredientSuggestionScript.astro';
 import AlternativeEditScript from './AlternativeEditScript.astro';
 import RecipeImageGallery from '../RecipeImageGallery.astro';
+import { NUTRITION_INPUT_IDS, NUTRITION_FIELDS } from '../../../lib/nutrition';
 
 interface Props {
   recipe: Recipe;
@@ -37,7 +38,7 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
   <AlternativeEditScript />
 </div>
 
-<script define:vars={{ recipe, aiDiffOriginal }}>
+<script define:vars={{ recipe, aiDiffOriginal, nutritionInputIds: NUTRITION_INPUT_IDS, nutritionFields: NUTRITION_FIELDS }}>
   const aiEditToken = new URLSearchParams(window.location.search).get('aiEditToken');
   // Make recipe data available globally for ingredient linking
   window.currentRecipe = recipe;
@@ -529,7 +530,7 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
           markInput('edit-difficulty');
         }
         if (stableJson(original.metadata?.nutrition || {}) !== stableJson(draft.metadata?.nutrition || {})) {
-          ['edit-calories', 'edit-carbohydrates', 'edit-protein', 'edit-fat'].forEach(markInput);
+          nutritionInputIds.forEach(markInput);
         }
         if (stableJson(original.metadata?.timeEntries || []) !== stableJson(draft.metadata?.timeEntries || [])) {
           const timeWrap = document.getElementById('time-entries-container');
@@ -567,7 +568,7 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
         if (pathSet.has('tags')) markBySelector('#tags-container');
         if (pathSet.has('metadata.servings')) markInput('edit-servings');
         if (pathSet.has('metadata.nutrition')) {
-          ['edit-calories', 'edit-carbohydrates', 'edit-protein', 'edit-fat'].forEach(markInput);
+          nutritionInputIds.forEach(markInput);
         }
         if (pathSet.has('metadata.timeEntries')) {
           const timeWrap = document.getElementById('time-entries-container');
@@ -735,25 +736,13 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
     
     // Restore nutrition
     if (draft.metadata?.nutrition) {
-      const caloriesInput = document.getElementById('edit-calories');
-      if (caloriesInput) {
-        caloriesInput.value = draft.metadata.nutrition.calories?.toString() || '';
-      }
-      
-      const carbsInput = document.getElementById('edit-carbohydrates');
-      if (carbsInput) {
-        carbsInput.value = draft.metadata.nutrition.carbohydrates?.toString() || '';
-      }
-      
-      const proteinInput = document.getElementById('edit-protein');
-      if (proteinInput) {
-        proteinInput.value = draft.metadata.nutrition.protein?.toString() || '';
-      }
-      
-      const fatInput = document.getElementById('edit-fat');
-      if (fatInput) {
-        fatInput.value = draft.metadata.nutrition.fat?.toString() || '';
-      }
+      nutritionFields.forEach((field) => {
+        const input = document.getElementById(field.inputId);
+        if (input) {
+          const value = draft.metadata.nutrition[field.key];
+          input.value = value != null ? String(value) : '';
+        }
+      });
     }
     
     // Note: Ingredient and preparation groups are more complex to restore
@@ -2258,12 +2247,16 @@ const { recipe, aiDiffOriginal = null } = Astro.props;
           const difficultyValue = document.getElementById('edit-difficulty')?.value;
           return difficultyValue && difficultyValue !== '' ? difficultyValue : undefined;
         })(),
-          nutrition: {
-            calories: parseFloat(document.getElementById('edit-calories')?.value) || undefined,
-            carbohydrates: parseFloat(document.getElementById('edit-carbohydrates')?.value) || undefined,
-            protein: parseFloat(document.getElementById('edit-protein')?.value) || undefined,
-            fat: parseFloat(document.getElementById('edit-fat')?.value) || undefined
-          }
+          nutrition: (() => {
+            const nutrition = {};
+            nutritionFields.forEach((field) => {
+              const raw = document.getElementById(field.inputId)?.value;
+              if (raw == null || String(raw).trim() === '') return;
+              const parsed = parseFloat(String(raw).replace(',', '.'));
+              if (Number.isFinite(parsed)) nutrition[field.key] = parsed;
+            });
+            return Object.keys(nutrition).length > 0 ? nutrition : undefined;
+          })()
         },
       // Include ingredient groups and preparation groups with linked ingredients
       ingredientGroups: collectIngredientGroups(),

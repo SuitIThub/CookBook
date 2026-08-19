@@ -1,6 +1,17 @@
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
-import type { Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe, Quantity } from '../types/recipe';
+import type { NutritionData, Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe, Quantity } from '../types/recipe';
+import type {
+  BodyProfile,
+  CatalogueIngredient,
+  DiaryEntry,
+  MealPlan,
+  MealPlanStatus,
+  Product,
+  ProductSupermarketPrice,
+  Supermarket,
+  WeightLog,
+} from '../types/tracker';
 import { eventBus, EVENTS } from './events';
 import {
   getDefaultSelection,
@@ -19,6 +30,10 @@ export class CookbookDatabase {
   constructor(dbPath: string = './cookbook.db') {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
+    // Enforce foreign keys so ON DELETE CASCADE on the tracker junction tables
+    // (ingredient_products, product_supermarkets) actually fires. better-sqlite3
+    // leaves this OFF by default. Must be set outside any transaction.
+    this.db.pragma('foreign_keys = ON');
     this.initTables();
   }
 
@@ -166,6 +181,139 @@ export class CookbookDatabase {
         PRIMARY KEY (alias, key)
       )
     `);
+
+    // Nutrition/tracker tables (Phase 1). These use full CREATE statements
+    // (not the generic EXPECTED_SCHEMA migrator) because we rely on UNIQUE
+    // and indexes that the generic migrator cannot express.
+    // Ingredients get catalogue-level nutrition and unit conversion data.
+    try {
+      this.db.exec(`ALTER TABLE ingredients ADD COLUMN nutrition_json TEXT`);
+    } catch (error) {
+      // column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE ingredients ADD COLUMN density_g_per_ml REAL`);
+    } catch (error) {
+      // column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE ingredients ADD COLUMN grams_by_unit_json TEXT`);
+    } catch (error) {
+      // column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE ingredients ADD COLUMN default_product_id TEXT`);
+    } catch (error) {
+      // column already exists
+    }
+
+    // Shopping list: preferred supermarket for price lookups.
+    try {
+      this.db.exec(`ALTER TABLE shopping_lists ADD COLUMN preferred_supermarket_id TEXT`);
+    } catch (error) {
+      // column already exists
+    }
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS supermarkets (
+        id TEXT PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        ean TEXT UNIQUE,
+        name TEXT NOT NULL,
+        brand TEXT,
+        net_grams REAL,
+        package_label TEXT,
+        nutrition_json TEXT,
+        default_price REAL,
+        image_url TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        off_code TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_products_ean ON products(ean)`);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS ingredient_products (
+        ingredient_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (ingredient_id, product_id),
+        FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_ingredient_products_product ON ingredient_products(product_id)`);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS product_supermarkets (
+        product_id TEXT NOT NULL,
+        supermarket_id TEXT NOT NULL,
+        price REAL NOT NULL,
+        PRIMARY KEY (product_id, supermarket_id),
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+        FOREIGN KEY (supermarket_id) REFERENCES supermarkets(id) ON DELETE CASCADE
+      )
+    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_product_supermarkets_market ON product_supermarkets(supermarket_id)`);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS weight_logs (
+        id TEXT PRIMARY KEY,
+        alias TEXT NOT NULL,
+        logged_at DATETIME NOT NULL,
+        weight_kg REAL NOT NULL
+      )
+    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_weight_logs_alias_time ON weight_logs(alias, logged_at)`);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS meal_plans (
+        id TEXT PRIMARY KEY,
+        alias TEXT NOT NULL,
+        recipe_id TEXT NOT NULL,
+        scheduled_at DATETIME NOT NULL,
+        servings REAL NOT NULL DEFAULT 1,
+        supermarket_id TEXT,
+        status TEXT NOT NULL DEFAULT 'planned',
+        product_assignments_json TEXT,
+        reminder_minutes INTEGER,
+        nutrition_snapshot_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_meal_plans_alias_time ON meal_plans(alias, scheduled_at)`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_meal_plans_recipe ON meal_plans(recipe_id)`);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS diary_entries (
+        id TEXT PRIMARY KEY,
+        alias TEXT NOT NULL,
+        eaten_at DATETIME NOT NULL,
+        source TEXT NOT NULL,
+        plan_id TEXT,
+        recipe_id TEXT,
+        product_id TEXT,
+        label TEXT,
+        grams REAL,
+        servings REAL,
+        nutrition_json TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_diary_alias_time ON diary_entries(alias, eaten_at)`);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_diary_plan ON diary_entries(plan_id)`);
   }
 
   // Recipe CRUD operations
@@ -561,6 +709,7 @@ export class CookbookDatabase {
       permanentType,
       isPermanent: permanentType > 0,
       hasSeenGlobalTemplatePrompt: !!(row.has_seen_global_template_prompt ?? 0),
+      preferredSupermarketId: row.preferred_supermarket_id || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -612,7 +761,7 @@ export class CookbookDatabase {
 
     const stmt = this.db.prepare(`
       UPDATE shopping_lists 
-      SET title = ?, description = ?, items = ?, recipes = ?, is_permanent = ?, has_seen_global_template_prompt = ?, updated_at = ?
+      SET title = ?, description = ?, items = ?, recipes = ?, is_permanent = ?, has_seen_global_template_prompt = ?, preferred_supermarket_id = ?, updated_at = ?
       WHERE id = ?
     `);
 
@@ -623,6 +772,7 @@ export class CookbookDatabase {
       JSON.stringify(updatedList.recipes),
       updatedList.permanentType ?? (updatedList.isPermanent ? 1 : 0),
       mergedHasSeenGlobalTemplatePrompt ? 1 : 0,
+      updatedList.preferredSupermarketId ?? null,
       updatedList.updatedAt.toISOString(),
       id
     );
@@ -1858,9 +2008,728 @@ export class CookbookDatabase {
     return { applied: true, value, updatedAt };
   }
 
+  // ===== Catalogue: ingredients with nutrition / grams-by-unit =====
+
+  /** Look up a catalogue ingredient by name (case-insensitive). */
+  getCatalogueIngredientByName(name: string): CatalogueIngredient | null {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const row = this.db
+      .prepare('SELECT * FROM ingredients WHERE LOWER(name) = LOWER(?) LIMIT 1')
+      .get(trimmed) as any;
+    return row ? rowToCatalogueIngredient(row) : null;
+  }
+
+  getCatalogueIngredientById(id: string): CatalogueIngredient | null {
+    const row = this.db.prepare('SELECT * FROM ingredients WHERE id = ?').get(id) as any;
+    return row ? rowToCatalogueIngredient(row) : null;
+  }
+
+  getAllCatalogueIngredients(): CatalogueIngredient[] {
+    const rows = this.db
+      .prepare('SELECT * FROM ingredients ORDER BY LOWER(name) ASC')
+      .all() as any[];
+    return rows.map(rowToCatalogueIngredient);
+  }
+
+  /**
+   * Upsert catalogue metadata (nutrition, density, gramsByUnit, defaultProductId)
+   * for an ingredient identified by name. Creates the row if it doesn't exist.
+   * Returns the resulting catalogue ingredient.
+   */
+  upsertCatalogueIngredient(input: {
+    name: string;
+    description?: string | null;
+    nutritionPer100g?: NutritionData | null;
+    densityGPerMl?: number | null;
+    gramsByUnit?: Record<string, number> | null;
+    defaultProductId?: string | null;
+  }): CatalogueIngredient {
+    const name = input.name.trim();
+    if (!name) throw new Error('Ingredient name is required');
+    const existing = this.getCatalogueIngredientByName(name);
+    const nutritionJson = input.nutritionPer100g == null ? null : JSON.stringify(input.nutritionPer100g);
+    const gramsByUnitJson = input.gramsByUnit == null ? null : JSON.stringify(input.gramsByUnit);
+
+    if (existing) {
+      this.db
+        .prepare(
+          `UPDATE ingredients SET
+             description = COALESCE(?, description),
+             nutrition_json = ?,
+             density_g_per_ml = ?,
+             grams_by_unit_json = ?,
+             default_product_id = ?
+           WHERE id = ?`
+        )
+        .run(
+          input.description ?? null,
+          nutritionJson,
+          input.densityGPerMl ?? null,
+          gramsByUnitJson,
+          input.defaultProductId ?? null,
+          existing.id
+        );
+      eventBus.emit(EVENTS.INGREDIENT_UPDATED, { id: existing.id, name });
+      return this.getCatalogueIngredientById(existing.id)!;
+    }
+
+    const id = uuidv4();
+    this.db
+      .prepare(
+        `INSERT INTO ingredients (id, name, description, usage_count, nutrition_json, density_g_per_ml, grams_by_unit_json, default_product_id)
+         VALUES (?, ?, ?, 0, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        name,
+        input.description ?? null,
+        nutritionJson,
+        input.densityGPerMl ?? null,
+        gramsByUnitJson,
+        input.defaultProductId ?? null
+      );
+    eventBus.emit(EVENTS.INGREDIENT_UPDATED, { id, name });
+    return this.getCatalogueIngredientById(id)!;
+  }
+
+  // ===== Supermarkets =====
+
+  getAllSupermarkets(): Supermarket[] {
+    const rows = this.db
+      .prepare('SELECT * FROM supermarkets ORDER BY LOWER(name) ASC')
+      .all() as any[];
+    return rows.map(rowToSupermarket);
+  }
+
+  getSupermarket(id: string): Supermarket | null {
+    const row = this.db.prepare('SELECT * FROM supermarkets WHERE id = ?').get(id) as any;
+    return row ? rowToSupermarket(row) : null;
+  }
+
+  upsertSupermarket(input: { id?: string; name: string }): Supermarket {
+    const name = input.name.trim();
+    if (!name) throw new Error('Supermarket name is required');
+
+    if (input.id) {
+      const existing = this.getSupermarket(input.id);
+      if (existing) {
+        this.db
+          .prepare('UPDATE supermarkets SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(name, input.id);
+        const updated = this.getSupermarket(input.id)!;
+        eventBus.emit(EVENTS.SUPERMARKET_UPSERTED, { supermarket: updated });
+        return updated;
+      }
+    }
+
+    const byName = this.db
+      .prepare('SELECT * FROM supermarkets WHERE LOWER(name) = LOWER(?) LIMIT 1')
+      .get(name) as any;
+    if (byName) return rowToSupermarket(byName);
+
+    const id = input.id ?? uuidv4();
+    this.db
+      .prepare('INSERT INTO supermarkets (id, name) VALUES (?, ?)')
+      .run(id, name);
+    const created = this.getSupermarket(id)!;
+    eventBus.emit(EVENTS.SUPERMARKET_UPSERTED, { supermarket: created });
+    return created;
+  }
+
+  deleteSupermarket(id: string): boolean {
+    // Explicit cleanup of price rows (defense-in-depth; the FK CASCADE also
+    // covers this now that foreign_keys is ON).
+    this.db.prepare('DELETE FROM product_supermarkets WHERE supermarket_id = ?').run(id);
+    const result = this.db.prepare('DELETE FROM supermarkets WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
+  // ===== Products =====
+
+  getProduct(id: string): Product | null {
+    const row = this.db.prepare('SELECT * FROM products WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    return this.hydrateProduct(row);
+  }
+
+  getProductByEan(ean: string): Product | null {
+    const trimmed = ean.trim();
+    if (!trimmed) return null;
+    const row = this.db.prepare('SELECT * FROM products WHERE ean = ?').get(trimmed) as any;
+    if (!row) return null;
+    return this.hydrateProduct(row);
+  }
+
+  getAllProducts(): Product[] {
+    const rows = this.db
+      .prepare('SELECT * FROM products ORDER BY LOWER(name) ASC')
+      .all() as any[];
+    return rows.map((row) => this.hydrateProduct(row));
+  }
+
+  searchProducts(query: string, limit = 20): Product[] {
+    const trimmed = query.trim();
+    if (!trimmed) return this.getAllProducts().slice(0, limit);
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM products
+         WHERE LOWER(name) LIKE ? OR LOWER(COALESCE(brand,'')) LIKE ? OR ean = ?
+         ORDER BY LOWER(name) ASC
+         LIMIT ?`
+      )
+      .all(`%${trimmed.toLowerCase()}%`, `%${trimmed.toLowerCase()}%`, trimmed, limit) as any[];
+    return rows.map((row) => this.hydrateProduct(row));
+  }
+
+  getProductsForIngredient(ingredientId: string): Product[] {
+    const rows = this.db
+      .prepare(
+        `SELECT p.* FROM products p
+         INNER JOIN ingredient_products ip ON ip.product_id = p.id
+         WHERE ip.ingredient_id = ?
+         ORDER BY ip.is_default DESC, LOWER(p.name) ASC`
+      )
+      .all(ingredientId) as any[];
+    return rows.map((row) => this.hydrateProduct(row));
+  }
+
+  /**
+   * Insert or update a product. If `ean` is set and an existing product has
+   * that EAN, that row is updated in-place. Otherwise a new product is created.
+   */
+  upsertProduct(input: {
+    id?: string;
+    ean?: string | null;
+    name: string;
+    brand?: string | null;
+    netGrams?: number | null;
+    packageLabel?: string | null;
+    nutritionPer100g?: NutritionData | null;
+    defaultPrice?: number | null;
+    imageUrl?: string | null;
+    source?: 'manual' | 'openfoodfacts';
+    offCode?: string | null;
+    supermarkets?: ProductSupermarketPrice[];
+    ingredientIds?: string[];
+  }): Product {
+    const name = input.name.trim();
+    if (!name) throw new Error('Product name is required');
+    const ean = input.ean ? input.ean.trim() : null;
+    const nutritionJson = input.nutritionPer100g == null ? null : JSON.stringify(input.nutritionPer100g);
+    const source = input.source ?? 'manual';
+
+    let productId = input.id ?? null;
+    if (!productId && ean) {
+      const existing = this.getProductByEan(ean);
+      if (existing) productId = existing.id;
+    }
+    if (productId) {
+      const existing = this.getProduct(productId);
+      if (existing) {
+        this.db
+          .prepare(
+            `UPDATE products SET
+               ean = ?, name = ?, brand = ?, net_grams = ?, package_label = ?,
+               nutrition_json = ?, default_price = ?, image_url = ?, source = ?, off_code = ?,
+               updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?`
+          )
+          .run(
+            ean,
+            name,
+            input.brand ?? null,
+            input.netGrams ?? null,
+            input.packageLabel ?? null,
+            nutritionJson,
+            input.defaultPrice ?? null,
+            input.imageUrl ?? null,
+            source,
+            input.offCode ?? null,
+            productId
+          );
+      } else {
+        productId = null;
+      }
+    }
+    if (!productId) {
+      productId = uuidv4();
+      this.db
+        .prepare(
+          `INSERT INTO products
+             (id, ean, name, brand, net_grams, package_label, nutrition_json, default_price, image_url, source, off_code)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          productId,
+          ean,
+          name,
+          input.brand ?? null,
+          input.netGrams ?? null,
+          input.packageLabel ?? null,
+          nutritionJson,
+          input.defaultPrice ?? null,
+          input.imageUrl ?? null,
+          source,
+          input.offCode ?? null
+        );
+    }
+
+    if (input.supermarkets) {
+      this.setProductSupermarkets(productId, input.supermarkets);
+    }
+    if (input.ingredientIds) {
+      this.setProductIngredients(productId, input.ingredientIds);
+    }
+
+    const product = this.getProduct(productId)!;
+    eventBus.emit(EVENTS.PRODUCT_UPSERTED, { product });
+    return product;
+  }
+
+  deleteProduct(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    if (result.changes > 0) {
+      eventBus.emit(EVENTS.PRODUCT_DELETED, { productId: id });
+      return true;
+    }
+    return false;
+  }
+
+  setProductSupermarkets(productId: string, prices: ProductSupermarketPrice[]): void {
+    const del = this.db.prepare('DELETE FROM product_supermarkets WHERE product_id = ?');
+    const insert = this.db.prepare(
+      'INSERT INTO product_supermarkets (product_id, supermarket_id, price) VALUES (?, ?, ?)'
+    );
+    const tx = this.db.transaction((rows: ProductSupermarketPrice[]) => {
+      del.run(productId);
+      for (const row of rows) {
+        if (!row.supermarketId || !Number.isFinite(row.price)) continue;
+        insert.run(productId, row.supermarketId, row.price);
+      }
+    });
+    tx(prices);
+  }
+
+  /**
+   * Set (or clear) the ingredient's default product without touching other
+   * catalogue metadata like nutrition, density, or gramsByUnit — the general
+   * upsertCatalogueIngredient always overwrites those columns because they
+   * are edited as one form.
+   */
+  setDefaultProductForIngredient(ingredientId: string, productId: string | null): void {
+    this.db
+      .prepare('UPDATE ingredients SET default_product_id = ? WHERE id = ?')
+      .run(productId, ingredientId);
+    eventBus.emit(EVENTS.INGREDIENT_UPDATED, { id: ingredientId });
+  }
+
+  setProductIngredients(productId: string, ingredientIds: string[]): void {
+    const del = this.db.prepare('DELETE FROM ingredient_products WHERE product_id = ?');
+    const insert = this.db.prepare(
+      'INSERT INTO ingredient_products (ingredient_id, product_id, is_default) VALUES (?, ?, 0)'
+    );
+    const tx = this.db.transaction((ids: string[]) => {
+      del.run(productId);
+      const seen = new Set<string>();
+      for (const id of ids) {
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        insert.run(id, productId);
+      }
+    });
+    tx(ingredientIds);
+  }
+
+  private hydrateProduct(row: any): Product {
+    const supermarkets = this.db
+      .prepare('SELECT supermarket_id, price FROM product_supermarkets WHERE product_id = ?')
+      .all(row.id) as Array<{ supermarket_id: string; price: number }>;
+    const ingredientIds = this.db
+      .prepare('SELECT ingredient_id FROM ingredient_products WHERE product_id = ?')
+      .all(row.id) as Array<{ ingredient_id: string }>;
+    return {
+      id: row.id,
+      ean: row.ean || undefined,
+      name: row.name,
+      brand: row.brand || undefined,
+      netGrams: row.net_grams ?? undefined,
+      packageLabel: row.package_label || undefined,
+      nutritionPer100g: row.nutrition_json ? safeParseJson<NutritionData>(row.nutrition_json) : undefined,
+      defaultPrice: row.default_price ?? undefined,
+      imageUrl: row.image_url || undefined,
+      source: row.source === 'openfoodfacts' ? 'openfoodfacts' : 'manual',
+      offCode: row.off_code || undefined,
+      supermarkets: supermarkets.map((s) => ({ supermarketId: s.supermarket_id, price: s.price })),
+      ingredientIds: ingredientIds.map((i) => i.ingredient_id),
+      createdAt: parseDate(row.created_at),
+      updatedAt: parseDate(row.updated_at),
+    };
+  }
+
+  // ===== Weight logs =====
+
+  getWeightLogs(alias: string, limit = 2000): WeightLog[] {
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM weight_logs WHERE alias = ? ORDER BY logged_at DESC LIMIT ?'
+      )
+      .all(alias, limit) as any[];
+    return rows.map((row) => ({
+      id: row.id,
+      alias: row.alias,
+      loggedAt: parseDate(row.logged_at),
+      weightKg: row.weight_kg,
+    }));
+  }
+
+  getLatestWeight(alias: string): WeightLog | null {
+    const row = this.db
+      .prepare('SELECT * FROM weight_logs WHERE alias = ? ORDER BY logged_at DESC LIMIT 1')
+      .get(alias) as any;
+    if (!row) return null;
+    return {
+      id: row.id,
+      alias: row.alias,
+      loggedAt: parseDate(row.logged_at),
+      weightKg: row.weight_kg,
+    };
+  }
+
+  addWeightLog(alias: string, weightKg: number, loggedAt = new Date()): WeightLog {
+    const id = uuidv4();
+    this.db
+      .prepare('INSERT INTO weight_logs (id, alias, logged_at, weight_kg) VALUES (?, ?, ?, ?)')
+      .run(id, alias, loggedAt.toISOString(), weightKg);
+    const log = { id, alias, loggedAt, weightKg };
+    eventBus.emit(EVENTS.WEIGHT_LOGGED, { alias, log });
+    return log;
+  }
+
+  deleteWeightLog(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM weight_logs WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
+  // ===== Meal plans =====
+
+  getMealPlan(id: string): MealPlan | null {
+    const row = this.db.prepare(`
+      SELECT mp.*, r.title AS recipe_title
+      FROM meal_plans mp
+      LEFT JOIN recipes r ON r.id = mp.recipe_id
+      WHERE mp.id = ?
+    `).get(id) as any;
+    return row ? this.hydrateMealPlan(row) : null;
+  }
+
+  getConsumedServingsForPlan(planId: string): number {
+    const row = this.db
+      .prepare(`SELECT COALESCE(SUM(servings), 0) AS total FROM diary_entries WHERE plan_id = ?`)
+      .get(planId) as { total: number } | undefined;
+    const total = Number(row?.total ?? 0);
+    return Number.isFinite(total) ? total : 0;
+  }
+
+  /**
+   * Keep plan.status in sync with remaining portions. A prep stays `planned`
+   * until every prepared portion has a diary entry; deleting a diary entry
+   * reopens it. `skipped` is left untouched.
+   */
+  syncMealPlanStatusFromDiary(planId: string): MealPlan | null {
+    const plan = this.getMealPlan(planId);
+    if (!plan || plan.status === 'skipped') return plan;
+    const nextStatus: MealPlanStatus = plan.servingsRemaining <= 0 ? 'eaten' : 'planned';
+    if (plan.status === nextStatus) return plan;
+    return this.updateMealPlan(planId, { status: nextStatus });
+  }
+
+  getMealPlansForAlias(alias: string, fromIso?: string, toIso?: string): MealPlan[] {
+    const clauses = ['mp.alias = ?'];
+    const params: any[] = [alias];
+    if (fromIso) {
+      clauses.push('mp.scheduled_at >= ?');
+      params.push(fromIso);
+    }
+    if (toIso) {
+      clauses.push('mp.scheduled_at <= ?');
+      params.push(toIso);
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT mp.*, r.title AS recipe_title
+         FROM meal_plans mp
+         LEFT JOIN recipes r ON r.id = mp.recipe_id
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY mp.scheduled_at ASC`
+      )
+      .all(...params) as any[];
+    return rows.map((row) => this.hydrateMealPlan(row));
+  }
+
+  /**
+   * Meal-prep batches available on a given day: started on or before that day,
+   * not skipped, and still having leftover portions.
+   */
+  getActiveMealPlansForAlias(alias: string, asOfIso: string): MealPlan[] {
+    const rows = this.db
+      .prepare(
+        `SELECT mp.*, r.title AS recipe_title
+         FROM meal_plans mp
+         LEFT JOIN recipes r ON r.id = mp.recipe_id
+         WHERE mp.alias = ?
+           AND mp.scheduled_at <= ?
+           AND mp.status != 'skipped'
+           AND mp.servings > COALESCE((
+             SELECT SUM(d.servings) FROM diary_entries d WHERE d.plan_id = mp.id
+           ), 0)
+         ORDER BY mp.scheduled_at ASC`
+      )
+      .all(alias, asOfIso) as any[];
+    return rows.map((row) => this.hydrateMealPlan(row));
+  }
+
+  private hydrateMealPlan(row: any): MealPlan {
+    const plan = rowToMealPlan(row);
+    const consumed = this.getConsumedServingsForPlan(plan.id);
+    plan.servingsConsumed = consumed;
+    plan.servingsRemaining = Math.max(0, Math.round((plan.servings - consumed) * 100) / 100);
+    plan.recipeTitle = typeof row.recipe_title === 'string' && row.recipe_title.trim()
+      ? row.recipe_title
+      : undefined;
+    return plan;
+  }
+
+  createMealPlan(input: Omit<MealPlan, 'id' | 'createdAt' | 'updatedAt' | 'servingsConsumed' | 'servingsRemaining' | 'recipeTitle'>): MealPlan {
+    const id = uuidv4();
+    this.db
+      .prepare(
+        `INSERT INTO meal_plans (id, alias, recipe_id, scheduled_at, servings, supermarket_id,
+             status, product_assignments_json, reminder_minutes, nutrition_snapshot_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.alias,
+        input.recipeId,
+        input.scheduledAt.toISOString(),
+        input.servings,
+        input.supermarketId ?? null,
+        input.status,
+        JSON.stringify(input.productAssignments ?? {}),
+        input.reminderMinutes ?? null,
+        input.nutritionSnapshot ? JSON.stringify(input.nutritionSnapshot) : null
+      );
+    const plan = this.getMealPlan(id)!;
+    eventBus.emit(EVENTS.MEAL_PLAN_UPSERTED, { plan });
+    return plan;
+  }
+
+  updateMealPlan(id: string, updates: Partial<Omit<MealPlan, 'id' | 'alias' | 'createdAt' | 'updatedAt'>>): MealPlan | null {
+    const existing = this.getMealPlan(id);
+    if (!existing) return null;
+
+    const merged: MealPlan = {
+      ...existing,
+      ...updates,
+      productAssignments: updates.productAssignments ?? existing.productAssignments,
+      nutritionSnapshot: updates.nutritionSnapshot ?? existing.nutritionSnapshot,
+    };
+
+    this.db
+      .prepare(
+        `UPDATE meal_plans SET
+             recipe_id = ?, scheduled_at = ?, servings = ?, supermarket_id = ?,
+             status = ?, product_assignments_json = ?, reminder_minutes = ?, nutrition_snapshot_json = ?,
+             updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`
+      )
+      .run(
+        merged.recipeId,
+        merged.scheduledAt.toISOString(),
+        merged.servings,
+        merged.supermarketId ?? null,
+        merged.status,
+        JSON.stringify(merged.productAssignments ?? {}),
+        merged.reminderMinutes ?? null,
+        merged.nutritionSnapshot ? JSON.stringify(merged.nutritionSnapshot) : null,
+        id
+      );
+    const plan = this.getMealPlan(id)!;
+    eventBus.emit(EVENTS.MEAL_PLAN_UPSERTED, { plan });
+    return plan;
+  }
+
+  deleteMealPlan(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM meal_plans WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
+  // ===== Diary entries =====
+
+  getDiaryEntry(id: string): DiaryEntry | null {
+    const row = this.db
+      .prepare(
+        `SELECT d.*, r.title AS recipe_title, p.name AS product_name
+         FROM diary_entries d
+         LEFT JOIN recipes r ON r.id = d.recipe_id
+         LEFT JOIN products p ON p.id = d.product_id
+         WHERE d.id = ?`
+      )
+      .get(id) as any;
+    return row ? rowToDiaryEntry(row) : null;
+  }
+
+  getDiaryEntriesForAlias(alias: string, fromIso?: string, toIso?: string): DiaryEntry[] {
+    const clauses = ['d.alias = ?'];
+    const params: any[] = [alias];
+    if (fromIso) {
+      clauses.push('d.eaten_at >= ?');
+      params.push(fromIso);
+    }
+    if (toIso) {
+      clauses.push('d.eaten_at <= ?');
+      params.push(toIso);
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT d.*, r.title AS recipe_title, p.name AS product_name
+         FROM diary_entries d
+         LEFT JOIN recipes r ON r.id = d.recipe_id
+         LEFT JOIN products p ON p.id = d.product_id
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY d.eaten_at DESC`
+      )
+      .all(...params) as any[];
+    return rows.map(rowToDiaryEntry);
+  }
+
+  addDiaryEntry(input: Omit<DiaryEntry, 'id' | 'createdAt'>): DiaryEntry {
+    const id = uuidv4();
+    this.db
+      .prepare(
+        `INSERT INTO diary_entries (id, alias, eaten_at, source, plan_id, recipe_id, product_id, label, grams, servings, nutrition_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.alias,
+        input.eatenAt.toISOString(),
+        input.source,
+        input.planId ?? null,
+        input.recipeId ?? null,
+        input.productId ?? null,
+        input.label ?? null,
+        input.grams ?? null,
+        input.servings ?? null,
+        JSON.stringify(input.nutrition ?? {})
+      );
+    const entry = this.getDiaryEntry(id)!;
+    eventBus.emit(EVENTS.DIARY_UPSERTED, { entry });
+    return entry;
+  }
+
+  deleteDiaryEntry(id: string): boolean {
+    const existing = this.getDiaryEntry(id);
+    const result = this.db.prepare('DELETE FROM diary_entries WHERE id = ?').run(id);
+    if (result.changes > 0 && existing?.planId) {
+      this.syncMealPlanStatusFromDiary(existing.planId);
+    }
+    return result.changes > 0;
+  }
+
   close(): void {
     this.db.close();
   }
+}
+
+function safeParseJson<T>(value: string | null): T | undefined {
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    return undefined;
+  }
+}
+
+function parseDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+
+function rowToCatalogueIngredient(row: any): CatalogueIngredient {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || undefined,
+    usageCount: typeof row.usage_count === 'number' ? row.usage_count : 0,
+    nutritionPer100g: row.nutrition_json ? safeParseJson<NutritionData>(row.nutrition_json) : undefined,
+    densityGPerMl: row.density_g_per_ml ?? undefined,
+    gramsByUnit: row.grams_by_unit_json ? safeParseJson<Record<string, number>>(row.grams_by_unit_json) : undefined,
+    defaultProductId: row.default_product_id || undefined,
+  };
+}
+
+function rowToSupermarket(row: any): Supermarket {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: parseDate(row.created_at),
+    updatedAt: parseDate(row.updated_at),
+  };
+}
+
+function rowToMealPlan(row: any): MealPlan {
+  const status: MealPlanStatus =
+    row.status === 'eaten' || row.status === 'skipped' ? row.status : 'planned';
+  const servings = typeof row.servings === 'number' ? row.servings : Number(row.servings) || 1;
+  return {
+    id: row.id,
+    alias: row.alias,
+    recipeId: row.recipe_id,
+    scheduledAt: parseDate(row.scheduled_at),
+    servings,
+    servingsConsumed: 0,
+    servingsRemaining: servings,
+    supermarketId: row.supermarket_id || undefined,
+    status,
+    productAssignments: row.product_assignments_json
+      ? safeParseJson<Record<string, string>>(row.product_assignments_json) ?? {}
+      : {},
+    reminderMinutes: row.reminder_minutes ?? undefined,
+    nutritionSnapshot: row.nutrition_snapshot_json
+      ? safeParseJson<NutritionData>(row.nutrition_snapshot_json)
+      : undefined,
+    createdAt: parseDate(row.created_at),
+    updatedAt: parseDate(row.updated_at),
+  };
+}
+
+function rowToDiaryEntry(row: any): DiaryEntry {
+  return {
+    id: row.id,
+    alias: row.alias,
+    eatenAt: parseDate(row.eaten_at),
+    source: row.source,
+    planId: row.plan_id || undefined,
+    recipeId: row.recipe_id || undefined,
+    recipeTitle: typeof row.recipe_title === 'string' && row.recipe_title.trim()
+      ? row.recipe_title
+      : undefined,
+    productId: row.product_id || undefined,
+    productName: typeof row.product_name === 'string' && row.product_name.trim()
+      ? row.product_name
+      : undefined,
+    label: row.label || undefined,
+    grams: row.grams ?? undefined,
+    servings: row.servings ?? undefined,
+    nutrition: row.nutrition_json ? safeParseJson<NutritionData>(row.nutrition_json) ?? {} : {},
+    createdAt: parseDate(row.created_at),
+  };
 }
 
 // Create a singleton instance

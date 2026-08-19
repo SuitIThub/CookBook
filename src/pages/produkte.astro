@@ -1,0 +1,989 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+import { db } from '../lib/database';
+
+const products = db.getAllProducts();
+const supermarkets = db.getAllSupermarkets();
+
+function formatEuro(v: number): string {
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(v);
+}
+---
+
+<Layout title="Produkte">
+  <div class="container mx-auto px-4 py-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">Produktregister</h1>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          Produkte mit EAN, Nährwerten und Supermarktpreisen. Barcode scannen für schnellen Import aus Open Food Facts (ODbL, community-basiert).
+        </p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" id="btn-scan" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm font-medium">
+          Barcode scannen
+        </button>
+        <button type="button" id="btn-new" class="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium">
+          Neues Produkt
+        </button>
+        <button type="button" id="btn-markets" class="px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded text-sm font-medium">
+          Supermärkte …
+        </button>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <input
+        id="product-search"
+        type="text"
+        placeholder="Produkte, Marken oder EAN suchen …"
+        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+      />
+    </div>
+
+    <div id="products-empty" class={products.length === 0 ? "text-center py-12" : "hidden"}>
+      <p class="text-gray-500 dark:text-gray-400">Noch keine Produkte. Barcode scannen oder manuell anlegen.</p>
+    </div>
+
+    <div id="products-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {products.map((p) => {
+        const nut = p.nutritionPer100g ?? {};
+        const smIds = p.supermarkets.map((s) => s.supermarketId);
+        return (
+          <div
+            class="product-card p-4 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition"
+            data-id={p.id}
+            data-name={p.name.toLowerCase()}
+            data-brand={(p.brand || '').toLowerCase()}
+            data-ean={p.ean || ''}
+          >
+            <div class="flex items-start gap-3">
+              <div class="w-16 h-16 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+                {p.imageUrl ? (
+                  <img src={p.imageUrl} alt="" class="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <span class="text-2xl">🥫</span>
+                )}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="font-semibold text-gray-900 dark:text-white truncate">{p.name}</div>
+                    {p.brand && <div class="text-xs text-gray-500 dark:text-gray-400 truncate">{p.brand}</div>}
+                    <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                      {p.ean ? `EAN ${p.ean}` : 'ohne EAN'}
+                      {p.packageLabel ? ` · ${p.packageLabel}` : ''}
+                      {p.netGrams ? ` · ${p.netGrams} g` : ''}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="text-red-500 hover:text-red-700 text-xs"
+                    data-action="delete"
+                    data-id={p.id}
+                    title="Löschen"
+                  >
+                    Löschen
+                  </button>
+                </div>
+                <div class="mt-2 text-xs text-gray-600 dark:text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
+                  {nut.calories != null && <span>{Math.round(nut.calories)} kcal/100 g</span>}
+                  {nut.protein != null && <span>Eiweiß {nut.protein} g</span>}
+                  {nut.fat != null && <span>Fett {nut.fat} g</span>}
+                  {nut.carbohydrates != null && <span>KH {nut.carbohydrates} g</span>}
+                </div>
+                <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Preise: {p.defaultPrice != null ? `${formatEuro(p.defaultPrice)} (Standard)` : 'kein Standardpreis'}
+                  {p.supermarkets.length > 0 && ` · ${p.supermarkets.length} Markt${p.supermarkets.length === 1 ? '' : 'e'}`}
+                </div>
+                <div class="mt-2 flex gap-2 flex-wrap">
+                  <button type="button" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded" data-action="edit" data-id={p.id}>
+                    Bearbeiten
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+
+  <!-- Product editor modal -->
+  <div id="product-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-3">
+    <div class="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 id="product-modal-title" class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Produkt</h2>
+          <button type="button" id="product-modal-close" class="text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+        <form id="product-form" class="space-y-3">
+          <input type="hidden" id="pf-id" />
+          <input type="hidden" id="pf-source" />
+          <input type="hidden" id="pf-off-code" />
+
+          <fieldset id="pf-off-wrap" class="border border-blue-200 dark:border-blue-900/60 rounded p-3 bg-blue-50/40 dark:bg-blue-950/20">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Open Food Facts durchsuchen</legend>
+            <div class="flex gap-2 flex-wrap">
+              <input
+                id="pf-off-input"
+                type="search"
+                placeholder="Produktname, Marke oder EAN …"
+                class="flex-1 min-w-[12rem] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+              <button type="button" id="pf-off-search" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
+                Suchen
+              </button>
+              <button type="button" id="pf-off-scan" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">
+                Barcode
+              </button>
+            </div>
+            <div id="pf-off-status" class="text-[11px] text-gray-500 dark:text-gray-400 mt-1"></div>
+            <div id="pf-off-results" class="mt-2 space-y-1 max-h-56 overflow-y-auto"></div>
+            <p class="text-[11px] text-gray-500 mt-2">
+              Community-Daten (ODbL). „Übernehmen“ füllt das Formular – erst Speichern legt das Produkt an.
+            </p>
+          </fieldset>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Name</span>
+              <input id="pf-name" required class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Marke</span>
+              <input id="pf-brand" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">EAN</span>
+              <input id="pf-ean" inputmode="numeric" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Netto (g)</span>
+              <input id="pf-net-grams" type="number" step="0.1" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Packungslabel</span>
+              <input id="pf-package" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Standardpreis (€)</span>
+              <input id="pf-default-price" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <div class="block text-sm col-span-full">
+              <span class="text-gray-700 dark:text-gray-200">Bild</span>
+              <input type="hidden" id="pf-image" />
+              <div class="mt-1 flex flex-col sm:flex-row gap-3">
+                <div
+                  id="pf-image-preview"
+                  class="w-24 h-24 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center border border-gray-200 dark:border-gray-600"
+                >
+                  <span class="text-2xl">🥫</span>
+                </div>
+                <div class="flex-1 min-w-0 space-y-2">
+                  <div
+                    id="pf-image-dropzone"
+                    class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3 text-center hover:border-orange-400 dark:hover:border-orange-500 transition-colors cursor-pointer"
+                  >
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                      <span class="font-medium">Klicken</span> oder Datei hierher ziehen
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">PNG, JPG oder WEBP (max. 10 MB)</p>
+                    <input id="pf-image-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+                  </div>
+                  <p id="pf-image-status" class="hidden text-xs text-gray-500 dark:text-gray-400">Bild wird hochgeladen …</p>
+                  <label class="block">
+                    <span class="text-xs text-gray-500 dark:text-gray-400">oder Bild-URL</span>
+                    <input
+                      id="pf-image-url"
+                      type="url"
+                      placeholder="https://…"
+                      class="mt-0.5 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    id="pf-image-remove"
+                    class="hidden text-xs text-red-500 hover:text-red-700"
+                  >
+                    Bild entfernen
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Nährwerte (pro 100 g)</legend>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <label class="block"><span class="block text-gray-500">kcal</span><input id="pf-nut-calories" type="number" step="1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">KH (g)</span><input id="pf-nut-carbohydrates" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Zucker (g)</span><input id="pf-nut-sugar" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Eiweiß (g)</span><input id="pf-nut-protein" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Fett (g)</span><input id="pf-nut-fat" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">ges. Fett (g)</span><input id="pf-nut-saturatedFat" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Ballaststoffe (g)</span><input id="pf-nut-fiber" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Salz (g)</span><input id="pf-nut-salt" type="number" step="0.01" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Preise pro Supermarkt</legend>
+            <div id="pf-market-prices" class="space-y-2"></div>
+            <p class="text-[11px] text-gray-500 mt-1">Leer lassen, um einen Marktpreis zu entfernen.</p>
+          </fieldset>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Verknüpfte Zutaten</legend>
+            <div id="pf-ingredient-chips" class="flex flex-wrap gap-1 mb-2 min-h-[1.5rem]"></div>
+            <div class="flex gap-2">
+              <input
+                id="pf-ingredient-input"
+                type="text"
+                list="pf-ingredient-datalist"
+                placeholder="Zutat suchen oder neu eingeben …"
+                class="flex-1 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600 text-sm"
+              />
+              <datalist id="pf-ingredient-datalist"></datalist>
+              <button type="button" id="pf-ingredient-add" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-sm">
+                Hinzufügen
+              </button>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Bestimmt, unter welchen Zutaten dieses Produkt im Rezept auswählbar ist. Unbekannte Namen werden neu angelegt.
+            </p>
+          </fieldset>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" id="pf-cancel" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Abbrechen</button>
+            <button type="submit" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded">Speichern</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supermarket manager modal -->
+  <div id="market-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-3">
+    <div class="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+      <div class="p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Supermärkte verwalten</h2>
+          <button type="button" id="market-modal-close" class="text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+        <div class="flex gap-2 mb-3">
+          <input id="market-name" placeholder="Neuer Supermarkt" class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+          <button type="button" id="market-add" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded">Hinzufügen</button>
+        </div>
+        <ul id="market-list" class="space-y-1 text-sm"></ul>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  interface Product {
+    id: string;
+    ean?: string;
+    name: string;
+    brand?: string;
+    netGrams?: number;
+    packageLabel?: string;
+    nutritionPer100g?: Record<string, number>;
+    defaultPrice?: number;
+    imageUrl?: string;
+    source: 'manual' | 'openfoodfacts';
+    offCode?: string;
+    supermarkets: Array<{ supermarketId: string; price: number }>;
+    ingredientIds: string[];
+  }
+  interface Supermarket {
+    id: string;
+    name: string;
+  }
+
+  interface CatalogueEntry { id: string; name: string; defaultProductId?: string }
+
+  interface OffSearchHit {
+    ean: string;
+    name?: string;
+    brand?: string;
+    packageLabel?: string;
+    imageUrl?: string;
+    nutritionPer100g?: Record<string, number>;
+    netGrams?: number;
+    offCode?: string;
+  }
+
+  let supermarketsCache: Supermarket[] = [];
+  let catalogueCache: CatalogueEntry[] = [];
+  let currentIngredientIds: string[] = [];
+  let openScanForImport = false;
+  let savedProductImageUrl = '';
+  let pendingLocalUploadUrl = '';
+  let lastOffRemoteByEan: Record<string, OffSearchHit> = {};
+
+  async function loadSupermarkets(): Promise<Supermarket[]> {
+    const res = await fetch('/api/supermarkets');
+    supermarketsCache = res.ok ? await res.json() : [];
+    return supermarketsCache;
+  }
+
+  async function loadCatalogue(): Promise<CatalogueEntry[]> {
+    const res = await fetch('/api/ingredients/catalogue');
+    catalogueCache = res.ok ? await res.json() : [];
+    const datalist = document.getElementById('pf-ingredient-datalist');
+    if (datalist) {
+      datalist.innerHTML = '';
+      for (const ing of catalogueCache) {
+        const opt = document.createElement('option');
+        opt.value = ing.name;
+        datalist.appendChild(opt);
+      }
+    }
+    return catalogueCache;
+  }
+
+  function findCatalogueByName(name: string): CatalogueEntry | undefined {
+    const target = name.trim().toLowerCase();
+    return catalogueCache.find((c) => c.name.trim().toLowerCase() === target);
+  }
+
+  function findCatalogueById(id: string): CatalogueEntry | undefined {
+    return catalogueCache.find((c) => c.id === id);
+  }
+
+  function renderIngredientChips() {
+    const container = document.getElementById('pf-ingredient-chips');
+    if (!container) return;
+    container.innerHTML = '';
+    if (currentIngredientIds.length === 0) {
+      container.innerHTML = '<span class="text-xs text-gray-500">Noch keine Zutaten verknüpft.</span>';
+      return;
+    }
+    for (const id of currentIngredientIds) {
+      const ing = findCatalogueById(id);
+      const label = ing?.name || id;
+      const chip = document.createElement('span');
+      chip.className = 'inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 rounded text-xs';
+      chip.innerHTML = `${escapeHtml(label)} <button type="button" class="pf-chip-remove text-red-500 hover:text-red-700" data-id="${id}" title="Entfernen">×</button>`;
+      container.appendChild(chip);
+    }
+  }
+
+  async function addIngredientByName(rawName: string) {
+    const name = rawName.trim();
+    if (!name) return;
+    let entry = findCatalogueByName(name);
+    if (!entry) {
+      const res = await fetch('/api/ingredients/catalogue', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      });
+      if (!res.ok) { alert('Zutat konnte nicht angelegt werden.'); return; }
+      const created = await res.json();
+      entry = { id: created.id, name: created.name };
+      catalogueCache.push(entry);
+    }
+    if (!currentIngredientIds.includes(entry.id)) currentIngredientIds.push(entry.id);
+    renderIngredientChips();
+  }
+
+  async function refreshList() {
+    const search = (document.getElementById('product-search') as HTMLInputElement | null)?.value?.trim() ?? '';
+    const url = search ? `/api/products?q=${encodeURIComponent(search)}` : '/api/products';
+    const res = await fetch(url);
+    const products: Product[] = res.ok ? await res.json() : [];
+    renderProducts(products);
+  }
+
+  function renderProducts(products: Product[]) {
+    const list = document.getElementById('products-list');
+    const empty = document.getElementById('products-empty');
+    if (!list) return;
+    list.innerHTML = '';
+    if (products.length === 0) {
+      empty?.classList.remove('hidden');
+      return;
+    }
+    empty?.classList.add('hidden');
+    for (const p of products) {
+      const card = document.createElement('div');
+      card.className = 'product-card p-4 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition';
+      card.dataset.id = p.id;
+      const nut = p.nutritionPer100g || {};
+      card.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="w-16 h-16 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+            ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-2xl">🥫</span>'}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="font-semibold text-gray-900 dark:text-white truncate">${escapeHtml(p.name)}</div>
+                ${p.brand ? `<div class="text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(p.brand)}</div>` : ''}
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                  ${p.ean ? `EAN ${escapeHtml(p.ean)}` : 'ohne EAN'}
+                  ${p.packageLabel ? ` · ${escapeHtml(p.packageLabel)}` : ''}
+                  ${p.netGrams ? ` · ${p.netGrams} g` : ''}
+                </div>
+              </div>
+              <button type="button" class="text-red-500 hover:text-red-700 text-xs" data-action="delete" data-id="${p.id}" title="Löschen">Löschen</button>
+            </div>
+            <div class="mt-2 text-xs text-gray-600 dark:text-gray-300 flex flex-wrap gap-x-3 gap-y-1">
+              ${nut.calories != null ? `<span>${Math.round(nut.calories)} kcal/100 g</span>` : ''}
+              ${nut.protein != null ? `<span>Eiweiß ${nut.protein} g</span>` : ''}
+              ${nut.fat != null ? `<span>Fett ${nut.fat} g</span>` : ''}
+              ${nut.carbohydrates != null ? `<span>KH ${nut.carbohydrates} g</span>` : ''}
+            </div>
+            <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Preise: ${p.defaultPrice != null ? `${formatEuroClient(p.defaultPrice)} (Standard)` : 'kein Standardpreis'}
+              ${p.supermarkets.length > 0 ? ` · ${p.supermarkets.length} Markt${p.supermarkets.length === 1 ? '' : 'e'}` : ''}
+            </div>
+            <div class="mt-2 flex gap-2 flex-wrap">
+              <button type="button" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded" data-action="edit" data-id="${p.id}">Bearbeiten</button>
+            </div>
+          </div>
+        </div>
+      `;
+      list.appendChild(card);
+    }
+  }
+
+  function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
+  function formatEuroClient(v: number): string {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(v);
+  }
+
+  function resetOffSearchUi() {
+    lastOffRemoteByEan = {};
+    const input = document.getElementById('pf-off-input') as HTMLInputElement | null;
+    const status = document.getElementById('pf-off-status');
+    const results = document.getElementById('pf-off-results');
+    if (input) input.value = '';
+    if (status) status.textContent = '';
+    if (results) results.innerHTML = '';
+  }
+
+  async function applyOffProductToForm(hit: OffSearchHit) {
+    (document.getElementById('pf-id') as HTMLInputElement).value = '';
+    (document.getElementById('pf-source') as HTMLInputElement).value = 'openfoodfacts';
+    (document.getElementById('pf-off-code') as HTMLInputElement).value = hit.offCode || hit.ean || '';
+    (document.getElementById('pf-name') as HTMLInputElement).value = hit.name || '';
+    (document.getElementById('pf-brand') as HTMLInputElement).value = hit.brand || '';
+    (document.getElementById('pf-ean') as HTMLInputElement).value = hit.ean || '';
+    (document.getElementById('pf-net-grams') as HTMLInputElement).value = hit.netGrams != null ? String(hit.netGrams) : '';
+    (document.getElementById('pf-package') as HTMLInputElement).value = hit.packageLabel || '';
+    await discardPendingUpload();
+    setProductImage(hit.imageUrl || '', { markSaved: true });
+    const nut = hit.nutritionPer100g || {};
+    (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((key) => {
+      const el = document.getElementById(`pf-nut-${key}`) as HTMLInputElement | null;
+      if (el) el.value = nut[key] != null ? String(nut[key]) : '';
+    });
+    const title = document.getElementById('product-modal-title');
+    if (title) title.textContent = 'Neues Produkt';
+    const status = document.getElementById('pf-off-status');
+    if (status) status.textContent = 'Daten übernommen. Bitte prüfen und speichern.';
+  }
+
+  function renderOffSearchResults(localHits: Product[], remoteHits: OffSearchHit[]) {
+    const results = document.getElementById('pf-off-results');
+    if (!results) return;
+    results.innerHTML = '';
+    lastOffRemoteByEan = {};
+    for (const p of localHits) {
+      const subtitleParts: string[] = [];
+      if (p.brand) subtitleParts.push(p.brand);
+      if (p.ean) subtitleParts.push(`EAN ${p.ean}`);
+      const subtitle = subtitleParts.join(' · ');
+      const row = document.createElement('div');
+      row.className = 'flex items-start gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-emerald-50/50 dark:bg-emerald-900/10';
+      row.innerHTML = `
+        <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 break-words" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+          <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+            <span class="uppercase font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">lokal</span>
+            ${subtitle ? `<span class="line-clamp-1 break-all" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</span>` : ''}
+          </div>
+        </div>
+        <button type="button" data-action="open-local" data-product-id="${p.id}" class="text-xs px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded shrink-0">Öffnen</button>
+      `;
+      results.appendChild(row);
+    }
+    for (const p of remoteHits) {
+      lastOffRemoteByEan[p.ean] = p;
+      const kcal = p.nutritionPer100g?.calories;
+      const name = p.name || '(ohne Name)';
+      const metaParts: string[] = [];
+      if (p.brand) metaParts.push(p.brand);
+      if (p.packageLabel) metaParts.push(p.packageLabel);
+      else if (p.netGrams) metaParts.push(`${p.netGrams} g`);
+      const meta = metaParts.join(' · ');
+      const row = document.createElement('div');
+      row.className = 'flex items-start gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900';
+      row.innerHTML = `
+        <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 break-words" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+          <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+            <span class="uppercase font-semibold text-blue-600 dark:text-blue-400 shrink-0">OFF</span>
+            ${meta ? `<span class="line-clamp-1 break-words min-w-0" title="${escapeHtml(meta)}">${escapeHtml(meta)}</span>` : ''}
+            <span class="shrink-0 text-gray-400">·</span>
+            <span class="font-mono text-gray-400 shrink-0" title="EAN ${escapeHtml(p.ean)}">EAN ${escapeHtml(p.ean)}</span>
+          </div>
+          <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+            ${kcal != null ? `${Math.round(kcal)} kcal / 100 g` : '<span class="text-gray-400 italic">keine Nährwerte</span>'}
+          </div>
+        </div>
+        <button type="button" data-action="apply-off" data-ean="${escapeHtml(p.ean)}" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded shrink-0">Übernehmen</button>
+      `;
+      results.appendChild(row);
+    }
+  }
+
+  async function searchOpenFoodFacts() {
+    const input = document.getElementById('pf-off-input') as HTMLInputElement | null;
+    const status = document.getElementById('pf-off-status');
+    const results = document.getElementById('pf-off-results');
+    if (!input || !status || !results) return;
+    const query = input.value.trim();
+    if (!query) return;
+    status.textContent = 'Suche läuft …';
+    results.innerHTML = '';
+    try {
+      let localHits: Product[] = [];
+      let remoteHits: OffSearchHit[] = [];
+      let errorMessage = '';
+      if (/^\d{6,14}$/.test(query)) {
+        const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error('lookup failed');
+        const data = await res.json();
+        if (data.source === 'local' && data.product) localHits = [data.product];
+        else if (data.source === 'openfoodfacts' && data.product) remoteHits = [data.product];
+      } else {
+        const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error('search failed');
+        const data = await res.json();
+        localHits = Array.isArray(data.local) ? data.local : [];
+        remoteHits = Array.isArray(data.results) ? data.results : [];
+        if (data.error) errorMessage = String(data.error);
+      }
+      renderOffSearchResults(localHits, remoteHits);
+      const total = localHits.length + remoteHits.length;
+      status.textContent = errorMessage
+        ? `Online-Suche fehlgeschlagen: ${errorMessage}`
+        : total > 0
+          ? `${total} Treffer (${localHits.length} lokal, ${remoteHits.length} online)`
+          : 'Keine Treffer.';
+    } catch (error) {
+      status.textContent = 'Suche fehlgeschlagen. Bitte später erneut versuchen.';
+    }
+  }
+
+  function openProductModal(product: Partial<Product> | null) {
+    const modal = document.getElementById('product-modal');
+    const title = document.getElementById('product-modal-title');
+    if (!modal || !title) return;
+    title.textContent = product?.id ? 'Produkt bearbeiten' : 'Neues Produkt';
+    (document.getElementById('pf-id') as HTMLInputElement).value = product?.id ?? '';
+    (document.getElementById('pf-source') as HTMLInputElement).value = product?.source ?? 'manual';
+    (document.getElementById('pf-off-code') as HTMLInputElement).value = product?.offCode ?? '';
+    (document.getElementById('pf-name') as HTMLInputElement).value = product?.name ?? '';
+    (document.getElementById('pf-brand') as HTMLInputElement).value = product?.brand ?? '';
+    (document.getElementById('pf-ean') as HTMLInputElement).value = product?.ean ?? '';
+    (document.getElementById('pf-net-grams') as HTMLInputElement).value = product?.netGrams != null ? String(product.netGrams) : '';
+    (document.getElementById('pf-package') as HTMLInputElement).value = product?.packageLabel ?? '';
+    (document.getElementById('pf-default-price') as HTMLInputElement).value = product?.defaultPrice != null ? String(product.defaultPrice) : '';
+    setProductImage(product?.imageUrl ?? '', { markSaved: true });
+    const nut = product?.nutritionPer100g || {};
+    (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((key) => {
+      const el = document.getElementById(`pf-nut-${key}`) as HTMLInputElement | null;
+      if (el) el.value = nut[key] != null ? String(nut[key]) : '';
+    });
+    renderMarketPricesEditor(product?.supermarkets || []);
+    currentIngredientIds = Array.isArray(product?.ingredientIds) ? [...product!.ingredientIds!] : [];
+    renderIngredientChips();
+    resetOffSearchUi();
+    const offWrap = document.getElementById('pf-off-wrap');
+    offWrap?.classList.toggle('hidden', Boolean(product?.id));
+    modal.classList.remove('hidden');
+  }
+
+  function renderMarketPricesEditor(prices: Array<{ supermarketId: string; price: number }>) {
+    const container = document.getElementById('pf-market-prices');
+    if (!container) return;
+    container.innerHTML = '';
+    if (supermarketsCache.length === 0) {
+      container.innerHTML = '<p class="text-xs text-gray-500">Noch keine Supermärkte. Über „Supermärkte …“ hinzufügen.</p>';
+      return;
+    }
+    const byId = new Map(prices.map((p) => [p.supermarketId, p.price]));
+    for (const market of supermarketsCache) {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2 text-sm';
+      const value = byId.get(market.id);
+      row.innerHTML = `
+        <label class="flex-1">${escapeHtml(market.name)}</label>
+        <input type="number" step="0.01" data-market-id="${market.id}" value="${value != null ? value : ''}" class="pf-market-price w-28 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" placeholder="€" />
+      `;
+      container.appendChild(row);
+    }
+  }
+
+  function setProductImage(url: string, options?: { markSaved?: boolean }) {
+    const hidden = document.getElementById('pf-image') as HTMLInputElement | null;
+    const urlInput = document.getElementById('pf-image-url') as HTMLInputElement | null;
+    const preview = document.getElementById('pf-image-preview');
+    const removeBtn = document.getElementById('pf-image-remove');
+    if (hidden) hidden.value = url;
+    if (urlInput && urlInput.value !== url) urlInput.value = url;
+    if (preview) {
+      preview.innerHTML = url
+        ? `<img src="${escapeHtml(url)}" alt="" class="w-full h-full object-cover" />`
+        : '<span class="text-2xl">🥫</span>';
+    }
+    removeBtn?.classList.toggle('hidden', !url);
+    if (options?.markSaved) {
+      savedProductImageUrl = url;
+      pendingLocalUploadUrl = '';
+    }
+  }
+
+  function setImageUploadBusy(busy: boolean) {
+    const status = document.getElementById('pf-image-status');
+    const dropzone = document.getElementById('pf-image-dropzone');
+    status?.classList.toggle('hidden', !busy);
+    if (dropzone) dropzone.classList.toggle('opacity-50', busy);
+    if (dropzone) dropzone.classList.toggle('pointer-events-none', busy);
+  }
+
+  async function discardPendingUpload() {
+    if (!pendingLocalUploadUrl || pendingLocalUploadUrl === savedProductImageUrl) {
+      pendingLocalUploadUrl = '';
+      return;
+    }
+    const url = pendingLocalUploadUrl;
+    pendingLocalUploadUrl = '';
+    await fetch(`/api/products/images?url=${encodeURIComponent(url)}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
+  async function uploadProductImageFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      alert('Bitte eine gültige Bilddatei wählen (PNG, JPG oder WEBP).');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Die Datei ist zu groß. Maximal 10 MB.');
+      return;
+    }
+    setImageUploadBusy(true);
+    try {
+      await discardPendingUpload();
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/products/images', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Bild konnte nicht hochgeladen werden.');
+        return;
+      }
+      pendingLocalUploadUrl = data.url;
+      setProductImage(data.url);
+    } finally {
+      setImageUploadBusy(false);
+      const fileInput = document.getElementById('pf-image-file') as HTMLInputElement | null;
+      if (fileInput) fileInput.value = '';
+    }
+  }
+
+  function closeProductModal() {
+    discardPendingUpload();
+    document.getElementById('product-modal')?.classList.add('hidden');
+  }
+
+  async function submitProductForm(e: Event) {
+    e.preventDefault();
+    const id = (document.getElementById('pf-id') as HTMLInputElement).value.trim();
+    const numOrNull = (el: HTMLInputElement) => (el.value.trim() === '' ? null : Number(el.value));
+    const payload: any = {
+      id: id || undefined,
+      name: (document.getElementById('pf-name') as HTMLInputElement).value.trim(),
+      brand: (document.getElementById('pf-brand') as HTMLInputElement).value.trim() || null,
+      ean: (document.getElementById('pf-ean') as HTMLInputElement).value.trim() || null,
+      netGrams: numOrNull(document.getElementById('pf-net-grams') as HTMLInputElement),
+      packageLabel: (document.getElementById('pf-package') as HTMLInputElement).value.trim() || null,
+      defaultPrice: numOrNull(document.getElementById('pf-default-price') as HTMLInputElement),
+      imageUrl: (document.getElementById('pf-image') as HTMLInputElement).value.trim() || null,
+      source: (document.getElementById('pf-source') as HTMLInputElement).value === 'openfoodfacts' ? 'openfoodfacts' : 'manual',
+      offCode: (document.getElementById('pf-off-code') as HTMLInputElement).value.trim() || null,
+    };
+    const nutrition: Record<string, number> = {};
+    (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((key) => {
+      const el = document.getElementById(`pf-nut-${key}`) as HTMLInputElement | null;
+      const v = el?.value?.trim();
+      if (v) {
+        const n = Number(v);
+        if (Number.isFinite(n)) nutrition[key] = n;
+      }
+    });
+    if (Object.keys(nutrition).length > 0) payload.nutritionPer100g = nutrition;
+
+    const prices: Array<{ supermarketId: string; price: number }> = [];
+    document.querySelectorAll('.pf-market-price').forEach((el) => {
+      const input = el as HTMLInputElement;
+      const marketId = input.dataset.marketId!;
+      const v = input.value.trim();
+      if (!v) return;
+      const n = Number(v);
+      if (Number.isFinite(n)) prices.push({ supermarketId: marketId, price: n });
+    });
+    payload.supermarkets = prices;
+    payload.ingredientIds = [...currentIngredientIds];
+
+    const res = await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      alert('Speichern fehlgeschlagen.');
+      return;
+    }
+    pendingLocalUploadUrl = '';
+    savedProductImageUrl = payload.imageUrl || '';
+    closeProductModal();
+    await refreshList();
+  }
+
+  async function deleteProduct(id: string) {
+    if (!confirm('Produkt wirklich löschen?')) return;
+    const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    if (res.ok) refreshList();
+  }
+
+  async function openScanFlow() {
+    openScanForImport = true;
+    (window as any).openBarcodeScanner?.();
+  }
+
+  window.addEventListener('barcode-scanned', async (event) => {
+    const detail = (event as CustomEvent).detail as { ean: string };
+    if (!detail?.ean) return;
+    if (!openScanForImport) return;
+    openScanForImport = false;
+    try {
+      const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(detail.ean)}`);
+      if (!res.ok) throw new Error('lookup failed');
+      const data = await res.json();
+      if (data.source === 'local' && data.product) {
+        openProductModal(data.product);
+        return;
+      }
+      if (data.source === 'openfoodfacts' && data.product) {
+        openProductModal({
+          name: data.product.name || '',
+          brand: data.product.brand || '',
+          ean: data.product.ean,
+          netGrams: data.product.netGrams,
+          packageLabel: data.product.packageLabel,
+          imageUrl: data.product.imageUrl,
+          nutritionPer100g: data.product.nutritionPer100g,
+          source: 'openfoodfacts',
+          offCode: data.product.offCode,
+          supermarkets: [],
+        } as any);
+        return;
+      }
+      openProductModal({ ean: detail.ean, supermarkets: [] } as any);
+    } catch (error) {
+      alert('Barcode-Lookup fehlgeschlagen. Produkt kann manuell angelegt werden.');
+      openProductModal({ ean: detail.ean, supermarkets: [] } as any);
+    }
+  });
+
+  async function openMarketModal() {
+    const modal = document.getElementById('market-modal');
+    if (!modal) return;
+    await loadSupermarkets();
+    renderMarketList();
+    modal.classList.remove('hidden');
+  }
+
+  function renderMarketList() {
+    const list = document.getElementById('market-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (supermarketsCache.length === 0) {
+      list.innerHTML = '<li class="text-xs text-gray-500">Noch keine Supermärkte.</li>';
+      return;
+    }
+    for (const m of supermarketsCache) {
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded';
+      li.innerHTML = `
+        <span>${escapeHtml(m.name)}</span>
+        <button type="button" class="text-xs text-red-500 hover:text-red-700" data-action="delete-market" data-id="${m.id}">Entfernen</button>
+      `;
+      list.appendChild(li);
+    }
+  }
+
+  document.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    if (!target) return;
+    if (target.id === 'btn-new') { openProductModal({ supermarkets: [], ingredientIds: [] } as any); return; }
+    if (target.id === 'btn-scan') { await openScanFlow(); return; }
+    if (target.id === 'btn-markets') { await openMarketModal(); return; }
+    if (target.id === 'pf-off-search') { await searchOpenFoodFacts(); return; }
+    if (target.id === 'pf-off-scan') { await openScanFlow(); return; }
+    if (target.id === 'product-modal-close' || target.id === 'pf-cancel') { closeProductModal(); return; }
+    if (target.id === 'pf-image-remove') {
+      await discardPendingUpload();
+      setProductImage('');
+      return;
+    }
+    if (target.id === 'pf-image-dropzone' || target.closest?.('#pf-image-dropzone')) {
+      if (target.id === 'pf-image-file') return;
+      (document.getElementById('pf-image-file') as HTMLInputElement | null)?.click();
+      return;
+    }
+    if (target.id === 'pf-ingredient-add') {
+      const input = document.getElementById('pf-ingredient-input') as HTMLInputElement;
+      const name = input.value.trim();
+      if (!name) return;
+      await addIngredientByName(name);
+      input.value = '';
+      return;
+    }
+    if (target.classList.contains('pf-chip-remove')) {
+      const id = target.dataset.id;
+      if (id) {
+        currentIngredientIds = currentIngredientIds.filter((x) => x !== id);
+        renderIngredientChips();
+      }
+      return;
+    }
+    if (target.id === 'market-modal-close') { document.getElementById('market-modal')?.classList.add('hidden'); return; }
+    if (target.id === 'market-add') {
+      const input = document.getElementById('market-name') as HTMLInputElement;
+      const name = input.value.trim();
+      if (!name) return;
+      const res = await fetch('/api/supermarkets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      });
+      if (res.ok) { input.value = ''; await loadSupermarkets(); renderMarketList(); }
+      return;
+    }
+    const action = target.dataset.action;
+    const id = target.dataset.id;
+    if (action === 'apply-off') {
+      const ean = target.dataset.ean;
+      if (!ean) return;
+      target.setAttribute('disabled', 'true');
+      const previousLabel = target.textContent;
+      target.textContent = 'Lade …';
+      try {
+        const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(ean)}`);
+        const data = res.ok ? await res.json() : null;
+        if (data?.source === 'local' && data.product) {
+          openProductModal(data.product);
+          return;
+        }
+        const hit = (data?.source === 'openfoodfacts' && data.product) ? data.product : lastOffRemoteByEan[ean];
+        if (hit) await applyOffProductToForm(hit);
+      } finally {
+        target.removeAttribute('disabled');
+        target.textContent = previousLabel || 'Übernehmen';
+      }
+      return;
+    }
+    if (action === 'open-local') {
+      const productId = target.dataset.productId;
+      if (!productId) return;
+      const res = await fetch(`/api/products/${productId}`);
+      if (res.ok) openProductModal(await res.json());
+      return;
+    }
+    if (action === 'edit' && id) {
+      const res = await fetch(`/api/products/${id}`);
+      if (res.ok) openProductModal(await res.json());
+      return;
+    }
+    if (action === 'delete' && id) { await deleteProduct(id); return; }
+    if (action === 'delete-market' && id) {
+      if (!confirm('Supermarkt entfernen?')) return;
+      const res = await fetch(`/api/supermarkets?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.ok) { await loadSupermarkets(); renderMarketList(); }
+      return;
+    }
+  });
+
+  document.getElementById('product-form')?.addEventListener('submit', submitProductForm);
+  (document.getElementById('pf-off-input') as HTMLInputElement | null)?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    searchOpenFoodFacts();
+  });
+  (document.getElementById('pf-image-file') as HTMLInputElement | null)?.addEventListener('change', (e) => {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (file) uploadProductImageFile(file);
+  });
+  (document.getElementById('pf-image-url') as HTMLInputElement | null)?.addEventListener('change', async (e) => {
+    const url = (e.currentTarget as HTMLInputElement).value.trim();
+    if (url === pendingLocalUploadUrl) return;
+    await discardPendingUpload();
+    setProductImage(url);
+  });
+  const dropzone = document.getElementById('pf-image-dropzone');
+  dropzone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('border-orange-400', 'dark:border-orange-500');
+  });
+  dropzone?.addEventListener('dragleave', () => {
+    dropzone.classList.remove('border-orange-400', 'dark:border-orange-500');
+  });
+  dropzone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('border-orange-400', 'dark:border-orange-500');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) uploadProductImageFile(file);
+  });
+  (document.getElementById('product-search') as HTMLInputElement | null)?.addEventListener('input', () => {
+    const timer = (window as any).__cbProductSearchTimer;
+    if (timer) window.clearTimeout(timer);
+    (window as any).__cbProductSearchTimer = window.setTimeout(refreshList, 200);
+  });
+  (document.getElementById('pf-ingredient-input') as HTMLInputElement | null)?.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const input = e.currentTarget as HTMLInputElement;
+    const name = input.value.trim();
+    if (!name) return;
+    await addIngredientByName(name);
+    input.value = '';
+  });
+
+  Promise.all([loadSupermarkets(), loadCatalogue()])
+    .then(() => {
+      const params = new URLSearchParams(location.search);
+      const linkName = params.get('linkIngredient');
+      if (linkName) {
+        openProductModal({ supermarkets: [], ingredientIds: [] } as any);
+        addIngredientByName(linkName).catch(() => undefined);
+      }
+    })
+    .catch(() => undefined);
+</script>
+
+<style>
+  .nav-link.active { color: rgb(249 115 22); }
+</style>

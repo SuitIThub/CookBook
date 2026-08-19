@@ -4,6 +4,9 @@ import MultiTimerManager from '../components/timer/MultiTimerManager.astro';
 import Modal from '../components/Modal.astro';
 import WarningModalLayout from '../components/modals/WarningModalLayout.astro';
 import AliasSettingsModal from '../components/modals/AliasSettingsModal.astro';
+import AISettingsModal from '../components/modals/AISettingsModal.astro';
+import BarcodeScanModal from '../components/modals/BarcodeScanModal.astro';
+import IngredientCatalogueModal from '../components/modals/IngredientCatalogueModal.astro';
 
 export interface Props {
   title: string;
@@ -13,7 +16,7 @@ const { title } = Astro.props;
 ---
 
 <!DOCTYPE html>
-<html lang="de" style="background-color: #111827; color: #f9fafb;">
+<html lang="de-DE" style="background-color: #111827; color: #f9fafb;">
   <script>
     // Theme + layout detection (runs immediately to prevent flash)
     (function() {
@@ -132,6 +135,12 @@ const { title } = Astro.props;
             <a href="/zutaten" class="nav-link">
               Zutaten
             </a>
+            <a href="/produkte" class="nav-link">
+              Produkte
+            </a>
+            <a href="/tracker" class="nav-link">
+              Tracker
+            </a>
             <!-- Low-bandwidth (data saver) -->
             <button
               type="button"
@@ -158,6 +167,18 @@ const { title } = Astro.props;
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.83-4" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              data-open-ai-settings
+              class="btn-icon text-gray-700 dark:text-gray-300 hover:text-indigo-500 dark:hover:text-indigo-400"
+              aria-label="KI-Einstellungen öffnen"
+              title="KI-Einstellungen"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317a1 1 0 011.35-.936l1.09.497a1 1 0 00.87 0l1.09-.497a1 1 0 011.35.936l.112 1.193a1 1 0 00.637.84l1.126.43a1 1 0 01.56 1.41l-.58 1.05a1 1 0 000 .966l.58 1.05a1 1 0 01-.56 1.41l-1.126.43a1 1 0 00-.637.84l-.112 1.193a1 1 0 01-1.35.936l-1.09-.497a1 1 0 00-.87 0l-1.09.497a1 1 0 01-1.35-.936l-.112-1.193a1 1 0 00-.637-.84l-1.126-.43a1 1 0 01-.56-1.41l.58-1.05a1 1 0 000-.966l-.58-1.05a1 1 0 01.56-1.41l1.126-.43a1 1 0 00.637-.84l.112-1.193z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
               </svg>
             </button>
             <!-- Theme Toggle Button -->
@@ -203,6 +224,18 @@ const { title } = Astro.props;
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.83-4" />
               </svg>
             </button>
+            <button
+              type="button"
+              data-open-ai-settings
+              class="btn-icon text-gray-700 dark:text-gray-300 hover:text-indigo-500 dark:hover:text-indigo-400"
+              aria-label="KI-Einstellungen öffnen"
+              title="KI-Einstellungen"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317a1 1 0 011.35-.936l1.09.497a1 1 0 00.87 0l1.09-.497a1 1 0 011.35.936l.112 1.193a1 1 0 00.637.84l1.126.43a1 1 0 01.56 1.41l-.58 1.05a1 1 0 000 .966l.58 1.05a1 1 0 01-.56 1.41l-1.126.43a1 1 0 00-.637.84l-.112 1.193a1 1 0 01-1.35.936l-1.09-.497a1 1 0 00-.87 0l-1.09.497a1 1 0 01-1.35-.936l-.112-1.193a1 1 0 00-.637-.84l-1.126-.43a1 1 0 01-.56-1.41l.58-1.05a1 1 0 000-.966l-.58-1.05a1 1 0 01.56-1.41l1.126-.43a1 1 0 00.637-.84l.112-1.193z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+              </svg>
+            </button>
             <!-- Theme Toggle Button for Mobile -->
             <button id="theme-toggle-mobile" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle dark mode">
               <!-- Sun icon (visible in dark mode, to switch to light mode) -->
@@ -216,7 +249,7 @@ const { title } = Astro.props;
             </button>
             
             <!-- Hamburger menu button -->
-            <button id="mobile-menu-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Toggle mobile menu">
+            <button type="button" id="mobile-menu-toggle" class="btn-icon text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400" aria-label="Menü" aria-expanded="false" aria-controls="mobile-menu">
               <!-- Hamburger icon -->
               <svg id="mobile-menu-open" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
@@ -240,6 +273,12 @@ const { title } = Astro.props;
             </a>
             <a href="/zutaten" class="nav-link text-base">
               Zutaten
+            </a>
+            <a href="/produkte" class="nav-link text-base">
+              Produkte
+            </a>
+            <a href="/tracker" class="nav-link text-base">
+              Tracker
             </a>
           </div>
         </div>
@@ -394,6 +433,13 @@ const { title } = Astro.props;
 
     <!-- Alias / cross-device settings sync -->
     <AliasSettingsModal />
+    <AISettingsModal />
+
+    <!-- Barcode / EAN scanner (used by product register, meal plan quick-add, …) -->
+    <BarcodeScanModal />
+
+    <!-- Ingredient catalogue (nutrition + product linking), used on /zutaten and recipe view -->
+    <IngredientCatalogueModal />
 
     <script>
       // Declare global functions
@@ -542,60 +588,49 @@ const { title } = Astro.props;
         const closeIcon = document.getElementById('mobile-menu-close');
 
         if (!mobileMenuToggle || !mobileMenu || !openIcon || !closeIcon) return;
+        if (mobileMenuToggle.dataset.menuInit === '1') return;
+        mobileMenuToggle.dataset.menuInit = '1';
 
-        // Ensure menu starts in closed state
-        mobileMenu.classList.add('hidden');
-        openIcon.classList.remove('hidden');
-        closeIcon.classList.add('hidden');
+        const setMenuOpen = (open: boolean) => {
+          mobileMenu.classList.toggle('hidden', !open);
+          openIcon.classList.toggle('hidden', open);
+          closeIcon.classList.toggle('hidden', !open);
+          mobileMenuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        };
+
+        setMenuOpen(false);
+
+        function layoutBucket(): string {
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          if (h > 0 && w / h <= 0.75 && Math.min(w, h) < 600) return 'mobile';
+          if (w < 1280) return 'tablet';
+          return 'desktop';
+        }
 
         function toggleMobileMenu(e: Event) {
           e.preventDefault();
           e.stopPropagation();
-          
-          if (!mobileMenu || !openIcon || !closeIcon) return;
-          
-          const isHidden = mobileMenu.classList.contains('hidden');
-          
-          if (isHidden) {
-            // Show menu
-            mobileMenu.classList.remove('hidden');
-            openIcon.classList.add('hidden');
-            closeIcon.classList.remove('hidden');
-          } else {
-            // Hide menu
-            mobileMenu.classList.add('hidden');
-            openIcon.classList.remove('hidden');
-            closeIcon.classList.add('hidden');
-          }
+          setMenuOpen(mobileMenu.classList.contains('hidden'));
         }
 
-        // Add click event with capture phase to ensure it runs before other handlers
-        mobileMenuToggle.addEventListener('click', toggleMobileMenu, { capture: true });
+        mobileMenuToggle.addEventListener('click', toggleMobileMenu);
 
-        // Close mobile menu when clicking on links
-        const mobileLinks = mobileMenu.querySelectorAll('a, button');
-        mobileLinks.forEach(link => {
-          link.addEventListener('click', () => {
-            if (!mobileMenu || !openIcon || !closeIcon) return;
-            mobileMenu.classList.add('hidden');
-            openIcon.classList.remove('hidden');
-            closeIcon.classList.add('hidden');
-          });
+        mobileMenu.querySelectorAll('a, button').forEach((link) => {
+          link.addEventListener('click', () => setMenuOpen(false));
         });
 
-        // Close mobile menu when layout/viewport changes
-        const handleLayoutChange = () => {
-          setTimeout(() => {
-            if (!mobileMenu || !openIcon || !closeIcon) return;
-            // Always close menu and reset icons on layout change
-            mobileMenu.classList.add('hidden');
-            openIcon.classList.remove('hidden');
-            closeIcon.classList.add('hidden');
-          }, 100);
-        };
-
-        window.addEventListener('orientationchange', handleLayoutChange);
-        window.addEventListener('resize', handleLayoutChange);
+        let lastBucket = layoutBucket();
+        window.addEventListener('resize', () => {
+          const next = layoutBucket();
+          if (next === lastBucket) return;
+          lastBucket = next;
+          setMenuOpen(false);
+        });
+        window.addEventListener('orientationchange', () => {
+          lastBucket = layoutBucket();
+          setMenuOpen(false);
+        });
       }
 
       // Initialize modal functionality
@@ -920,6 +955,22 @@ const { title } = Astro.props;
       } else {
         runLayoutClientInit();
       }
+    </script>
+    <script>
+      import { enhanceGermanDateFields } from '../lib/germanDateFields';
+      function bootGermanDates() {
+        enhanceGermanDateFields();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootGermanDates);
+      } else {
+        bootGermanDates();
+      }
+      requestAnimationFrame(bootGermanDates);
+      new MutationObserver(() => enhanceGermanDateFields()).observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+      });
     </script>
   </body>
 </html> 

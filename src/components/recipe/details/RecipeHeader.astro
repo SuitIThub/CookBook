@@ -1,6 +1,7 @@
 ---
 import type { Recipe } from '../../../types/recipe';
 import NutritionInfo from './NutritionInfo.astro';
+import { hasNutritionValues } from '../../../lib/nutrition';
 
 interface Props {
   recipe: Recipe;
@@ -506,7 +507,7 @@ const hasHeroImage = !!heroImage;
     )}
 
     <!-- Nutrition Information -->
-    {recipe.metadata.nutrition && (
+    {recipe.metadata.nutrition && hasNutritionValues(recipe.metadata.nutrition) && (
       <NutritionInfo nutrition={recipe.metadata.nutrition} />
     )}
 

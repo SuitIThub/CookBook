@@ -1,0 +1,408 @@
+---
+import type { Recipe } from '../../../types/recipe';
+import { db } from '../../../lib/database';
+import { collectIngredientsFromGroups, computeRecipeNutrition, computeRecipePrice } from '../../../lib/recipeNutrition';
+import type { CatalogueIngredient, Product } from '../../../types/tracker';
+import { NUTRITION_FIELDS } from '../../../lib/nutrition';
+import {
+  filterRecipeBySelection,
+  getDefaultSelection,
+  resolveSelection,
+} from '../../../lib/alternatives';
+
+interface Props {
+  recipe: Recipe;
+}
+
+const { recipe } = Astro.props;
+
+// Server-side initial compute: apply alternative filter with defaults, look up
+// catalogue nutrition and any linked default products, and compute recipe
+// nutrition per serving and total price. The panel then re-renders
+// client-side when the user chooses a product per ingredient or when the
+// selected supermarket changes.
+const selection = resolveSelection(recipe, getDefaultSelection(recipe));
+const filtered = filterRecipeBySelection(recipe, selection);
+const visibleIngredients = collectIngredientsFromGroups(filtered.ingredientGroups);
+
+const catalogueByName = new Map<string, CatalogueIngredient>();
+const uniqueNames = Array.from(new Set(visibleIngredients.map((i) => i.name.trim().toLowerCase()).filter(Boolean)));
+for (const name of uniqueNames) {
+  const cat = db.getCatalogueIngredientByName(name);
+  if (cat) catalogueByName.set(name, cat);
+}
+
+const productsById = new Map<string, Product>();
+const productsByIngredient = new Map<string, Product[]>();
+for (const cat of catalogueByName.values()) {
+  const products = db.getProductsForIngredient(cat.id);
+  productsByIngredient.set(cat.id, products);
+  for (const product of products) productsById.set(product.id, product);
+  if (cat.defaultProductId && !productsById.has(cat.defaultProductId)) {
+    const dp = db.getProduct(cat.defaultProductId);
+    if (dp) productsById.set(dp.id, dp);
+  }
+}
+
+const supermarkets = db.getAllSupermarkets();
+
+const nutritionResult = computeRecipeNutrition({
+  recipe,
+  visibleIngredients,
+  servings: recipe.metadata.servings,
+  catalogueByName,
+  productsById,
+});
+const priceResult = computeRecipePrice({
+  recipe,
+  visibleIngredients,
+  servings: recipe.metadata.servings,
+  catalogueByName,
+  productsById,
+});
+
+const nutritionByIngredient: Record<string, {
+  name: string;
+  catalogueId?: string;
+  defaultProductId?: string;
+  products: { id: string; name: string; brand?: string }[];
+}> = {};
+for (const ing of visibleIngredients) {
+  const key = ing.name.trim().toLowerCase();
+  const cat = catalogueByName.get(key);
+  const products = cat ? productsByIngredient.get(cat.id) ?? [] : [];
+  nutritionByIngredient[ing.id] = {
+    name: ing.name,
+    catalogueId: cat?.id,
+    defaultProductId: cat?.defaultProductId,
+    products: products.map((p) => ({ id: p.id, name: p.name, brand: p.brand })),
+  };
+}
+
+const bootstrap = {
+  recipeId: recipe.id,
+  servings: recipe.metadata.servings,
+  ingredients: nutritionByIngredient,
+  supermarkets: supermarkets.map((s) => ({ id: s.id, name: s.name })),
+};
+
+const showPanel = visibleIngredients.length > 0;
+
+function formatEuroValue(value: number, estimated: boolean): string {
+  const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
+  return estimated ? `~${eur}` : eur;
+}
+---
+
+{showPanel && (
+  <div
+    id="live-nutrition-panel"
+    class="mb-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
+    data-recipe-id={recipe.id}
+  >
+    <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+      <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+        Nährwerte & Preis (live berechnet)
+      </h3>
+      {supermarkets.length > 0 && (
+        <label class="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+          Supermarkt:
+          <select id="live-supermarket-select" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm">
+            <option value="">Standardpreis</option>
+            {supermarkets.map((s) => (
+              <option value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
+
+    <div id="live-nutrition-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+      {NUTRITION_FIELDS.filter((f) => f.group === 'primary').map((field) => {
+        const val = nutritionResult.perServing[field.key];
+        return (
+          <div class="text-center">
+            <div class={`font-bold ${field.valueClass}`} data-field={field.key} data-unit={field.key === 'calories' ? '' : field.unit}>
+              {val != null ? `${nutritionResult.isEstimated ? '~' : ''}${field.key === 'calories' ? Math.round(val) : Math.round(val * 10) / 10}${field.key === 'calories' ? '' : field.unit}` : '–'}
+            </div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">{field.label}</div>
+          </div>
+        );
+      })}
+    </div>
+
+    <div class="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-700 dark:text-gray-200">
+      <div>
+        Preis pro Rezept:
+        <span id="live-price-total" class="font-semibold">
+          {priceResult.hasAnyData ? formatEuroValue(priceResult.perRecipe, priceResult.isEstimated) : '–'}
+        </span>
+      </div>
+      <div>
+        Preis pro Portion:
+        <span id="live-price-serving" class="font-semibold">
+          {priceResult.hasAnyData ? formatEuroValue(priceResult.perServing, priceResult.isEstimated) : '–'}
+        </span>
+      </div>
+      {nutritionResult.incompleteIngredients.length > 0 && (
+        <div class="text-xs text-yellow-700 dark:text-yellow-300">
+          {nutritionResult.incompleteIngredients.length} Zutat(en) ohne Nährwerte
+        </div>
+      )}
+    </div>
+
+    <details class="mt-3" open>
+      <summary class="text-sm font-medium text-gray-700 dark:text-gray-200 cursor-pointer">
+        Produkt pro Zutat (optional)
+      </summary>
+      <div id="live-product-picker" class="mt-2 space-y-2">
+        {visibleIngredients.map((ing) => {
+          const info = nutritionByIngredient[ing.id];
+          const hasProducts = info.products.length > 0;
+          return (
+            <div
+              class="flex items-center gap-2 text-sm"
+              data-ingredient-row
+              data-ingredient-id={ing.id}
+              data-ingredient-name={info.name}
+            >
+              <span class="flex-1 truncate">{info.name}</span>
+              <div class="live-product-slot">
+                {hasProducts ? (
+                  <select
+                    data-ingredient-id={ing.id}
+                    class="live-product-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm max-w-xs"
+                  >
+                    <option value="">Kein Produkt</option>
+                    {info.products.map((p) => (
+                      <option value={p.id} selected={p.id === info.defaultProductId}>
+                        {p.brand ? `${p.brand} – ${p.name}` : p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span class="text-xs text-gray-500 dark:text-gray-400">kein Produkt hinterlegt</span>
+                )}
+              </div>
+              <button
+                type="button"
+                class="live-link-product text-xs px-2 py-1 border border-emerald-500 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 whitespace-nowrap"
+                data-ingredient-name={info.name}
+                title="Produkte für diese Zutat verwalten"
+              >
+                {hasProducts ? '+ / verwalten' : '+ Produkt verknüpfen'}
+              </button>
+            </div>
+          );
+        })}
+        {visibleIngredients.length === 0 && (
+          <div class="text-xs text-gray-500 dark:text-gray-400">Keine sichtbaren Zutaten.</div>
+        )}
+      </div>
+    </details>
+
+    {nutritionResult.incompleteIngredients.length > 0 && (
+      <details class="mt-3 text-xs">
+        <summary class="cursor-pointer text-gray-500 hover:text-gray-700 dark:text-gray-400">
+          Warum sind Nährwerte unvollständig?
+        </summary>
+        <ul class="mt-1 list-disc list-inside text-gray-600 dark:text-gray-300 space-y-0.5">
+          {nutritionResult.incompleteIngredients.map((r) => (
+            <li>{r.name}{r.reason ? ` – ${r.reason}` : ''}</li>
+          ))}
+        </ul>
+      </details>
+    )}
+
+    <details class="mt-4">
+      <summary class="cursor-pointer text-sm font-medium text-orange-600 dark:text-orange-400">
+        Als Meal Prep planen
+      </summary>
+      <form id="live-plan-form" class="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm items-end">
+        <label class="block sm:col-span-2">Verfügbar ab
+          <input id="live-plan-when" type="date" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" required />
+        </label>
+        <label class="block">Zubereitete Portionen
+          <input id="live-plan-servings" type="number" step="0.5" min="0.5" value={recipe.metadata.servings} class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" required />
+        </label>
+        <div class="flex justify-end">
+          <button type="submit" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm w-full sm:w-auto">Planen</button>
+        </div>
+        <p class="sm:col-span-4 text-[11px] text-gray-500">
+          Die Portionen stehen ab diesem Tag bereit und werden im Tracker über mehrere Tage abgestrichen — nicht alle an einem Tag gegessen.
+        </p>
+        <div id="live-plan-status" class="sm:col-span-4 text-xs text-gray-500"></div>
+      </form>
+    </details>
+  </div>
+)}
+
+<script is:inline set:html={`window.__cbLiveNutrition = ${JSON.stringify(bootstrap)};`}></script>
+
+<script>
+  interface Bootstrap {
+    recipeId: string;
+    servings: number;
+    ingredients: Record<string, { name: string; catalogueId?: string; defaultProductId?: string; products: { id: string; name: string; brand?: string }[] }>;
+    supermarkets: { id: string; name: string }[];
+  }
+
+  const boot: Bootstrap | undefined = (window as any).__cbLiveNutrition;
+  if (boot) {
+    const supermarketSelect = document.getElementById('live-supermarket-select') as HTMLSelectElement | null;
+
+    function productSelects(): NodeListOf<HTMLSelectElement> {
+      return document.querySelectorAll<HTMLSelectElement>('.live-product-select');
+    }
+
+    async function recompute() {
+      const assignments: Record<string, string> = {};
+      productSelects().forEach((sel) => {
+        const ingId = sel.dataset.ingredientId!;
+        const value = sel.value;
+        if (value) assignments[ingId] = value;
+      });
+      const supermarketId = supermarketSelect?.value || undefined;
+      try {
+        const res = await fetch(`/api/recipes/${boot!.recipeId}/live-nutrition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productAssignments: assignments, supermarketId, servings: boot!.servings }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        updateSummary(data);
+      } catch (error) {
+        console.warn('Live nutrition recompute failed', error);
+      }
+    }
+
+    function updateSummary(data: any) {
+      const isEstimated = !!data.nutrition?.isEstimated;
+      const perServing = data.nutrition?.perServing || {};
+      const priceRecipe = data.price?.perRecipe;
+      const priceServing = data.price?.perServing;
+      const hasPrice = !!data.price?.hasAnyData;
+      const priceEstimated = !!data.price?.isEstimated;
+
+      document.querySelectorAll<HTMLElement>('[data-field]').forEach((el) => {
+        const key = el.dataset.field!;
+        const val = perServing[key];
+        if (val == null) {
+          el.textContent = '–';
+          return;
+        }
+        const rounded = key === 'calories' ? Math.round(val) : Math.round(val * 10) / 10;
+        const unit = key === 'calories' ? '' : el.getAttribute('data-unit') || 'g';
+        el.textContent = `${isEstimated ? '~' : ''}${rounded}${unit}`;
+      });
+      const setPrice = (id: string, value: number | undefined) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = hasPrice && value != null ? formatEuro(value, priceEstimated) : '–';
+      };
+      setPrice('live-price-total', priceRecipe);
+      setPrice('live-price-serving', priceServing);
+    }
+
+    function formatEuro(value: number, estimated: boolean): string {
+      const eur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
+      return estimated ? `~${eur}` : eur;
+    }
+
+    supermarketSelect?.addEventListener('change', () => { recompute(); });
+    const planWhen = document.getElementById('live-plan-when') as HTMLInputElement | null;
+    if (planWhen && !planWhen.value) {
+      const now = new Date();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      planWhen.value = `${now.getFullYear()}-${mm}-${dd}`;
+    }
+    document.getElementById('live-product-picker')?.addEventListener('change', (e) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.classList.contains('live-product-select')) recompute();
+    });
+
+    document.getElementById('live-product-picker')?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement | null)?.closest('.live-link-product') as HTMLElement | null;
+      if (!btn) return;
+      const name = btn.dataset.ingredientName || '';
+      if (name) (window as any).openCatalogueModal?.(name);
+    });
+
+    window.addEventListener('catalogue-updated', (event) => {
+      const detail = (event as CustomEvent).detail as {
+        ingredientName?: string;
+        defaultProductId?: string;
+        products?: Array<{ id: string; name: string; brand?: string }>;
+      };
+      const name = (detail?.ingredientName || '').trim().toLowerCase();
+      if (!name) return;
+      const products = detail.products || [];
+      const defaultId = detail.defaultProductId || '';
+      document.querySelectorAll<HTMLElement>('[data-ingredient-row]').forEach((row) => {
+        const rowName = (row.dataset.ingredientName || '').trim().toLowerCase();
+        if (rowName !== name) return;
+        const slot = row.querySelector('.live-product-slot');
+        const btn = row.querySelector('.live-link-product');
+        const ingredientId = row.dataset.ingredientId || '';
+        if (slot) {
+          if (products.length === 0) {
+            slot.innerHTML = '<span class="text-xs text-gray-500 dark:text-gray-400">kein Produkt hinterlegt</span>';
+          } else {
+            const options = products.map((p) => {
+              const label = p.brand ? `${p.brand} – ${p.name}` : p.name;
+              const selected = p.id === defaultId ? ' selected' : '';
+              return `<option value="${p.id}"${selected}>${escapeHtml(label)}</option>`;
+            }).join('');
+            slot.innerHTML = `<select data-ingredient-id="${ingredientId}" class="live-product-select px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm max-w-xs"><option value="">Kein Produkt</option>${options}</select>`;
+          }
+        }
+        if (btn) btn.textContent = products.length > 0 ? '+ / verwalten' : '+ Produkt verknüpfen';
+      });
+      recompute();
+    });
+
+    function escapeHtml(s: string): string {
+      return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+    }
+
+    const planForm = document.getElementById('live-plan-form') as HTMLFormElement | null;
+    planForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const status = document.getElementById('live-plan-status') as HTMLElement | null;
+      const alias = (localStorage.getItem('cookbook.alias') || '').trim();
+      if (!alias) {
+        if (status) status.textContent = 'Bitte zuerst einen Alias in den Einstellungen einrichten.';
+        return;
+      }
+      const whenInput = document.getElementById('live-plan-when') as HTMLInputElement;
+      const servingsInput = document.getElementById('live-plan-servings') as HTMLInputElement;
+      const when = whenInput.value
+        ? new Date(`${whenInput.value}T12:00:00`)
+        : new Date();
+      const servings = Number(servingsInput.value) || boot!.servings;
+      const assignments: Record<string, string> = {};
+      productSelects().forEach((sel) => {
+        const ingId = sel.dataset.ingredientId!;
+        if (sel.value) assignments[ingId] = sel.value;
+      });
+      const supermarketId = supermarketSelect?.value || undefined;
+      const res = await fetch('/api/tracker/meal-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alias,
+          recipeId: boot!.recipeId,
+          scheduledAt: when.toISOString(),
+          servings,
+          supermarketId,
+          productAssignments: assignments,
+        }),
+      });
+      if (status) status.textContent = res.ok
+        ? 'Meal Prep gespeichert — Portionen können ab diesem Tag im Tracker abgestrichen werden.'
+        : 'Speichern fehlgeschlagen.';
+    });
+  }
+</script>

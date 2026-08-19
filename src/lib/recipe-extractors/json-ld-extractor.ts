@@ -1,5 +1,6 @@
 import { BaseRecipeExtractor, type ExtractedRecipeData } from './base-extractor';
 import type { NutritionData } from '../../types/recipe';
+import { nutritionFromJsonLd } from '../nutrition';
 
 export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
   readonly name = 'JSON-LD Generic Extractor';
@@ -254,86 +255,12 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
   }
   
   private extractNutritionFromJsonLd(data: any): NutritionData | undefined {
-    if (!data || !data.nutrition) {
-      console.log('No nutrition data in JSON-LD');
-      return undefined;
-    }
-
-    const result: NutritionData = {};
-    const nutrition = data.nutrition;
-    
-    console.log('Extracting nutrition from JSON-LD (Generic):', nutrition);
-
-    // Handle different JSON-LD nutrition formats
-    if (typeof nutrition === 'object') {
-      // Handle single NutritionInformation object
-      if (nutrition['@type'] === 'NutritionInformation' || !nutrition['@type']) {
-        // Extract calories
-        if (nutrition.calories) {
-          const calories = this.parseNutritionValue(nutrition.calories);
-          if (calories) result.calories = calories;
-        }
-        
-        // Extract protein
-        if (nutrition.proteinContent) {
-          const protein = this.parseNutritionValue(nutrition.proteinContent);
-          if (protein) result.protein = protein;
-        }
-        
-        // Extract fat
-        if (nutrition.fatContent) {
-          const fat = this.parseNutritionValue(nutrition.fatContent);
-          if (fat) result.fat = fat;
-        }
-        
-        // Extract carbohydrates
-        if (nutrition.carbohydrateContent) {
-          const carbs = this.parseNutritionValue(nutrition.carbohydrateContent);
-          if (carbs) result.carbohydrates = carbs;
-        }
-      }
-      
-      // Handle array of nutrition information
-      if (Array.isArray(nutrition)) {
-        for (const item of nutrition) {
-          if (item['@type'] === 'NutritionInformation') {
-            const nutritionData = this.extractNutritionFromJsonLd({ nutrition: item });
-            if (nutritionData) {
-              Object.assign(result, nutritionData);
-            }
-          }
-        }
-      }
-    }
-
-    // Return nutrition data only if we found at least one value
-    if (result.calories || result.protein || result.fat || result.carbohydrates) {
+    const result = nutritionFromJsonLd(data?.nutrition ?? data);
+    if (result) {
       console.log('Extracted nutrition from JSON-LD (Generic):', result);
       return result;
     }
-
     console.log('No valid nutrition data found in JSON-LD');
-    return undefined;
-  }
-
-  private parseNutritionValue(value: any): number | undefined {
-    if (typeof value === 'number') {
-      return value;
-    }
-    
-    if (typeof value === 'string') {
-      // Handle formats like "391 kcal", "5g", "24 g"
-      const match = value.match(/(\d+(?:[,\.]\d+)?)/);
-      if (match) {
-        return parseFloat(match[1].replace(',', '.'));
-      }
-    }
-    
-    // Handle object format with value property
-    if (value && typeof value === 'object' && value.value) {
-      return this.parseNutritionValue(value.value);
-    }
-    
     return undefined;
   }
 

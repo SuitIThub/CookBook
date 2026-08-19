@@ -102,6 +102,10 @@ function buildStructuredEditSchema(regions: EditRegion[]) {
           carbohydrates: { type: 'number' },
           protein: { type: 'number' },
           fat: { type: 'number' },
+          saturatedFat: { type: 'number' },
+          sugar: { type: 'number' },
+          fiber: { type: 'number' },
+          salt: { type: 'number' },
           energyKcal: { type: 'number' },
           proteinG: { type: 'number' },
           fatG: { type: 'number' },
@@ -172,12 +176,20 @@ function normalizeNutritionObject(value: unknown): Recipe['metadata']['nutrition
     carbohydrates: byKey(['carbohydrates', 'kohlenhydrate', 'carbs', 'carbohydratesG', 'carbsG']),
     protein: byKey(['protein', 'eiweiss', 'eiweiß', 'proteinG']),
     fat: byKey(['fat', 'fett', 'fatG']),
+    saturatedFat: byKey(['saturatedFat', 'saturated_fat', 'gesaettigteFettsaeuren', 'gesättigteFettsäuren', 'saturatedFatG']),
+    sugar: byKey(['sugar', 'sugars', 'zucker', 'sugarG']),
+    fiber: byKey(['fiber', 'fibre', 'ballaststoffe', 'fiberG']),
+    salt: byKey(['salt', 'salz', 'saltG']),
   };
   if (
     nutrition.calories === undefined &&
     nutrition.carbohydrates === undefined &&
     nutrition.protein === undefined &&
-    nutrition.fat === undefined
+    nutrition.fat === undefined &&
+    nutrition.saturatedFat === undefined &&
+    nutrition.sugar === undefined &&
+    nutrition.fiber === undefined &&
+    nutrition.salt === undefined
   ) {
     return undefined;
   }
@@ -187,7 +199,7 @@ function normalizeNutritionObject(value: unknown): Recipe['metadata']['nutrition
 function inferEditIntent(editMessage: string) {
   const text = editMessage.toLowerCase();
   return {
-    touchesNutrition: /(nährwert|naehrwert|kalorien|kcal|eiweiß|eiweiss|protein|kohlenhydrat|fett)/i.test(text),
+    touchesNutrition: /(nährwert|naehrwert|kalorien|kcal|eiweiß|eiweiss|protein|kohlenhydrat|fett|zucker|salz|ballaststoff|gesättigt|gesaettigt|fiber|sugar|salt)/i.test(text),
     touchesTimes: /(zeit|zeiten|kochzeit|backzeit|vorbereitung)/i.test(text),
     touchesIngredients: /(zutat|zutaten|menge|mengen|ingredient)/i.test(text),
     touchesPreparation: /(zubereitung|schritt|schritte|prep|preparation)/i.test(text),

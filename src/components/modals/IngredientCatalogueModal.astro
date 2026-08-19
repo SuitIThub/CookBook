@@ -1,0 +1,645 @@
+---
+// Shared catalogue modal for ingredient nutrition + product linking.
+// Available globally via Layout: `window.openCatalogueModal(name)`.
+// Dispatches `catalogue-updated` after product links change so recipe view
+// can refresh product dropdowns without a page navigation.
+---
+
+<div id="catalogue-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[55] p-3">
+  <div class="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div class="p-4 sm:p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+          Nährwerte & Umrechnung: <span id="catalogue-name-label" class="font-bold"></span>
+        </h2>
+        <button type="button" id="catalogue-close" class="text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white text-2xl leading-none">&times;</button>
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+        Werte pro 100 g. Gramm pro Einheit wird für Stück-/Löffel-/Tassen-Zutaten benötigt (z.&nbsp;B. 1 Zehe = 5&nbsp;g). Dichte in g/ml wird für Flüssigkeiten wie Öl (~0,91) benötigt.
+      </p>
+      <form id="catalogue-form" class="space-y-3">
+        <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+          <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Nährwerte (pro 100 g)</legend>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <label><span class="block text-gray-500">kcal</span><input id="cat-nut-calories" type="number" step="1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            <label><span class="block text-gray-500">KH (g)</span><input id="cat-nut-carbohydrates" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            <label><span class="block text-gray-500">Zucker (g)</span><input id="cat-nut-sugar" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            <label><span class="block text-gray-500">Eiweiß (g)</span><input id="cat-nut-protein" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            <label><span class="block text-gray-500">Fett (g)</span><input id="cat-nut-fat" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            <label><span class="block text-gray-500">ges. Fett (g)</span><input id="cat-nut-saturatedFat" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            <label><span class="block text-gray-500">Ballaststoffe (g)</span><input id="cat-nut-fiber" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            <label><span class="block text-gray-500">Salz (g)</span><input id="cat-nut-salt" type="number" step="0.01" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+          </div>
+        </fieldset>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="block text-sm">
+            <span class="text-gray-700 dark:text-gray-200">Dichte (g/ml)</span>
+            <input id="cat-density" type="number" step="0.001" placeholder="z.B. 0.91" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            <span class="block text-[11px] text-gray-500 mt-1">Nur wenn die Zutat in ml, TL, EL oder Tasse benutzt wird.</span>
+          </label>
+          <input id="cat-default-product-id" type="hidden" />
+        </div>
+
+        <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+          <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Verknüpfte Produkte</legend>
+          <div id="cat-linked-products" class="space-y-1 text-sm mb-3"></div>
+
+          <div class="mb-3">
+            <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+              Aus lokalem Register verknüpfen
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <input
+                id="cat-product-input"
+                type="text"
+                list="cat-product-datalist"
+                placeholder="Produkt suchen …"
+                class="flex-1 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600 text-sm"
+              />
+              <datalist id="cat-product-datalist"></datalist>
+              <button type="button" id="cat-product-link" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-sm">
+                Verknüpfen
+              </button>
+              <a id="cat-product-new" href="/produkte" class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm no-underline">
+                Neues Produkt anlegen
+              </a>
+            </div>
+          </div>
+
+          <div>
+            <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+              Online (Open Food Facts) suchen oder scannen
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <input
+                id="cat-off-input"
+                type="search"
+                placeholder="Marke oder Produktname … (z. B. „Barilla Spaghetti“)"
+                class="flex-1 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600 text-sm"
+              />
+              <button type="button" id="cat-off-search" class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
+                Online suchen
+              </button>
+              <button type="button" id="cat-off-scan" class="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">
+                Barcode scannen
+              </button>
+            </div>
+            <div id="cat-off-status" class="text-[11px] text-gray-500 mt-1"></div>
+            <div id="cat-off-results" class="mt-2 space-y-1 max-h-64 overflow-y-auto"></div>
+            <p class="text-[11px] text-gray-500 mt-2">
+              Daten community-basiert (ODbL). Bei Übernahme wird das Produkt lokal gespeichert und verknüpft.
+            </p>
+          </div>
+
+          <p class="text-[11px] text-gray-500 mt-2">
+            Ein Standardprodukt (⭐) wird im Rezept vorausgewählt und liefert Nährwerte, wenn die Zutat keine eigenen hat.
+          </p>
+        </fieldset>
+        <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+          <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Gramm pro Einheit</legend>
+          <div id="cat-gbu-list" class="space-y-2 text-sm"></div>
+          <div class="flex gap-2 mt-2">
+            <input id="cat-gbu-unit" placeholder="Einheit (z.B. Stück, Zehe, EL)" class="flex-1 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600 text-sm" />
+            <input id="cat-gbu-grams" type="number" step="0.1" placeholder="Gramm" class="w-28 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600 text-sm" />
+            <button type="button" id="cat-gbu-add" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-sm">Hinzufügen</button>
+          </div>
+          <p class="text-[11px] text-gray-500 mt-2">Beispiele: „Stück“ 110, „Zehe“ 5, „Kopf“ 800, „EL“ 15, „Tasse“ 120. Werte sind Schätzungen → Rezeptnährwerte werden mit „~“ markiert.</p>
+        </fieldset>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="cat-cancel" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Abbrechen</button>
+          <button type="submit" class="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  interface ProductLite {
+    id: string;
+    name: string;
+    brand?: string;
+    ean?: string;
+    imageUrl?: string;
+    ingredientIds?: string[];
+  }
+
+  interface WindowWithCatalogue extends Window {
+    openCatalogueModal?: (name: string) => Promise<void>;
+  }
+
+  let currentCatalogueName = '';
+  let currentCatalogueId = '';
+  let currentDefaultProductId = '';
+  let currentLinkedProducts: ProductLite[] = [];
+  let productsCache: ProductLite[] = [];
+  let currentGramsByUnit: Record<string, number> = {};
+  let listenersBound = false;
+
+  function notifyCatalogueUpdated() {
+    window.dispatchEvent(new CustomEvent('catalogue-updated', {
+      detail: {
+        ingredientName: currentCatalogueName,
+        catalogueId: currentCatalogueId,
+        defaultProductId: currentDefaultProductId,
+        products: currentLinkedProducts.map((p) => ({ id: p.id, name: p.name, brand: p.brand })),
+      },
+    }));
+  }
+
+  async function openCatalogueModal(name: string) {
+    currentCatalogueName = name;
+    currentCatalogueId = '';
+    currentDefaultProductId = '';
+    currentLinkedProducts = [];
+    const label = document.getElementById('catalogue-name-label');
+    if (label) label.textContent = name;
+    currentGramsByUnit = {};
+    try {
+      const res = await fetch(`/api/ingredients/catalogue?name=${encodeURIComponent(name)}`);
+      const catalogue = res.ok ? await res.json() : null;
+      const nut = (catalogue && catalogue.nutritionPer100g) || {};
+      (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((k) => {
+        const el = document.getElementById(`cat-nut-${k}`) as HTMLInputElement | null;
+        if (el) el.value = nut[k] != null ? String(nut[k]) : '';
+      });
+      (document.getElementById('cat-density') as HTMLInputElement).value = catalogue?.densityGPerMl != null ? String(catalogue.densityGPerMl) : '';
+      (document.getElementById('cat-default-product-id') as HTMLInputElement).value = catalogue?.defaultProductId || '';
+      currentGramsByUnit = catalogue?.gramsByUnit ? { ...catalogue.gramsByUnit } : {};
+      currentCatalogueId = catalogue?.id || '';
+      currentDefaultProductId = catalogue?.defaultProductId || '';
+    } catch (error) {
+      console.error('Failed to load catalogue for', name, error);
+    }
+    renderGramsByUnit();
+    const newBtn = document.getElementById('cat-product-new') as HTMLAnchorElement | null;
+    if (newBtn) newBtn.href = `/produkte?linkIngredient=${encodeURIComponent(name)}`;
+    const offInput = document.getElementById('cat-off-input') as HTMLInputElement | null;
+    if (offInput) offInput.value = name;
+    const offResults = document.getElementById('cat-off-results');
+    if (offResults) offResults.innerHTML = '';
+    const offStatus = document.getElementById('cat-off-status');
+    if (offStatus) offStatus.textContent = '';
+    const productInput = document.getElementById('cat-product-input') as HTMLInputElement | null;
+    if (productInput) productInput.value = '';
+    await refreshLinkedProducts();
+    await refreshProductsDatalist();
+    document.getElementById('catalogue-modal')?.classList.remove('hidden');
+  }
+
+  async function refreshLinkedProducts() {
+    currentLinkedProducts = [];
+    if (currentCatalogueId) {
+      try {
+        const res = await fetch(`/api/products?ingredientId=${encodeURIComponent(currentCatalogueId)}`);
+        if (res.ok) currentLinkedProducts = await res.json();
+      } catch (error) { console.error('Failed to load linked products', error); }
+    }
+    renderLinkedProducts();
+  }
+
+  function renderLinkedProducts() {
+    const container = document.getElementById('cat-linked-products');
+    if (!container) return;
+    container.innerHTML = '';
+    if (currentLinkedProducts.length === 0) {
+      container.innerHTML = '<p class="text-xs text-gray-500">Noch keine Produkte verknüpft.</p>';
+      return;
+    }
+    for (const product of currentLinkedProducts) {
+      const isDefault = product.id === currentDefaultProductId;
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between gap-2 px-2 py-1 border border-gray-200 dark:border-gray-700 rounded';
+      const label = product.brand ? `${product.brand} – ${product.name}` : product.name;
+      row.innerHTML = `
+        <span class="flex-1 truncate text-gray-800 dark:text-gray-100">${isDefault ? '⭐ ' : ''}${escapeHtml(label)}${product.ean ? `<span class="text-[11px] text-gray-500 ml-1">EAN ${escapeHtml(product.ean)}</span>` : ''}</span>
+        <button type="button" class="cat-set-default text-[11px] px-2 py-0.5 rounded ${isDefault ? 'bg-yellow-500 text-white' : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}" data-product-id="${product.id}" title="Als Standard">${isDefault ? 'Standard' : 'Als Standard'}</button>
+        <button type="button" class="cat-unlink text-[11px] text-red-500 hover:text-red-700" data-product-id="${product.id}">Entfernen</button>
+      `;
+      container.appendChild(row);
+    }
+  }
+
+  async function refreshProductsDatalist() {
+    try {
+      const res = await fetch('/api/products');
+      productsCache = res.ok ? await res.json() : [];
+    } catch (error) { productsCache = []; }
+    const datalist = document.getElementById('cat-product-datalist');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    const linkedIds = new Set(currentLinkedProducts.map((p) => p.id));
+    for (const p of productsCache) {
+      if (linkedIds.has(p.id)) continue;
+      const opt = document.createElement('option');
+      opt.value = p.brand ? `${p.brand} – ${p.name}` : p.name;
+      opt.dataset.productId = p.id;
+      datalist.appendChild(opt);
+    }
+  }
+
+  function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
+  async function ensureCatalogueId(): Promise<string> {
+    if (currentCatalogueId) return currentCatalogueId;
+    const payload = {
+      name: currentCatalogueName,
+      nutritionPer100g: null,
+      densityGPerMl: null,
+      defaultProductId: null,
+      gramsByUnit: Object.keys(currentGramsByUnit).length > 0 ? currentGramsByUnit : null,
+    };
+    const res = await fetch('/api/ingredients/catalogue', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Zutat konnte nicht angelegt werden');
+    const created = await res.json();
+    currentCatalogueId = created.id;
+    return currentCatalogueId;
+  }
+
+  async function callLinkProduct(action: string, productId: string): Promise<boolean> {
+    const ingredientId = await ensureCatalogueId();
+    const res = await fetch('/api/ingredients/link-product', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ingredientId, productId, action }),
+    });
+    if (!res.ok) { alert('Aktion fehlgeschlagen.'); return false; }
+    const data = await res.json();
+    currentDefaultProductId = data?.ingredient?.defaultProductId || '';
+    await refreshLinkedProducts();
+    await refreshProductsDatalist();
+    notifyCatalogueUpdated();
+    return true;
+  }
+
+  function renderGramsByUnit() {
+    const container = document.getElementById('cat-gbu-list');
+    if (!container) return;
+    container.innerHTML = '';
+    const entries = Object.entries(currentGramsByUnit);
+    if (entries.length === 0) {
+      container.innerHTML = '<p class="text-xs text-gray-500">Noch keine Einträge.</p>';
+      return;
+    }
+    for (const [unit, grams] of entries) {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2';
+      row.innerHTML = `
+        <span class="flex-1 text-gray-800 dark:text-gray-100">${unit}</span>
+        <span class="text-gray-600 dark:text-gray-300">${grams} g</span>
+        <button type="button" data-unit="${unit}" class="text-red-500 hover:text-red-700 text-xs cat-gbu-remove">Entfernen</button>
+      `;
+      container.appendChild(row);
+    }
+  }
+
+  function renderOffResults(data: any) {
+    const results = document.getElementById('cat-off-results');
+    if (!results) return;
+    results.innerHTML = '';
+    const linkedIds = new Set(currentLinkedProducts.map((p) => p.id));
+    const localHits = (data?.local || []) as ProductLite[];
+    const remoteHits = (data?.results || []) as Array<{ ean: string; name?: string; brand?: string; packageLabel?: string; imageUrl?: string; nutritionPer100g?: Record<string, number>; netGrams?: number; }>;
+    if (localHits.length === 0 && remoteHits.length === 0) return;
+
+    for (const p of localHits) {
+      const alreadyLinked = linkedIds.has(p.id);
+      const subtitleParts: string[] = [];
+      if (p.brand) subtitleParts.push(p.brand);
+      if (p.ean) subtitleParts.push(`EAN ${p.ean}`);
+      const subtitle = subtitleParts.join(' · ');
+      const row = document.createElement('div');
+      row.className = 'flex items-start gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-emerald-50/50 dark:bg-emerald-900/10';
+      row.innerHTML = `
+        <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div
+            class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 break-words"
+            title="${escapeHtml(p.name)}"
+          >${escapeHtml(p.name)}</div>
+          <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+            <span class="uppercase font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">lokal</span>
+            ${subtitle ? `<span class="line-clamp-1 break-all" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</span>` : ''}
+          </div>
+        </div>
+        ${alreadyLinked
+          ? '<span class="text-[11px] text-gray-500 shrink-0 pt-0.5">bereits verknüpft</span>'
+          : `<button type="button" data-action="link-local" data-product-id="${p.id}" class="text-xs px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded shrink-0">Verknüpfen</button>`}
+      `;
+      results.appendChild(row);
+    }
+
+    for (const p of remoteHits) {
+      const kcal = p?.nutritionPer100g?.calories;
+      const name = p.name || '(ohne Name)';
+      const metaParts: string[] = [];
+      if (p.brand) metaParts.push(p.brand);
+      if (p.packageLabel) metaParts.push(p.packageLabel);
+      else if (p.netGrams) metaParts.push(`${p.netGrams} g`);
+      const meta = metaParts.join(' · ');
+      const row = document.createElement('div');
+      row.className = 'flex items-start gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded';
+      row.innerHTML = `
+        <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div
+            class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 break-words"
+            title="${escapeHtml(name)}"
+          >${escapeHtml(name)}</div>
+          <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+            <span class="uppercase font-semibold text-blue-600 dark:text-blue-400 shrink-0">OFF</span>
+            ${meta ? `<span class="line-clamp-1 break-words min-w-0" title="${escapeHtml(meta)}">${escapeHtml(meta)}</span>` : ''}
+            <span class="shrink-0 text-gray-400">·</span>
+            <span class="font-mono text-gray-400 shrink-0" title="EAN ${escapeHtml(p.ean)}">EAN ${escapeHtml(p.ean)}</span>
+          </div>
+          <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+            ${kcal != null ? `${Math.round(kcal)} kcal / 100 g` : '<span class="text-gray-400 italic">keine Nährwerte</span>'}
+          </div>
+        </div>
+        <button type="button" data-action="import-off" data-ean="${escapeHtml(p.ean)}" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded shrink-0">Übernehmen</button>
+      `;
+      results.appendChild(row);
+    }
+  }
+
+  async function mergeMissingNutritionFromProduct(productId: string): Promise<number> {
+    try {
+      const res = await fetch(`/api/products/${encodeURIComponent(productId)}`);
+      if (!res.ok) return 0;
+      const product = await res.json();
+      const productNutrition = product?.nutritionPer100g || {};
+      const keys = ['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const;
+      const mergedNutrition: Record<string, number> = {};
+      let filledCount = 0;
+      for (const k of keys) {
+        const el = document.getElementById(`cat-nut-${k}`) as HTMLInputElement | null;
+        const currentRaw = el?.value?.trim() ?? '';
+        const currentNum = currentRaw ? Number(currentRaw) : NaN;
+        if (currentRaw && Number.isFinite(currentNum)) {
+          mergedNutrition[k] = currentNum;
+          continue;
+        }
+        const productValue = productNutrition[k];
+        if (productValue == null) continue;
+        const productNum = Number(productValue);
+        if (!Number.isFinite(productNum)) continue;
+        mergedNutrition[k] = productNum;
+        if (el) el.value = String(productNum);
+        filledCount++;
+      }
+      if (filledCount === 0) return 0;
+
+      const densityInput = document.getElementById('cat-density') as HTMLInputElement | null;
+      const densityRaw = densityInput?.value?.trim() ?? '';
+      const payload = {
+        name: currentCatalogueName,
+        nutritionPer100g: Object.keys(mergedNutrition).length > 0 ? mergedNutrition : null,
+        densityGPerMl: densityRaw ? Number(densityRaw) : null,
+        defaultProductId: currentDefaultProductId || null,
+        gramsByUnit: Object.keys(currentGramsByUnit).length > 0 ? currentGramsByUnit : null,
+      };
+      const save = await fetch('/api/ingredients/catalogue', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (save.ok) notifyCatalogueUpdated();
+      return save.ok ? filledCount : 0;
+    } catch (error) {
+      console.error('mergeMissingNutritionFromProduct failed', error);
+      return 0;
+    }
+  }
+
+  async function importOffProductByEan(ean: string): Promise<string | null> {
+    try {
+      const lookup = await fetch(`/api/products/lookup?ean=${encodeURIComponent(ean)}`);
+      if (!lookup.ok) return null;
+      const data = await lookup.json();
+      if (data?.source === 'local' && data.product) {
+        return data.product.id;
+      }
+      if (data?.source === 'openfoodfacts' && data.product) {
+        const payload = {
+          ean: data.product.ean,
+          name: data.product.name || `Produkt ${data.product.ean}`,
+          brand: data.product.brand ?? null,
+          netGrams: data.product.netGrams ?? null,
+          packageLabel: data.product.packageLabel ?? null,
+          imageUrl: data.product.imageUrl ?? null,
+          source: 'openfoodfacts',
+          offCode: data.product.offCode ?? null,
+          nutritionPer100g: data.product.nutritionPer100g ?? null,
+        };
+        const create = await fetch('/api/products', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        if (!create.ok) return null;
+        const created = await create.json();
+        return created?.id || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('OFF import failed', error);
+      return null;
+    }
+  }
+
+  function bindListeners() {
+    if (listenersBound) return;
+    const modal = document.getElementById('catalogue-modal');
+    if (!modal) return;
+    listenersBound = true;
+
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+    document.getElementById('catalogue-close')?.addEventListener('click', () => modal.classList.add('hidden'));
+    document.getElementById('cat-cancel')?.addEventListener('click', () => modal.classList.add('hidden'));
+
+    document.getElementById('cat-gbu-add')?.addEventListener('click', () => {
+      const unitInput = document.getElementById('cat-gbu-unit') as HTMLInputElement;
+      const gramsInput = document.getElementById('cat-gbu-grams') as HTMLInputElement;
+      const unit = unitInput.value.trim();
+      const grams = Number(gramsInput.value);
+      if (!unit || !Number.isFinite(grams) || grams <= 0) return;
+      currentGramsByUnit[unit] = grams;
+      unitInput.value = '';
+      gramsInput.value = '';
+      renderGramsByUnit();
+    });
+    document.getElementById('cat-gbu-list')?.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target?.classList.contains('cat-gbu-remove')) {
+        const unit = target.dataset.unit;
+        if (unit && unit in currentGramsByUnit) {
+          delete currentGramsByUnit[unit];
+          renderGramsByUnit();
+        }
+      }
+    });
+
+    document.getElementById('cat-linked-products')?.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      const productId = target?.dataset?.productId;
+      if (!productId) return;
+      if (target.classList.contains('cat-unlink')) {
+        if (!confirm('Verknüpfung entfernen?')) return;
+        await callLinkProduct('unlink', productId);
+      } else if (target.classList.contains('cat-set-default')) {
+        const action = productId === currentDefaultProductId ? 'clearDefault' : 'setDefault';
+        await callLinkProduct(action, productId);
+      }
+    });
+
+    const productLinkHandler = async () => {
+      const input = document.getElementById('cat-product-input') as HTMLInputElement;
+      const raw = input.value.trim();
+      if (!raw) return;
+      const datalist = document.getElementById('cat-product-datalist');
+      let productId = '';
+      if (datalist) {
+        for (const opt of Array.from(datalist.children) as HTMLOptionElement[]) {
+          if (opt.value === raw) { productId = opt.dataset.productId || ''; break; }
+        }
+      }
+      if (!productId) {
+        const target = raw.toLowerCase();
+        const match = productsCache.find((p) => (p.brand ? `${p.brand} – ${p.name}` : p.name).toLowerCase() === target
+          || p.name.toLowerCase() === target);
+        if (match) productId = match.id;
+      }
+      if (!productId) { alert('Produkt nicht gefunden. Erst über „Neues Produkt anlegen“ anlegen.'); return; }
+      const ok = await callLinkProduct('link', productId);
+      if (ok) input.value = '';
+    };
+
+    document.getElementById('cat-product-link')?.addEventListener('click', productLinkHandler);
+    document.getElementById('cat-product-input')?.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); productLinkHandler(); }
+    });
+
+    const offSearchHandler = async () => {
+      const input = document.getElementById('cat-off-input') as HTMLInputElement | null;
+      const status = document.getElementById('cat-off-status');
+      const results = document.getElementById('cat-off-results');
+      if (!input || !status || !results) return;
+      const query = input.value.trim();
+      if (!query) return;
+      status.textContent = 'Suche läuft …';
+      results.innerHTML = '';
+      try {
+        const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error('search failed');
+        const data = await res.json();
+        renderOffResults(data);
+        const total = (data?.results?.length || 0) + (data?.local?.length || 0);
+        status.textContent = data?.error
+          ? `Online-Suche fehlgeschlagen: ${data.error}`
+          : total > 0
+            ? `${total} Treffer (${data?.local?.length || 0} lokal, ${data?.results?.length || 0} online)`
+            : 'Keine Treffer.';
+      } catch (error) {
+        status.textContent = 'Suche fehlgeschlagen. Bitte später erneut versuchen.';
+      }
+    };
+
+    document.getElementById('cat-off-search')?.addEventListener('click', offSearchHandler);
+    document.getElementById('cat-off-input')?.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); offSearchHandler(); }
+    });
+
+    document.getElementById('cat-off-scan')?.addEventListener('click', () => {
+      (window as any).__cbCatalogueScanTarget = true;
+      (window as any).openBarcodeScanner?.();
+    });
+
+    document.getElementById('cat-off-results')?.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      const action = target?.dataset?.action;
+      if (!action) return;
+      if (action === 'link-local') {
+        const productId = target.dataset.productId;
+        if (productId) await callLinkProduct('link', productId);
+        return;
+      }
+      if (action === 'import-off') {
+        const ean = target.dataset.ean;
+        if (!ean) return;
+        target.setAttribute('disabled', 'true');
+        target.textContent = 'Importiere …';
+        const productId = await importOffProductByEan(ean);
+        if (productId) {
+          await callLinkProduct('link', productId);
+          const filled = await mergeMissingNutritionFromProduct(productId);
+          const status = document.getElementById('cat-off-status');
+          if (filled > 0 && status) {
+            status.textContent = `${filled} fehlende Nährwert${filled === 1 ? '' : 'e'} aus Produkt übernommen.`;
+          }
+          await offSearchHandler();
+        } else {
+          target.removeAttribute('disabled');
+          target.textContent = 'Übernehmen';
+        }
+      }
+    });
+
+    document.getElementById('catalogue-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nutrition: Record<string, number> = {};
+      (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((k) => {
+        const el = document.getElementById(`cat-nut-${k}`) as HTMLInputElement | null;
+        const v = el?.value?.trim();
+        if (v) {
+          const n = Number(v);
+          if (Number.isFinite(n)) nutrition[k] = n;
+        }
+      });
+      const densityInput = document.getElementById('cat-density') as HTMLInputElement;
+      const dpi = document.getElementById('cat-default-product-id') as HTMLInputElement;
+      const payload = {
+        name: currentCatalogueName,
+        nutritionPer100g: Object.keys(nutrition).length > 0 ? nutrition : null,
+        densityGPerMl: densityInput.value.trim() ? Number(densityInput.value) : null,
+        defaultProductId: dpi.value.trim() || null,
+        gramsByUnit: Object.keys(currentGramsByUnit).length > 0 ? currentGramsByUnit : null,
+      };
+      const res = await fetch('/api/ingredients/catalogue', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (!res.ok) { alert('Speichern fehlgeschlagen.'); return; }
+      notifyCatalogueUpdated();
+      modal.classList.add('hidden');
+    });
+
+    window.addEventListener('barcode-scanned', async (event) => {
+      if (!(window as any).__cbCatalogueScanTarget) return;
+      (window as any).__cbCatalogueScanTarget = false;
+      const detail = (event as CustomEvent).detail as { ean?: string };
+      const ean = detail?.ean?.trim();
+      if (!ean) return;
+      const status = document.getElementById('cat-off-status');
+      if (status) status.textContent = `Barcode ${ean}: Produkt wird geholt …`;
+      const productId = await importOffProductByEan(ean);
+      if (!productId) {
+        if (status) status.textContent = `Kein Produkt zu EAN ${ean} gefunden.`;
+        return;
+      }
+      const ok = await callLinkProduct('link', productId);
+      if (!ok) return;
+      const filled = await mergeMissingNutritionFromProduct(productId);
+      if (status) {
+        status.textContent = filled > 0
+          ? `Produkt (EAN ${ean}) verknüpft. ${filled} Nährwert${filled === 1 ? '' : 'e'} ergänzt.`
+          : `Produkt (EAN ${ean}) verknüpft.`;
+      }
+    });
+  }
+
+  bindListeners();
+  const w = window as WindowWithCatalogue;
+  w.openCatalogueModal = openCatalogueModal;
+</script>
