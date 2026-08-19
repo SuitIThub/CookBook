@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveGramsByUnitFromOff } from './openFoodFacts';
+import { deriveGramsByUnitFromOff, sanitizeSearchQuery, suggestOpenFoodFactsTerms } from './openFoodFacts';
 import { detectUnitInText } from './units';
+
+function fakeFetch(payload: unknown, ok = true): typeof fetch {
+  return (async () => ({ ok, json: async () => payload })) as unknown as typeof fetch;
+}
 
 // Run with: npx tsx --test src/lib/openFoodFacts.test.ts
 
@@ -58,6 +62,34 @@ test('metric-only quantity yields nothing', () => {
 
 test('out-of-range grams are rejected', () => {
   assert.deepEqual(deriveGramsByUnitFromOff({ serving_size: '1 Scheibe (5000 g)' }), []);
+});
+
+test('sanitizeSearchQuery strips Lucene operators instead of phrase-quoting', () => {
+  // The old behaviour wrapped this in quotes → exact phrase → 0 hits on OFF.
+  assert.equal(sanitizeSearchQuery('gut & günstig'), 'gut günstig');
+  assert.equal(sanitizeSearchQuery('veganer schmand'), 'veganer schmand');
+  assert.equal(sanitizeSearchQuery('milch (3,5%)'), 'milch 3,5%');
+  assert.equal(sanitizeSearchQuery('a/b:c'), 'a b c');
+  // All-operator input keeps the original so we never send an empty q.
+  assert.equal(sanitizeSearchQuery('&&'), '&&');
+});
+
+test('suggestOpenFoodFactsTerms returns deduped display strings', async () => {
+  const fetchFn = fakeFetch({ suggestions: ['Schmand', 'Schmand', 'Schmalz', '  ', 42] });
+  const out = await suggestOpenFoodFactsTerms('schm', { fetchFn });
+  assert.deepEqual(out, ['Schmand', 'Schmalz']);
+});
+
+test('suggestOpenFoodFactsTerms ignores too-short queries without calling fetch', async () => {
+  let called = false;
+  const fetchFn = (async () => { called = true; return { ok: true, json: async () => ({}) }; }) as unknown as typeof fetch;
+  assert.deepEqual(await suggestOpenFoodFactsTerms('s', { fetchFn }), []);
+  assert.equal(called, false);
+});
+
+test('suggestOpenFoodFactsTerms is best-effort on errors', async () => {
+  const fetchFn = (async () => { throw new Error('network'); }) as unknown as typeof fetch;
+  assert.deepEqual(await suggestOpenFoodFactsTerms('schmand', { fetchFn }), []);
 });
 
 test('detectUnitInText ignores metric units', () => {

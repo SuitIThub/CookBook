@@ -22,9 +22,12 @@
               <input
                 id="pf-off-input"
                 type="search"
+                list="pf-off-suggest-list"
+                autocomplete="off"
                 placeholder="Produktname, Marke oder EAN …"
                 class="flex-1 min-w-[12rem] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
               />
+              <datalist id="pf-off-suggest-list"></datalist>
               <button type="button" id="pf-off-search" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
                 Suchen
               </button>
@@ -956,6 +959,36 @@
     if (e.key !== 'Enter') return;
     e.preventDefault();
     searchOpenFoodFacts(false);
+  });
+  // Debounced autocomplete: OFF category suggestions ("Schmand", "Joghurt") fill
+  // the datalist as the user types. Best-effort — failures are ignored.
+  let offSuggestTimer: ReturnType<typeof setTimeout> | undefined;
+  let offSuggestSeq = 0;
+  (document.getElementById('pf-off-input') as HTMLInputElement | null)?.addEventListener('input', (e) => {
+    const value = (e.currentTarget as HTMLInputElement).value.trim();
+    if (offSuggestTimer) clearTimeout(offSuggestTimer);
+    const datalist = document.getElementById('pf-off-suggest-list');
+    if (value.length < 2 || /^\d+$/.test(value)) {
+      if (datalist) datalist.innerHTML = '';
+      return;
+    }
+    offSuggestTimer = setTimeout(async () => {
+      const seq = ++offSuggestSeq;
+      try {
+        const res = await fetch(`/api/products/lookup?suggest=${encodeURIComponent(value)}`);
+        if (!res.ok || seq !== offSuggestSeq) return;
+        const data = await res.json();
+        if (!datalist || seq !== offSuggestSeq) return;
+        datalist.innerHTML = '';
+        for (const term of (data.suggestions || []) as string[]) {
+          const opt = document.createElement('option');
+          opt.value = term;
+          datalist.appendChild(opt);
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 220);
   });
   (document.getElementById('pf-image-file') as HTMLInputElement | null)?.addEventListener('change', (e) => {
     const file = (e.currentTarget as HTMLInputElement).files?.[0];

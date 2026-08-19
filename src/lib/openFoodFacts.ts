@@ -20,7 +20,6 @@ import { detectUnitInText } from './units';
 
 const OFF_ENDPOINT = 'https://world.openfoodfacts.org/api/v3/product';
 const OFF_SEARCH_ALICIOUS = 'https://search.openfoodfacts.org/search';
-const OFF_SEARCH_CGI = 'https://world.openfoodfacts.org/cgi/search.pl';
 const USER_AGENT = 'CookBook/1.0 (https://github.com/) nutrition tracker';
 const SEARCH_FIELDS = [
   'code',
@@ -244,17 +243,59 @@ export async function searchOpenFoodFactsProducts(
   const page = Math.max(1, options.page ?? 1);
   const language = options.language || 'de';
 
-  const primary = await searchViaSearchAlicious(trimmed, pageSize, page, language, fetchFn);
-  if (primary.status === 'ok') return primary;
+  // Only Search-a-licious. The legacy cgi/search.pl fallback was removed: it
+  // OR-matches and returned irrelevant results (e.g. products literally named
+  // "vegan") or HTML error pages when overloaded. fetchWithRetries already
+  // retries transient failures; if it still fails the user simply retries.
+  return searchViaSearchAlicious(trimmed, pageSize, page, language, fetchFn);
+}
 
-  const fallback = await searchViaCgi(trimmed, pageSize, page, language, fetchFn);
-  if (fallback.status === 'ok') return fallback;
+const OFF_SUGGEST = 'https://world.openfoodfacts.org/api/v3/taxonomy_suggestions';
 
-  return {
-    status: 'error',
-    products: [],
-    message: primary.message || fallback.message || 'Open Food Facts ist gerade nicht erreichbar.',
-  };
+/**
+ * Autocomplete suggestions for the product search box, powered by OFF's
+ * `taxonomy_suggestions` endpoint. Defaults to the `categories` taxonomy: it
+ * returns product-type terms ("Schmand", "Joghurt") — what users actually
+ * search for — as plain display strings. Best-effort: any failure yields [].
+ */
+export async function suggestOpenFoodFactsTerms(
+  query: string,
+  options: { tagtype?: string; language?: string; limit?: number; fetchFn?: typeof fetch } = {}
+): Promise<string[]> {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const fetchFn = options.fetchFn ?? fetch;
+  const tagtype = options.tagtype || 'categories';
+  const lc = options.language || 'de';
+  const limit = Math.min(25, Math.max(1, options.limit ?? 10));
+  const params = new URLSearchParams({ tagtype, lc, string: trimmed });
+  let response: Response | null;
+  try {
+    response = await fetchFn(`${OFF_SUGGEST}?${params.toString()}`, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+    });
+  } catch {
+    return [];
+  }
+  if (!response || !response.ok) return [];
+  let body: any;
+  try {
+    body = await response.json();
+  } catch {
+    return [];
+  }
+  const raw = Array.isArray(body?.suggestions) ? body.suggestions : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of raw) {
+    if (typeof s !== 'string') continue;
+    const value = s.trim();
+    if (!value || seen.has(value.toLowerCase())) continue;
+    seen.add(value.toLowerCase());
+    out.push(value);
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 async function searchViaSearchAlicious(
@@ -266,7 +307,7 @@ async function searchViaSearchAlicious(
 ): Promise<OpenFoodFactsSearchResult> {
   const langs = language === 'de' ? 'de,en' : `${language},en`;
   const params = new URLSearchParams({
-    q: asLiteralSearchQuery(query),
+    q: sanitizeSearchQuery(query),
     langs,
     page_size: String(pageSize),
     page: String(page),
@@ -303,49 +344,6 @@ async function searchViaSearchAlicious(
   };
 }
 
-async function searchViaCgi(
-  query: string,
-  pageSize: number,
-  page: number,
-  language: string,
-  fetchFn: typeof fetch
-): Promise<OpenFoodFactsSearchResult> {
-  const params = new URLSearchParams({
-    search_terms: query,
-    search_simple: '1',
-    action: 'process',
-    json: '1',
-    page_size: String(pageSize),
-    page: String(page),
-    lc: language,
-    fields: SEARCH_FIELDS,
-  });
-  const response = await fetchWithRetries(`${OFF_SEARCH_CGI}?${params.toString()}`, fetchFn);
-  if (!response) {
-    return { status: 'error', products: [], message: 'Netzwerkfehler bei der Open-Food-Facts-Suche.' };
-  }
-  if (!response.ok) {
-    return { status: 'error', products: [], message: `OFF antwortete mit HTTP ${response.status}.` };
-  }
-  let body: any;
-  try {
-    body = await response.json();
-  } catch {
-    return { status: 'error', products: [], message: 'Antwort konnte nicht als JSON gelesen werden.' };
-  }
-  const products = normalizeSearchHits(body?.products);
-  const count = numericCount(body?.count);
-  const responsePageSize = numericCount(body?.page_size) ?? pageSize;
-  return {
-    status: 'ok',
-    products,
-    count,
-    page: numericCount(body?.page) ?? page,
-    pageCount: undefined,
-    hasMore: computeHasMore(page, responsePageSize, products.length, count),
-  };
-}
-
 function computeHasMore(
   page: number,
   pageSize: number,
@@ -375,12 +373,21 @@ function numericCount(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-/** Keep product names literal so Lucene operators in the query are not interpreted. */
-function asLiteralSearchQuery(query: string): string {
-  if (/[+\-&|!(){}[\]^"~*?:\\/]/.test(query)) {
-    return `"${query.replace(/"/g, ' ')}"`;
-  }
-  return query;
+/**
+ * Neutralize Lucene query operators in user input for the Search-a-licious `q`
+ * parameter. The previous approach wrapped the whole query in quotes as soon as
+ * one special character was present, turning it into an exact phrase match — so
+ * "gut & günstig" matched nothing (0 hits). Instead we replace the reserved
+ * characters with spaces so the words are searched as ordinary free text
+ * ("gut & günstig" → "gut günstig"). Falls back to the trimmed input if
+ * sanitizing would leave nothing.
+ */
+export function sanitizeSearchQuery(query: string): string {
+  const cleaned = query
+    .replace(/[+\-&|!(){}\[\]^"~*?:\\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || query.trim();
 }
 
 async function fetchWithRetries(
