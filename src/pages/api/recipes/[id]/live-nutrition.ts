@@ -6,7 +6,7 @@ import {
   computeRecipePrice,
   roundNutritionValues,
   applySupermarketProductAssignments,
-  productAssignmentsFromRecipe,
+  assignmentsFromCatalogueDefaults,
 } from '../../../../lib/recipeNutrition';
 import {
   filterRecipeBySelection,
@@ -38,12 +38,7 @@ export const POST: APIRoute = async ({ params, request }) => {
           .map(([k, v]) => [k, v as string])
       )
     : {};
-  let productAssignments: Record<string, string> = {
-    ...productAssignmentsFromRecipe(recipe),
-    ...incomingAssignments,
-  };
   const supermarketId: string | undefined = typeof body?.supermarketId === 'string' && body.supermarketId ? body.supermarketId : undefined;
-  const persist = body?.persist === true;
   const applySupermarket = body?.applySupermarket === true;
   const servingsRaw = Number(body?.servings);
   const servings = Number.isFinite(servingsRaw) && servingsRaw > 0 ? servingsRaw : recipe.metadata.servings;
@@ -68,6 +63,10 @@ export const POST: APIRoute = async ({ params, request }) => {
       if (dp) productsById.set(dp.id, dp);
     }
   }
+  let productAssignments: Record<string, string> = {
+    ...assignmentsFromCatalogueDefaults(visible, catalogueByName),
+    ...incomingAssignments,
+  };
   if (applySupermarket && supermarketId) {
     productAssignments = applySupermarketProductAssignments({
       ingredients: visible,
@@ -81,17 +80,6 @@ export const POST: APIRoute = async ({ params, request }) => {
     if (productId && !productsById.has(productId)) {
       const p = db.getProduct(productId);
       if (p) productsById.set(p.id, p);
-    }
-  }
-
-  if (persist) {
-    try {
-      db.setRecipeProductSelection(id, {
-        productAssignments,
-        preferredSupermarketId: supermarketId ?? null,
-      });
-    } catch (error) {
-      console.error('Failed to persist recipe product selection', error);
     }
   }
 

@@ -1,0 +1,848 @@
+---
+// Global product editor. Available via Layout as window.openProductModal / openProductModalById.
+// Dispatches product-saved after a successful save so lists and the ingredient modal can refresh.
+---
+
+  <!-- Product editor modal -->
+  <div id="product-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-3">
+    <div class="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 id="product-modal-title" class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">Produkt</h2>
+          <button type="button" id="product-modal-close" class="text-gray-500 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+        <form id="product-form" class="space-y-3">
+          <input type="hidden" id="pf-id" />
+          <input type="hidden" id="pf-source" />
+          <input type="hidden" id="pf-off-code" />
+
+          <fieldset id="pf-off-wrap" class="border border-blue-200 dark:border-blue-900/60 rounded p-3 bg-blue-50/40 dark:bg-blue-950/20">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Open Food Facts durchsuchen</legend>
+            <div class="flex gap-2 flex-wrap">
+              <input
+                id="pf-off-input"
+                type="search"
+                placeholder="Produktname, Marke oder EAN …"
+                class="flex-1 min-w-[12rem] px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm"
+              />
+              <button type="button" id="pf-off-search" class="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
+                Suchen
+              </button>
+              <button type="button" id="pf-off-scan" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">
+                Barcode
+              </button>
+            </div>
+            <div id="pf-off-status" class="text-[11px] text-gray-500 dark:text-gray-400 mt-1"></div>
+            <div id="pf-off-results" class="mt-2 space-y-1 max-h-[min(24rem,50vh)] overflow-y-auto"></div>
+            <button
+              type="button"
+              id="pf-off-more"
+              class="hidden mt-2 w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            >
+              Weitere Ergebnisse laden
+            </button>
+            <p class="text-[11px] text-gray-500 mt-2">
+              Community-Daten (ODbL). „Übernehmen“ füllt das Formular – erst Speichern legt das Produkt an.
+            </p>
+          </fieldset>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Name</span>
+              <input id="pf-name" required class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Marke</span>
+              <input id="pf-brand" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">EAN</span>
+              <input id="pf-ean" inputmode="numeric" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Netto (g)</span>
+              <input id="pf-net-grams" type="number" step="0.1" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Packungslabel</span>
+              <input id="pf-package" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-gray-700 dark:text-gray-200">Standardpreis (€)</span>
+              <input id="pf-default-price" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+            </label>
+            <div class="block text-sm col-span-full">
+              <span class="text-gray-700 dark:text-gray-200">Bild</span>
+              <input type="hidden" id="pf-image" />
+              <div class="mt-1 flex flex-col sm:flex-row gap-3">
+                <div
+                  id="pf-image-preview"
+                  class="w-24 h-24 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center border border-gray-200 dark:border-gray-600"
+                >
+                  <span class="text-2xl">🥫</span>
+                </div>
+                <div class="flex-1 min-w-0 space-y-2">
+                  <div
+                    id="pf-image-dropzone"
+                    class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3 text-center hover:border-orange-400 dark:hover:border-orange-500 transition-colors cursor-pointer"
+                  >
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                      <span class="font-medium">Klicken</span> oder Datei hierher ziehen
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">PNG, JPG oder WEBP (max. 10 MB)</p>
+                    <input id="pf-image-file" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+                  </div>
+                  <p id="pf-image-status" class="hidden text-xs text-gray-500 dark:text-gray-400">Bild wird hochgeladen …</p>
+                  <label class="block">
+                    <span class="text-xs text-gray-500 dark:text-gray-400">oder Bild-URL</span>
+                    <input
+                      id="pf-image-url"
+                      type="url"
+                      placeholder="https://…"
+                      class="mt-0.5 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    id="pf-image-remove"
+                    class="hidden text-xs text-red-500 hover:text-red-700"
+                  >
+                    Bild entfernen
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Nährwerte (pro 100 g)</legend>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <label class="block"><span class="block text-gray-500">kcal</span><input id="pf-nut-calories" type="number" step="1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">KH (g)</span><input id="pf-nut-carbohydrates" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Zucker (g)</span><input id="pf-nut-sugar" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Eiweiß (g)</span><input id="pf-nut-protein" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Fett (g)</span><input id="pf-nut-fat" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">ges. Fett (g)</span><input id="pf-nut-saturatedFat" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Ballaststoffe (g)</span><input id="pf-nut-fiber" type="number" step="0.1" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+              <label class="block"><span class="block text-gray-500">Salz (g)</span><input id="pf-nut-salt" type="number" step="0.01" class="mt-0.5 w-full px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" /></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Preise pro Supermarkt</legend>
+            <div id="pf-market-prices" class="space-y-2"></div>
+            <p class="text-[11px] text-gray-500 mt-1">Leer lassen, um einen Marktpreis zu entfernen.</p>
+          </fieldset>
+
+          <fieldset class="border border-gray-200 dark:border-gray-700 rounded p-3">
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">Verknüpfte Zutaten</legend>
+            <div id="pf-ingredient-chips" class="flex flex-wrap gap-1 mb-2 min-h-[1.5rem]"></div>
+            <div class="flex gap-2">
+              <input
+                id="pf-ingredient-input"
+                type="text"
+                list="pf-ingredient-datalist"
+                placeholder="Zutat suchen oder neu eingeben …"
+                class="flex-1 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600 text-sm"
+              />
+              <datalist id="pf-ingredient-datalist"></datalist>
+              <button type="button" id="pf-ingredient-add" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-sm">
+                Hinzufügen
+              </button>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Tippe auf eine Zutat, um ihre Registerdaten zu öffnen. Unbekannte Namen werden neu angelegt.
+            </p>
+          </fieldset>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" id="pf-cancel" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Abbrechen</button>
+            <button type="submit" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded">Speichern</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+<script>
+  interface Product {
+    id: string;
+    ean?: string;
+    name: string;
+    brand?: string;
+    netGrams?: number;
+    packageLabel?: string;
+    nutritionPer100g?: Record<string, number>;
+    defaultPrice?: number;
+    imageUrl?: string;
+    source: 'manual' | 'openfoodfacts';
+    offCode?: string;
+    supermarkets: Array<{ supermarketId: string; price: number }>;
+    ingredientIds: string[];
+  }
+  interface Supermarket { id: string; name: string; }
+  interface CatalogueEntry { id: string; name: string; }
+  interface OffSearchHit {
+    ean: string;
+    name?: string;
+    brand?: string;
+    packageLabel?: string;
+    imageUrl?: string;
+    nutritionPer100g?: Record<string, number>;
+    netGrams?: number;
+    offCode?: string;
+  }
+
+  interface WindowWithProduct extends Window {
+    openProductModal?: (product?: Partial<Product> | null, opts?: { prelinkIngredientName?: string }) => Promise<void>;
+    openProductModalById?: (id: string) => Promise<void>;
+    startProductBarcodeImport?: () => void;
+    openCatalogueModal?: (name: string) => Promise<void>;
+    openBarcodeScanner?: () => void;
+  }
+
+  let supermarketsCache: Supermarket[] = [];
+  let catalogueCache: CatalogueEntry[] = [];
+  let currentIngredientIds: string[] = [];
+  let openScanForImport = false;
+  let savedProductImageUrl = '';
+  let pendingLocalUploadUrl = '';
+  let lastOffRemoteByEan: Record<string, OffSearchHit> = {};
+  let offSearchQuery = '';
+  let offSearchPage = 0;
+  let offSearchHasMore = false;
+  let offSearchRemoteShown = 0;
+  let offSearchLocalShown = 0;
+  let offSearchTotalCount: number | undefined;
+
+  function raiseModal(id: string) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    for (const otherId of ['catalogue-modal', 'product-modal']) {
+      const other = document.getElementById(otherId) as HTMLElement | null;
+      if (!other) continue;
+      other.style.zIndex = otherId === id ? '80' : '';
+    }
+    el.classList.remove('hidden');
+  }
+
+  function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
+  async function loadSupermarkets(): Promise<Supermarket[]> {
+    const res = await fetch('/api/supermarkets');
+    supermarketsCache = res.ok ? await res.json() : [];
+    return supermarketsCache;
+  }
+
+  async function loadCatalogue(): Promise<CatalogueEntry[]> {
+    const res = await fetch('/api/ingredients/catalogue');
+    catalogueCache = res.ok ? await res.json() : [];
+    const datalist = document.getElementById('pf-ingredient-datalist');
+    if (datalist) {
+      datalist.innerHTML = '';
+      for (const ing of catalogueCache) {
+        const opt = document.createElement('option');
+        opt.value = ing.name;
+        datalist.appendChild(opt);
+      }
+    }
+    return catalogueCache;
+  }
+
+  function findCatalogueByName(name: string): CatalogueEntry | undefined {
+    const target = name.trim().toLowerCase();
+    return catalogueCache.find((c) => c.name.trim().toLowerCase() === target);
+  }
+
+  function findCatalogueById(id: string): CatalogueEntry | undefined {
+    return catalogueCache.find((c) => c.id === id);
+  }
+
+  function renderIngredientChips() {
+    const container = document.getElementById('pf-ingredient-chips');
+    if (!container) return;
+    container.innerHTML = '';
+    if (currentIngredientIds.length === 0) {
+      container.innerHTML = '<span class="text-xs text-gray-500">Noch keine Zutaten verknüpft.</span>';
+      return;
+    }
+    for (const id of currentIngredientIds) {
+      const ing = findCatalogueById(id);
+      const label = ing?.name || id;
+      const chip = document.createElement('span');
+      chip.className = 'inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 rounded text-xs';
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'pf-chip-open hover:underline text-left';
+      openBtn.dataset.name = label;
+      openBtn.title = 'Zutat im Register öffnen';
+      openBtn.textContent = label;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'pf-chip-remove text-red-500 hover:text-red-700';
+      removeBtn.dataset.id = id;
+      removeBtn.title = 'Entfernen';
+      removeBtn.textContent = '×';
+      chip.append(openBtn, removeBtn);
+      container.appendChild(chip);
+    }
+  }
+
+  async function addIngredientByName(rawName: string) {
+    const name = rawName.trim();
+    if (!name) return;
+    let entry = findCatalogueByName(name);
+    if (!entry) {
+      const res = await fetch('/api/ingredients/catalogue', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      });
+      if (!res.ok) { alert('Zutat konnte nicht angelegt werden.'); return; }
+      const created = await res.json();
+      entry = { id: created.id, name: created.name };
+      catalogueCache.push(entry);
+    }
+    if (!currentIngredientIds.includes(entry.id)) currentIngredientIds.push(entry.id);
+    renderIngredientChips();
+  }
+
+  function resetOffSearchUi() {
+    lastOffRemoteByEan = {};
+    offSearchQuery = '';
+    offSearchPage = 0;
+    offSearchHasMore = false;
+    offSearchRemoteShown = 0;
+    offSearchLocalShown = 0;
+    offSearchTotalCount = undefined;
+    const input = document.getElementById('pf-off-input') as HTMLInputElement | null;
+    const status = document.getElementById('pf-off-status');
+    const results = document.getElementById('pf-off-results');
+    if (input) input.value = '';
+    if (status) status.textContent = '';
+    if (results) results.innerHTML = '';
+    setOffMoreVisible(false);
+  }
+
+  function setOffMoreVisible(visible: boolean, loading = false) {
+    const btn = document.getElementById('pf-off-more') as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.classList.toggle('hidden', !visible);
+    btn.disabled = loading || !visible;
+    btn.textContent = loading ? 'Weitere Ergebnisse werden geladen …' : 'Weitere Ergebnisse laden';
+  }
+
+  function updateOffSearchStatus(errorMessage = '') {
+    const status = document.getElementById('pf-off-status');
+    if (!status) return;
+    if (errorMessage) {
+      status.textContent = `Online-Suche fehlgeschlagen: ${errorMessage}`;
+      return;
+    }
+    const shown = offSearchLocalShown + offSearchRemoteShown;
+    if (shown === 0) {
+      status.textContent = 'Keine Treffer.';
+      return;
+    }
+    const totalPart = offSearchTotalCount != null ? ` von ${offSearchTotalCount}` : '';
+    status.textContent = `${shown} Treffer angezeigt${totalPart}${offSearchLocalShown ? ` (${offSearchLocalShown} lokal)` : ''}.`;
+  }
+
+  async function applyOffProductToForm(hit: OffSearchHit) {
+    (document.getElementById('pf-id') as HTMLInputElement).value = '';
+    (document.getElementById('pf-source') as HTMLInputElement).value = 'openfoodfacts';
+    (document.getElementById('pf-off-code') as HTMLInputElement).value = hit.offCode || hit.ean || '';
+    (document.getElementById('pf-name') as HTMLInputElement).value = hit.name || '';
+    (document.getElementById('pf-brand') as HTMLInputElement).value = hit.brand || '';
+    (document.getElementById('pf-ean') as HTMLInputElement).value = hit.ean || '';
+    (document.getElementById('pf-net-grams') as HTMLInputElement).value = hit.netGrams != null ? String(hit.netGrams) : '';
+    (document.getElementById('pf-package') as HTMLInputElement).value = hit.packageLabel || '';
+    await discardPendingUpload();
+    setProductImage(hit.imageUrl || '', { markSaved: true });
+    const nut = hit.nutritionPer100g || {};
+    (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((key) => {
+      const el = document.getElementById(`pf-nut-${key}`) as HTMLInputElement | null;
+      if (el) el.value = nut[key] != null ? String(nut[key]) : '';
+    });
+    const title = document.getElementById('product-modal-title');
+    if (title) title.textContent = 'Neues Produkt';
+    const status = document.getElementById('pf-off-status');
+    if (status) status.textContent = 'Daten übernommen. Bitte prüfen und speichern.';
+  }
+
+  function renderOffSearchResults(localHits: Product[], remoteHits: OffSearchHit[], append = false) {
+    const results = document.getElementById('pf-off-results');
+    if (!results) return;
+    if (!append) {
+      results.innerHTML = '';
+      lastOffRemoteByEan = {};
+    }
+    if (!append) {
+      for (const p of localHits) {
+        const subtitleParts: string[] = [];
+        if (p.brand) subtitleParts.push(p.brand);
+        if (p.ean) subtitleParts.push(`EAN ${p.ean}`);
+        const subtitle = subtitleParts.join(' · ');
+        const row = document.createElement('div');
+        row.className = 'flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-emerald-50/50 dark:bg-emerald-900/10';
+        row.innerHTML = `
+          <div class="flex items-start gap-2 min-w-0">
+            <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+              ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-900 dark:text-white break-words">${escapeHtml(p.name)}</div>
+              <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                <span class="uppercase font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">lokal</span>
+                ${subtitle ? `<span class="break-all">${escapeHtml(subtitle)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <button type="button" data-action="open-local" data-product-id="${p.id}" class="text-xs px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded w-full not-mobile:w-auto">Öffnen</button>
+        `;
+        results.appendChild(row);
+      }
+    }
+    for (const p of remoteHits) {
+      if (!p.ean || lastOffRemoteByEan[p.ean]) continue;
+      lastOffRemoteByEan[p.ean] = p;
+      const kcal = p.nutritionPer100g?.calories;
+      const name = p.name || '(ohne Name)';
+      const metaParts: string[] = [];
+      if (p.brand) metaParts.push(p.brand);
+      if (p.packageLabel) metaParts.push(p.packageLabel);
+      else if (p.netGrams) metaParts.push(`${p.netGrams} g`);
+      const meta = metaParts.join(' · ');
+      const row = document.createElement('div');
+      row.className = 'flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900';
+      row.innerHTML = `
+        <div class="flex items-start gap-2 min-w-0">
+          <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+            ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white break-words">${escapeHtml(name)}</div>
+            <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+              <span class="uppercase font-semibold text-blue-600 dark:text-blue-400 shrink-0">OFF</span>
+              ${meta ? `<span class="break-words min-w-0">${escapeHtml(meta)}</span>` : ''}
+              <span class="font-mono text-gray-400">EAN ${escapeHtml(p.ean)}</span>
+            </div>
+            <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+              ${kcal != null ? `${Math.round(kcal)} kcal / 100 g` : '<span class="text-gray-400 italic">keine Nährwerte</span>'}
+            </div>
+          </div>
+        </div>
+        <button type="button" data-action="apply-off" data-ean="${escapeHtml(p.ean)}" class="text-xs px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded w-full not-mobile:w-auto">Übernehmen</button>
+      `;
+      results.appendChild(row);
+    }
+  }
+
+  async function searchOpenFoodFacts(append = false) {
+    const input = document.getElementById('pf-off-input') as HTMLInputElement | null;
+    const status = document.getElementById('pf-off-status');
+    const results = document.getElementById('pf-off-results');
+    if (!input || !status || !results) return;
+    const query = input.value.trim();
+    if (!query) return;
+    if (!append) {
+      offSearchQuery = query;
+      offSearchPage = 0;
+      offSearchRemoteShown = 0;
+      offSearchLocalShown = 0;
+      offSearchTotalCount = undefined;
+      results.innerHTML = '';
+      lastOffRemoteByEan = {};
+      setOffMoreVisible(false);
+    } else if (query !== offSearchQuery) {
+      return searchOpenFoodFacts(false);
+    }
+    const nextPage = append ? offSearchPage + 1 : 1;
+    status.textContent = append ? 'Weitere Ergebnisse werden geladen …' : 'Suche läuft …';
+    setOffMoreVisible(append && offSearchHasMore, true);
+    try {
+      if (/^\d{6,14}$/.test(query)) {
+        const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error('lookup failed');
+        const data = await res.json();
+        const localHits = data.source === 'local' && data.product ? [data.product] : [];
+        const remoteHits = data.source === 'openfoodfacts' && data.product ? [data.product] : [];
+        offSearchLocalShown = localHits.length;
+        offSearchRemoteShown = remoteHits.length;
+        offSearchPage = 1;
+        offSearchHasMore = false;
+        renderOffSearchResults(localHits, remoteHits, false);
+        updateOffSearchStatus();
+        setOffMoreVisible(false);
+        return;
+      }
+      const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}&page=${nextPage}&pageSize=20`);
+      if (!res.ok) throw new Error('search failed');
+      const data = await res.json();
+      if (data.error) {
+        updateOffSearchStatus(String(data.error));
+        setOffMoreVisible(offSearchHasMore);
+        return;
+      }
+      const localHits = Array.isArray(data.local) ? data.local : [];
+      const remoteHits = Array.isArray(data.results) ? data.results : [];
+      renderOffSearchResults(localHits, remoteHits, append);
+      offSearchPage = Number(data.page) || nextPage;
+      offSearchHasMore = Boolean(data.hasMore) && remoteHits.length > 0;
+      offSearchTotalCount = typeof data.count === 'number' ? data.count : offSearchTotalCount;
+      if (!append) offSearchLocalShown = localHits.length;
+      offSearchRemoteShown = Object.keys(lastOffRemoteByEan).length;
+      updateOffSearchStatus();
+      setOffMoreVisible(offSearchHasMore);
+    } catch (error) {
+      status.textContent = 'Suche fehlgeschlagen. Bitte später erneut versuchen.';
+      setOffMoreVisible(append && offSearchHasMore);
+    }
+  }
+
+  function renderMarketPricesEditor(prices: Array<{ supermarketId: string; price: number }>) {
+    const container = document.getElementById('pf-market-prices');
+    if (!container) return;
+    container.innerHTML = '';
+    if (supermarketsCache.length === 0) {
+      container.innerHTML = '<p class="text-xs text-gray-500">Noch keine Supermärkte. Unter <a class="underline" href="/produkte">Produkte</a> anlegen.</p>';
+      return;
+    }
+    const byId = new Map(prices.map((p) => [p.supermarketId, p.price]));
+    for (const market of supermarketsCache) {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2 text-sm';
+      const value = byId.get(market.id);
+      row.innerHTML = `
+        <label class="flex-1">${escapeHtml(market.name)}</label>
+        <input type="number" step="0.01" data-market-id="${market.id}" value="${value != null ? value : ''}" class="pf-market-price w-28 px-2 py-1 border rounded dark:bg-gray-900 dark:border-gray-600" placeholder="€" />
+      `;
+      container.appendChild(row);
+    }
+  }
+
+  function setProductImage(url: string, options?: { markSaved?: boolean }) {
+    const hidden = document.getElementById('pf-image') as HTMLInputElement | null;
+    const urlInput = document.getElementById('pf-image-url') as HTMLInputElement | null;
+    const preview = document.getElementById('pf-image-preview');
+    const removeBtn = document.getElementById('pf-image-remove');
+    if (hidden) hidden.value = url;
+    if (urlInput && urlInput.value !== url) urlInput.value = url;
+    if (preview) {
+      preview.innerHTML = url
+        ? `<img src="${escapeHtml(url)}" alt="" class="w-full h-full object-cover" />`
+        : '<span class="text-2xl">🥫</span>';
+    }
+    removeBtn?.classList.toggle('hidden', !url);
+    if (options?.markSaved) {
+      savedProductImageUrl = url;
+      pendingLocalUploadUrl = '';
+    }
+  }
+
+  function setImageUploadBusy(busy: boolean) {
+    const status = document.getElementById('pf-image-status');
+    const dropzone = document.getElementById('pf-image-dropzone');
+    status?.classList.toggle('hidden', !busy);
+    if (dropzone) dropzone.classList.toggle('opacity-50', busy);
+    if (dropzone) dropzone.classList.toggle('pointer-events-none', busy);
+  }
+
+  async function discardPendingUpload() {
+    if (!pendingLocalUploadUrl || pendingLocalUploadUrl === savedProductImageUrl) {
+      pendingLocalUploadUrl = '';
+      return;
+    }
+    const url = pendingLocalUploadUrl;
+    pendingLocalUploadUrl = '';
+    await fetch(`/api/products/images?url=${encodeURIComponent(url)}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
+  async function uploadProductImageFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      alert('Bitte eine gültige Bilddatei wählen (PNG, JPG oder WEBP).');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Die Datei ist zu groß. Maximal 10 MB.');
+      return;
+    }
+    setImageUploadBusy(true);
+    try {
+      await discardPendingUpload();
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/products/images', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Bild konnte nicht hochgeladen werden.');
+        return;
+      }
+      pendingLocalUploadUrl = data.url;
+      setProductImage(data.url);
+    } finally {
+      setImageUploadBusy(false);
+      const fileInput = document.getElementById('pf-image-file') as HTMLInputElement | null;
+      if (fileInput) fileInput.value = '';
+    }
+  }
+
+  async function fillProductForm(product: Partial<Product> | null | undefined) {
+    const title = document.getElementById('product-modal-title');
+    if (title) title.textContent = product?.id ? 'Produkt bearbeiten' : 'Neues Produkt';
+    (document.getElementById('pf-id') as HTMLInputElement).value = product?.id ?? '';
+    (document.getElementById('pf-source') as HTMLInputElement).value = product?.source ?? 'manual';
+    (document.getElementById('pf-off-code') as HTMLInputElement).value = product?.offCode ?? '';
+    (document.getElementById('pf-name') as HTMLInputElement).value = product?.name ?? '';
+    (document.getElementById('pf-brand') as HTMLInputElement).value = product?.brand ?? '';
+    (document.getElementById('pf-ean') as HTMLInputElement).value = product?.ean ?? '';
+    (document.getElementById('pf-net-grams') as HTMLInputElement).value = product?.netGrams != null ? String(product.netGrams) : '';
+    (document.getElementById('pf-package') as HTMLInputElement).value = product?.packageLabel ?? '';
+    (document.getElementById('pf-default-price') as HTMLInputElement).value = product?.defaultPrice != null ? String(product.defaultPrice) : '';
+    setProductImage(product?.imageUrl ?? '', { markSaved: true });
+    const nut = product?.nutritionPer100g || {};
+    (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((key) => {
+      const el = document.getElementById(`pf-nut-${key}`) as HTMLInputElement | null;
+      if (el) el.value = nut[key] != null ? String(nut[key]) : '';
+    });
+    renderMarketPricesEditor(product?.supermarkets || []);
+    currentIngredientIds = Array.isArray(product?.ingredientIds) ? [...product!.ingredientIds!] : [];
+    renderIngredientChips();
+    resetOffSearchUi();
+    document.getElementById('pf-off-wrap')?.classList.toggle('hidden', Boolean(product?.id));
+  }
+
+  async function openProductModal(product?: Partial<Product> | null, opts?: { prelinkIngredientName?: string }) {
+    await Promise.all([loadSupermarkets(), loadCatalogue()]);
+    await fillProductForm(product || { supermarkets: [], ingredientIds: [] });
+    if (opts?.prelinkIngredientName) await addIngredientByName(opts.prelinkIngredientName);
+    raiseModal('product-modal');
+  }
+
+  async function openProductModalById(id: string) {
+    const res = await fetch(`/api/products/${encodeURIComponent(id)}`);
+    if (!res.ok) { alert('Produkt nicht gefunden.'); return; }
+    await openProductModal(await res.json());
+  }
+
+  function closeProductModal() {
+    discardPendingUpload();
+    const modal = document.getElementById('product-modal');
+    modal?.classList.add('hidden');
+    if (modal) modal.style.zIndex = '';
+  }
+
+  async function submitProductForm(e: Event) {
+    e.preventDefault();
+    const id = (document.getElementById('pf-id') as HTMLInputElement).value.trim();
+    const numOrNull = (el: HTMLInputElement) => (el.value.trim() === '' ? null : Number(el.value));
+    const payload: any = {
+      id: id || undefined,
+      name: (document.getElementById('pf-name') as HTMLInputElement).value.trim(),
+      brand: (document.getElementById('pf-brand') as HTMLInputElement).value.trim() || null,
+      ean: (document.getElementById('pf-ean') as HTMLInputElement).value.trim() || null,
+      netGrams: numOrNull(document.getElementById('pf-net-grams') as HTMLInputElement),
+      packageLabel: (document.getElementById('pf-package') as HTMLInputElement).value.trim() || null,
+      defaultPrice: numOrNull(document.getElementById('pf-default-price') as HTMLInputElement),
+      imageUrl: (document.getElementById('pf-image') as HTMLInputElement).value.trim() || null,
+      source: (document.getElementById('pf-source') as HTMLInputElement).value === 'openfoodfacts' ? 'openfoodfacts' : 'manual',
+      offCode: (document.getElementById('pf-off-code') as HTMLInputElement).value.trim() || null,
+    };
+    const nutrition: Record<string, number> = {};
+    (['calories', 'carbohydrates', 'sugar', 'protein', 'fat', 'saturatedFat', 'fiber', 'salt'] as const).forEach((key) => {
+      const el = document.getElementById(`pf-nut-${key}`) as HTMLInputElement | null;
+      const v = el?.value?.trim();
+      if (v) {
+        const n = Number(v);
+        if (Number.isFinite(n)) nutrition[key] = n;
+      }
+    });
+    if (Object.keys(nutrition).length > 0) payload.nutritionPer100g = nutrition;
+    const prices: Array<{ supermarketId: string; price: number }> = [];
+    document.querySelectorAll('.pf-market-price').forEach((el) => {
+      const input = el as HTMLInputElement;
+      const marketId = input.dataset.marketId!;
+      const v = input.value.trim();
+      if (!v) return;
+      const n = Number(v);
+      if (Number.isFinite(n)) prices.push({ supermarketId: marketId, price: n });
+    });
+    payload.supermarkets = prices;
+    payload.ingredientIds = [...currentIngredientIds];
+
+    const res = await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      alert('Speichern fehlgeschlagen.');
+      return;
+    }
+    const saved = await res.json().catch(() => payload);
+    pendingLocalUploadUrl = '';
+    savedProductImageUrl = payload.imageUrl || '';
+    closeProductModal();
+    window.dispatchEvent(new CustomEvent('product-saved', { detail: { product: saved } }));
+  }
+
+  function startProductBarcodeImport() {
+    openScanForImport = true;
+    (window as WindowWithProduct).openBarcodeScanner?.();
+  }
+
+  const modal = document.getElementById('product-modal');
+  modal?.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    if (target === modal || target.id === 'product-modal-close' || target.id === 'pf-cancel') {
+      closeProductModal();
+      return;
+    }
+    if (target.id === 'pf-off-search') { await searchOpenFoodFacts(false); return; }
+    if (target.id === 'pf-off-more') { await searchOpenFoodFacts(true); return; }
+    if (target.id === 'pf-off-scan') { startProductBarcodeImport(); return; }
+    if (target.id === 'pf-image-remove') {
+      await discardPendingUpload();
+      setProductImage('');
+      return;
+    }
+    if (target.id === 'pf-image-dropzone' || target.closest?.('#pf-image-dropzone')) {
+      if (target.id === 'pf-image-file') return;
+      (document.getElementById('pf-image-file') as HTMLInputElement | null)?.click();
+      return;
+    }
+    if (target.id === 'pf-ingredient-add') {
+      const input = document.getElementById('pf-ingredient-input') as HTMLInputElement;
+      const name = input.value.trim();
+      if (!name) return;
+      await addIngredientByName(name);
+      input.value = '';
+      return;
+    }
+    if (target.classList.contains('pf-chip-remove')) {
+      const id = target.dataset.id;
+      if (id) {
+        currentIngredientIds = currentIngredientIds.filter((x) => x !== id);
+        renderIngredientChips();
+      }
+      return;
+    }
+    if (target.classList.contains('pf-chip-open')) {
+      const name = target.dataset.name || '';
+      if (name) {
+        raiseModal('catalogue-modal');
+        (window as WindowWithProduct).openCatalogueModal?.(name);
+      }
+      return;
+    }
+    const action = target.dataset.action;
+    if (action === 'apply-off') {
+      const ean = target.dataset.ean;
+      if (!ean) return;
+      target.setAttribute('disabled', 'true');
+      const previousLabel = target.textContent;
+      target.textContent = 'Lade …';
+      try {
+        const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(ean)}`);
+        const data = res.ok ? await res.json() : null;
+        if (data?.source === 'local' && data.product) {
+          await fillProductForm(data.product);
+          return;
+        }
+        const hit = (data?.source === 'openfoodfacts' && data.product) ? data.product : lastOffRemoteByEan[ean];
+        if (hit) await applyOffProductToForm(hit);
+      } finally {
+        target.removeAttribute('disabled');
+        target.textContent = previousLabel || 'Übernehmen';
+      }
+      return;
+    }
+    if (action === 'open-local') {
+      const productId = target.dataset.productId;
+      if (!productId) return;
+      const res = await fetch(`/api/products/${productId}`);
+      if (res.ok) await fillProductForm(await res.json());
+    }
+  });
+
+  document.getElementById('product-form')?.addEventListener('submit', submitProductForm);
+  (document.getElementById('pf-off-input') as HTMLInputElement | null)?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    searchOpenFoodFacts(false);
+  });
+  (document.getElementById('pf-image-file') as HTMLInputElement | null)?.addEventListener('change', (e) => {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (file) uploadProductImageFile(file);
+  });
+  (document.getElementById('pf-image-url') as HTMLInputElement | null)?.addEventListener('change', async (e) => {
+    const url = (e.currentTarget as HTMLInputElement).value.trim();
+    if (url === pendingLocalUploadUrl) return;
+    await discardPendingUpload();
+    setProductImage(url);
+  });
+  const dropzone = document.getElementById('pf-image-dropzone');
+  dropzone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('border-orange-400', 'dark:border-orange-500');
+  });
+  dropzone?.addEventListener('dragleave', () => {
+    dropzone.classList.remove('border-orange-400', 'dark:border-orange-500');
+  });
+  dropzone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('border-orange-400', 'dark:border-orange-500');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) uploadProductImageFile(file);
+  });
+  (document.getElementById('pf-ingredient-input') as HTMLInputElement | null)?.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const input = e.currentTarget as HTMLInputElement;
+    const name = input.value.trim();
+    if (!name) return;
+    await addIngredientByName(name);
+    input.value = '';
+  });
+
+  window.addEventListener('barcode-scanned', async (event) => {
+    const detail = (event as CustomEvent).detail as { ean: string };
+    if (!detail?.ean || !openScanForImport) return;
+    openScanForImport = false;
+    try {
+      const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(detail.ean)}`);
+      if (!res.ok) throw new Error('lookup failed');
+      const data = await res.json();
+      if (data.source === 'local' && data.product) {
+        await openProductModal(data.product);
+        return;
+      }
+      if (data.source === 'openfoodfacts' && data.product) {
+        await openProductModal({
+          name: data.product.name || '',
+          brand: data.product.brand || '',
+          ean: data.product.ean,
+          netGrams: data.product.netGrams,
+          packageLabel: data.product.packageLabel,
+          imageUrl: data.product.imageUrl,
+          nutritionPer100g: data.product.nutritionPer100g,
+          source: 'openfoodfacts',
+          offCode: data.product.offCode,
+          supermarkets: [],
+        });
+        return;
+      }
+      await openProductModal({ ean: detail.ean, supermarkets: [] });
+    } catch (error) {
+      alert('Barcode-Lookup fehlgeschlagen. Produkt kann manuell angelegt werden.');
+      await openProductModal({ ean: detail.ean, supermarkets: [] });
+    }
+  });
+
+  const w = window as WindowWithProduct;
+  w.openProductModal = openProductModal;
+  w.openProductModalById = openProductModalById;
+  w.startProductBarcodeImport = startProductBarcodeImport;
+</script>
+

@@ -2828,7 +2828,10 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
               },
               body: JSON.stringify({
                 action: 'add-recipe',
-                recipeId: recipeId
+                recipeId: recipeId,
+                catalogueDefaults: (function () {
+                  try { return JSON.parse(localStorage.getItem('cookbook.ingredient.defaults') || '{}'); } catch (e) { return {}; }
+                })()
               }),
             });
 

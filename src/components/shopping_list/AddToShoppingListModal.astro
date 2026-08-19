@@ -39,6 +39,9 @@ const { recipeId } = Astro.props;
 </div>
 
 <script define:vars={{ recipeId }}>
+  function catalogueDefaultsPayload() {
+    try { return JSON.parse(localStorage.getItem('cookbook.ingredient.defaults') || '{}'); } catch (e) { return {}; }
+  }
   let availableShoppingLists = [];
   
   // Load shopping lists
@@ -108,7 +111,8 @@ const { recipeId } = Astro.props;
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          recipeIds: [recipeId]
+          recipeIds: [recipeId],
+          catalogueDefaults: catalogueDefaultsPayload()
         })
       });
       
@@ -137,7 +141,8 @@ const { recipeId } = Astro.props;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
-          recipeIds: [recipeId]
+          recipeIds: [recipeId],
+          catalogueDefaults: catalogueDefaultsPayload()
         })
       });
       

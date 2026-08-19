@@ -46,11 +46,11 @@ export const POST: APIRoute = async ({ request }) => {
         db.setDefaultProductForIngredient(ingredientId, null);
       }
     } else if (action === 'setDefault') {
+      // Link only. Which product is pre-selected is alias-specific (client).
       const nextIds = Array.from(new Set([...(product.ingredientIds || []), ingredientId]));
       db.setProductIngredients(productId, nextIds);
-      db.setDefaultProductForIngredient(ingredientId, productId);
     } else if (action === 'clearDefault') {
-      db.setDefaultProductForIngredient(ingredientId, null);
+      // Alias defaults are stored per-alias; nothing to change on the catalogue.
     } else {
       return json({ error: `unknown action: ${action}` }, 400);
     }

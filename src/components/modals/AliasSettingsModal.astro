@@ -32,7 +32,8 @@
         Vergib einen Alias (z.&nbsp;B. deinen Namen). Alle Geräte mit demselben Alias
         teilen automatisch ihre Einstellungen: <strong>Design</strong> (Hell/Dunkel),
         <strong>Datenspar-Modus</strong>, <strong>KI-Einstellungen</strong>,
-        <strong>Favoriten</strong> und der <strong>Kalorien-/Nährwerttracker</strong>
+        <strong>Favoriten</strong>, <strong>Produkt-Standards</strong> (welches Produkt
+        zu welcher Zutat) und der <strong>Kalorien-/Nährwerttracker</strong>
         (Körperprofil, Gewichtsverlauf, Mahlzeitenplan, Tagebuch).
       </p>
       <div class="rounded-lg border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 p-3 text-xs text-yellow-800 dark:text-yellow-200">
@@ -86,7 +87,7 @@
     if (!window.__cookbookAliasSync) {
       var ALIAS_KEY = 'cookbook.alias';
       var META_KEY = 'cookbook.alias.meta';
-      var SYNC_KEYS = ['theme', 'lowBandwidth', 'cookbook.ai.settings', 'cookbook.recipes.layout', 'cookbook.recipes.favorites', 'cookbook.tracker.profile'];
+      var SYNC_KEYS = ['theme', 'lowBandwidth', 'cookbook.ai.settings', 'cookbook.recipes.layout', 'cookbook.recipes.favorites', 'cookbook.tracker.profile', 'cookbook.ingredient.defaults', 'cookbook.preferredSupermarket'];
 
       var origSetItem = Storage.prototype.setItem;
       var origRemoveItem = Storage.prototype.removeItem;
@@ -187,6 +188,8 @@
           } catch (e) {}
         } else if (key === 'cookbook.recipes.favorites') {
           document.dispatchEvent(new CustomEvent('cookbook:favorites-changed'));
+        } else if (key === 'cookbook.ingredient.defaults' || key === 'cookbook.preferredSupermarket') {
+          document.dispatchEvent(new CustomEvent('cookbook:ingredient-defaults-changed'));
         }
       }
 

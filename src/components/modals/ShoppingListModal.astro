@@ -40,6 +40,7 @@ declare global {
 </div>
 
 <script>
+  import { readIngredientDefaults } from '../../lib/ingredientDefaults';
   // Shopping List Modal
   const shoppingListModal = document.getElementById('bulk-shopping-list-modal');
   const closeShoppingListModal = document.getElementById('close-shopping-list-modal');
@@ -264,7 +265,8 @@ declare global {
         const requestBody = {
           title: `Einkaufsliste vom ${new Date().toLocaleDateString('de-DE')}`,
           recipeIds: recipeArray,
-          recipeServingsById: currentRecipeServingsById
+          recipeServingsById: currentRecipeServingsById,
+          catalogueDefaults: readIngredientDefaults()
         };
         
         const response = await fetch('/api/shopping-lists', {
@@ -307,7 +309,8 @@ declare global {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipeIds: Array.from(selectedRecipes),
-          recipeServingsById: currentRecipeServingsById
+          recipeServingsById: currentRecipeServingsById,
+          catalogueDefaults: readIngredientDefaults()
         })
       });
       
