@@ -38,6 +38,20 @@ export class CookbookDatabase {
     this.initTables();
   }
 
+  /** Safe to call repeatedly (HMR / older processes that skipped initTables ALTERs). */
+  private ensureRecipeProductSelectionColumns(): void {
+    try {
+      this.db.exec(`ALTER TABLE recipes ADD COLUMN product_assignments_json TEXT`);
+    } catch {
+      // column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE recipes ADD COLUMN preferred_supermarket_id TEXT`);
+    } catch {
+      // column already exists
+    }
+  }
+
   private initTables(): void {
     // Recipes table
     this.db.exec(`
@@ -73,16 +87,7 @@ export class CookbookDatabase {
     } catch (error) {
       // Ignore error if column already exists
     }
-    try {
-      this.db.exec(`ALTER TABLE recipes ADD COLUMN product_assignments_json TEXT`);
-    } catch (error) {
-      // Ignore error if column already exists
-    }
-    try {
-      this.db.exec(`ALTER TABLE recipes ADD COLUMN preferred_supermarket_id TEXT`);
-    } catch (error) {
-      // Ignore error if column already exists
-    }
+    this.ensureRecipeProductSelectionColumns();
 
     // Categories table for predefined categories
     this.db.exec(`
@@ -433,6 +438,7 @@ export class CookbookDatabase {
   }
 
   updateRecipe(id: string, updates: Partial<Recipe> & { imageUrl?: string | null }): Recipe | null {
+    this.ensureRecipeProductSelectionColumns();
     const existingRecipe = this.getRecipe(id);
     if (!existingRecipe) {
       return null;
@@ -527,6 +533,7 @@ export class CookbookDatabase {
       preferredSupermarketId?: string | null;
     }
   ): Recipe | null {
+    this.ensureRecipeProductSelectionColumns();
     const existing = this.getRecipe(id);
     if (!existing) return null;
     const productAssignments = input.productAssignments
