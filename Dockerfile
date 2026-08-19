@@ -1,5 +1,5 @@
 # Dockerfile
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
 # Set environment to production
 ENV NODE_ENV=production
@@ -23,20 +23,18 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY package*.json ./
 RUN npm ci
 
-# Copy source
+# Copy source and entrypoint script
 COPY . .
 
-# Set correct ownership
-RUN chown -R astro:nodejs .
+# Set correct permissions and ownership
+RUN chmod +x /app/docker-entrypoint.sh && \
+    chown -R astro:nodejs .
 
 # Switch to non-root user
 USER astro
 
-# Init & migrate DB, then build
-RUN npm run db:init && npm run db:migrate && npm run build
-
 # Expose the Astro default port
 EXPOSE 4321
 
-# Start the server
-CMD ["npm", "run", "start"]
+# Start the server using the entrypoint script
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

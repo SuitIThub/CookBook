@@ -1,0 +1,60 @@
+
+> kochbuch-app@0.0.1 start
+> HOST=0.0.0.0 node dist/server/entry.mjs
+
+21:20:47 [@astrojs/node] Server listening on 
+  local: http://localhost:4321 	
+  network: http://192.168.178.20:4321
+
+Processing RCB file with 17 recipe(s)
+Uploads directory: /home/suit/CookBook/public/uploads/recipes
+Successfully imported image: cab4fdef-2db9-4de6-a393-cf2c35e27993.jpg
+Skipping image url-image-1750712286231.jpg - no base64 data found
+Skipping image imported-image-1750959267078.jpg - no base64 data found
+Skipping image imported-image-1750959208546.jpg - no base64 data found
+Skipping image imported-image-1750959145372.jpg - no base64 data found
+Skipping image imported-image-1750959035324.jpg - no base64 data found
+Skipping image imported-image-1750958898077.jpg - no base64 data found
+Skipping image imported-image-1750958045762.jpg - no base64 data found
+Skipping image imported-image-1750957888267.jpg - no base64 data found
+Skipping image imported-image-1750943677846.jpg - no base64 data found
+Skipping image imported-image-1750943624061.jpg - no base64 data found
+Skipping image imported-image-1750943264934.jpg - no base64 data found
+Skipping image imported-image-1750942997124.jpg - no base64 data found
+Skipping image imported-image-1750941484211.jpg - no base64 data found
+Skipping image imported-image-1750941411114.jpg - no base64 data found
+Skipping image imported-image-1750877028798.jpg - no base64 data found
+Skipping image imported-image-1750856855301.jpg - no base64 data found
+Mapped 13 ingredient IDs and 6 intermediate ingredient IDs for recipe: Erdbeer Matcha Tiramisu
+Mapped 3 ingredient IDs and 0 intermediate ingredient IDs for recipe: Matcha Tee
+Mapped 11 ingredient IDs and 1 intermediate ingredient IDs for recipe: Saftige Apfelmuffins
+Mapped 15 ingredient IDs and 0 intermediate ingredient IDs for recipe: Bolognese-Sauce, einfaches Rezept
+Mapped 11 ingredient IDs and 0 intermediate ingredient IDs for recipe: Möhreneintopf, einfach und klassisch
+Mapped 15 ingredient IDs and 0 intermediate ingredient IDs for recipe: Bauerntopf mit Hackfleisch und Kartoffeln
+Mapped 16 ingredient IDs and 0 intermediate ingredient IDs for recipe: Rigatoni al forno wie beim Italiener
+Mapped 14 ingredient IDs and 0 intermediate ingredient IDs for recipe: Nasi Goreng
+Mapped 13 ingredient IDs and 0 intermediate ingredient IDs for recipe: Vegetarische Tortellini-Pfanne
+Mapped 11 ingredient IDs and 0 intermediate ingredient IDs for recipe: Spätzlepfanne
+Mapped 8 ingredient IDs and 0 intermediate ingredient IDs for recipe: One Pot Pasta mit Hackfleisch für Kinder
+Mapped 15 ingredient IDs and 0 intermediate ingredient IDs for recipe: Mitternachtssuppe, die beste Partysuppe
+Mapped 15 ingredient IDs and 2 intermediate ingredient IDs for recipe: Hähnchen süß-sauer Rezept
+Mapped 12 ingredient IDs and 0 intermediate ingredient IDs for recipe: Kohlrabi-Hackfleisch-Auflauf
+Mapped 15 ingredient IDs and 0 intermediate ingredient IDs for recipe: Würstchengulasch für Kinder
+Mapped 13 ingredient IDs and 0 intermediate ingredient IDs for recipe: Hühnerfrikassee wie bei Mama
+Mapped 12 ingredient IDs and 0 intermediate ingredient IDs for recipe: Käsespätzle – einfach & schnell mit Fertigspätzle
+
+> kochbuch-app@0.0.1 start
+> HOST=0.0.0.0 node dist/server/entry.mjs
+
+05:48:06 [@astrojs/node] Server listening on 
+  local: http://localhost:4321 	
+  network: http://192.168.178.20:4321
+
+
+> kochbuch-app@0.0.1 start
+> HOST=0.0.0.0 node dist/server/entry.mjs
+
+07:28:57 [@astrojs/node] Server listening on 
+  local: http://localhost:4321 	
+  network: http://192.168.178.20:4321
+
