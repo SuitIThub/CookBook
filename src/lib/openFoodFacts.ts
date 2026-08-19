@@ -1,4 +1,5 @@
 import type { NutritionData } from '../types/recipe';
+import { detectUnitInText } from './units';
 
 /**
  * Adapter for the Open Food Facts (OFF) public API — https://openfoodfacts.org
@@ -9,6 +10,9 @@ import type { NutritionData } from '../types/recipe';
  * Notes / caveats:
  * - OFF is crowdsourced (ODbL). Data can be missing, wrong or partially filled.
  * - Nutrition values are typically per 100 g (or per 100 ml for beverages).
+ * - Slice/piece weights are not a first-class field. `serving_size` /
+ *   `serving_quantity` are optional contributor text/numbers (e.g. "1 Scheibe
+ *   (30 g)"). Many products omit them entirely.
  * - The v3 response shape differs slightly from v2 in a few places, so field
  *   access here is defensive and falls back through both shapes.
  * - OFF asks callers to send a descriptive User-Agent identifying the app.
@@ -29,6 +33,8 @@ const SEARCH_FIELDS = [
   'quantity',
   'product_quantity',
   'serving_size',
+  'serving_quantity',
+  'serving_quantity_unit',
   'image_front_url',
   'image_url',
   'image_small_url',
@@ -41,10 +47,24 @@ export interface OpenFoodFactsProduct {
   brand?: string;
   netGrams?: number;
   packageLabel?: string;
+  /** Grams of one serving, when OFF contributors filled serving_size / serving_quantity. */
+  servingGrams?: number;
+  /** Raw serving_size text, e.g. "1 Scheibe (30 g)". */
+  servingLabel?: string;
+  /** Derived "1 unit = N g" suggestions (confirm before applying, see deriveGramsByUnitFromOff). */
+  gramsByUnitSuggestions?: GramsPerUnitSuggestion[];
   nutritionPer100g?: NutritionData;
   imageUrl?: string;
   offCode?: string;
   raw?: unknown;
+}
+
+/** A single "1 <unit> = <gramsPerUnit> g" suggestion derived from noisy OFF data. */
+export interface GramsPerUnitSuggestion {
+  unit: string; // canonical unit name (see units.ts)
+  gramsPerUnit: number; // grams of ONE unit
+  source: 'serving' | 'quantity';
+  confidence: 'high' | 'medium';
 }
 
 export interface OpenFoodFactsLookupResult {
@@ -117,8 +137,10 @@ export function normalizeOpenFoodFactsProduct(ean: string, product: any): OpenFo
     product?.generic_name
   );
   const brand = firstString(product?.brands);
-  const packageLabel = firstString(product?.quantity, product?.serving_size);
+  const packageLabel = firstString(product?.quantity);
   const netGrams = parseGramsFromQuantity(product?.product_quantity, product?.quantity);
+  const serving = parseServingInfo(product);
+  const gramsByUnitSuggestions = deriveGramsByUnitFromOff(product);
   const imageUrl = firstString(product?.image_front_url, product?.image_url, product?.image_small_url);
   const offCode = firstString(product?.code, product?._id);
 
@@ -152,6 +174,9 @@ export function normalizeOpenFoodFactsProduct(ean: string, product: any): OpenFo
     brand,
     netGrams,
     packageLabel,
+    servingGrams: serving.grams,
+    servingLabel: serving.label,
+    gramsByUnitSuggestions: gramsByUnitSuggestions.length > 0 ? gramsByUnitSuggestions : undefined,
     imageUrl,
     offCode,
     nutritionPer100g: hasNutrition ? nutritionPer100g : undefined,
@@ -393,21 +418,129 @@ function parseGramsFromQuantity(productQuantity: unknown, quantityText: unknown)
   const num = parseNumeric(productQuantity);
   if (num != null && num > 0) return num;
   if (typeof quantityText !== 'string') return undefined;
-  const match = quantityText.match(/([\d.,]+)\s*(kg|g|ml|l|cl)/i);
+  return parseMassFromText(quantityText);
+}
+
+/**
+ * Slice / piece weights are not a dedicated OFF field. Contributors sometimes
+ * fill `serving_size` ("1 Scheibe (30 g)") and/or numeric `serving_quantity`.
+ * `serving_quantity === 1` without a mass unit almost always means "1 serving",
+ * not 1 gram — ignore those.
+ */
+function parseServingInfo(product: any): { grams?: number; label?: string } {
+  const label = firstString(product?.serving_size);
+  const fromText = label ? parseMassFromText(label) : undefined;
+  if (fromText != null) return { grams: fromText, label };
+
+  const unit = firstString(product?.serving_quantity_unit)?.toLowerCase();
+  const qty = parseNumeric(product?.serving_quantity);
+  if (qty != null && qty > 0) {
+    const fromUnit = unit ? toGrams(qty, unit) : undefined;
+    if (fromUnit != null) return { grams: fromUnit, label };
+    // Bare number without unit: likely grams only when it looks like a weight.
+    if (!unit && qty >= 5) return { grams: qty, label };
+  }
+  return { grams: undefined, label };
+}
+
+const MIN_UNIT_GRAMS = 0.5;
+const MAX_UNIT_GRAMS = 3000;
+
+/**
+ * Derive "1 <unit> = <grams>" suggestions from an OFF product. OFF has no
+ * dedicated field for this, so we read two independent, noisy sources:
+ *   A. serving_size, e.g. "2 Scheiben (60 g)" → 60 / 2 = 30 g per Scheibe.
+ *   B. quantity + product_quantity, e.g. "6 Scheiben" + 300 g → 50 g per Scheibe.
+ * Community data is unreliable, so values are clamped to a sane range and
+ * returned as suggestions to confirm — never applied silently. When both paths
+ * yield the same unit, the higher-confidence serving_size value wins.
+ */
+export function deriveGramsByUnitFromOff(product: any): GramsPerUnitSuggestion[] {
+  const byUnit = new Map<string, GramsPerUnitSuggestion>();
+  const consider = (s: GramsPerUnitSuggestion | null): void => {
+    if (!s) return;
+    const existing = byUnit.get(s.unit);
+    if (!existing || rankSuggestion(s) > rankSuggestion(existing)) byUnit.set(s.unit, s);
+  };
+  consider(suggestionFromServingSize(product));
+  consider(suggestionFromQuantityTotal(product));
+  return [...byUnit.values()];
+}
+
+function rankSuggestion(s: GramsPerUnitSuggestion): number {
+  return s.confidence === 'high' ? 2 : 1;
+}
+
+function sanitizeUnitGrams(grams: number): number | undefined {
+  if (!Number.isFinite(grams) || grams < MIN_UNIT_GRAMS || grams > MAX_UNIT_GRAMS) return undefined;
+  return grams >= 10 ? Math.round(grams) : Math.round(grams * 10) / 10;
+}
+
+/** Leading count in a text like "2 Scheiben" / "6 x …"; defaults to 1. */
+function leadingCount(text: string): number {
+  const m = text.trim().match(/^(\d+(?:[.,]\d+)?)/);
+  if (!m) return 1;
+  const n = Number.parseFloat(m[1].replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function suggestionFromServingSize(product: any): GramsPerUnitSuggestion | null {
+  const label = firstString(product?.serving_size);
+  if (!label) return null;
+  const unit = detectUnitInText(label);
+  if (!unit) return null;
+  const mass = parseMassFromText(label);
+  if (mass == null) return null;
+  const grams = sanitizeUnitGrams(mass / leadingCount(label));
+  if (grams == null) return null;
+  return { unit, gramsPerUnit: grams, source: 'serving', confidence: 'high' };
+}
+
+function suggestionFromQuantityTotal(product: any): GramsPerUnitSuggestion | null {
+  const quantityText = firstString(product?.quantity);
+  if (!quantityText) return null;
+  const unit = detectUnitInText(quantityText);
+  if (!unit) return null;
+  const count = leadingCount(quantityText);
+  if (!(count > 1)) return null; // "1 Scheibe" carries no ratio without a total
+  const total = parseNumeric(product?.product_quantity) ?? parseMassFromText(quantityText);
+  if (total == null || !(total > 0)) return null;
+  const grams = sanitizeUnitGrams(total / count);
+  if (grams == null) return null;
+  return { unit, gramsPerUnit: grams, source: 'quantity', confidence: 'medium' };
+}
+
+function parseMassFromText(text: string): number | undefined {
+  const paren = text.match(/\(([\d.,]+)\s*(kg|g|ml|l|cl)\)/i);
+  if (paren) {
+    const value = Number.parseFloat(paren[1].replace(',', '.'));
+    if (Number.isFinite(value) && value > 0) return toGrams(value, paren[2]);
+  }
+  const match = text.match(/([\d.,]+)\s*(kg|g|ml|l|cl)\b/i);
   if (!match) return undefined;
   const value = Number.parseFloat(match[1].replace(',', '.'));
-  if (!Number.isFinite(value)) return undefined;
-  const unit = match[2].toLowerCase();
-  switch (unit) {
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return toGrams(value, match[2]);
+}
+
+function toGrams(value: number, unit: string): number | undefined {
+  switch (unit.toLowerCase()) {
     case 'kg':
       return value * 1000;
     case 'g':
+    case 'gr':
+    case 'gram':
+    case 'grams':
       return value;
     case 'l':
-      return value * 1000; // assume density 1 for liquids (fine for water-like products)
+    case 'liter':
+    case 'litre':
+      return value * 1000; // assume density 1 for water-like liquids
     case 'cl':
       return value * 10;
     case 'ml':
+    case 'milliliter':
+    case 'millilitre':
       return value;
     default:
       return undefined;

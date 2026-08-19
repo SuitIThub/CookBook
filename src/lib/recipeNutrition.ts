@@ -7,7 +7,7 @@ import type {
 } from '../types/recipe';
 import type { CatalogueIngredient, Product } from '../types/tracker';
 import { NUTRITION_FIELDS } from './nutrition';
-import { convertToGrams, convertToMl, findUnit } from './units';
+import { convertToGrams, convertToMl, findUnit, lookupGramsPerUnit } from './units';
 
 export type IngredientResolutionState = 'exact' | 'estimated' | 'incomplete';
 
@@ -200,9 +200,10 @@ export function collectIngredientsFromGroups(groups: (Ingredient | IngredientGro
  * Resolve one ingredient's total gram weight for the whole recipe using
  * (in order):
  *   1. Weight units (g / kg) → exact.
- *   2. Ingredient/product `gramsByUnit[unit]` → estimated.
- *   3. ml (or ml-equivalent unit) * density → estimated.
- *   4. Nothing → null (incomplete).
+ *   2. Product `gramsByUnit[unit]` → estimated (product-specific, e.g. 1 Scheibe = 30 g).
+ *   3. Ingredient `gramsByUnit[unit]` → estimated, if the product has no mapping for this unit.
+ *   4. ml (or ml-equivalent unit) * density → estimated.
+ *   5. Nothing → null (incomplete).
  *
  * Nutrition contribution and price fall back to the catalogue ingredient's
  * data when no product is assigned.
@@ -226,7 +227,6 @@ function resolveIngredient(
   const quantities = Array.isArray(ingredient.quantities) ? ingredient.quantities : [];
   const primary = quantities[0];
 
-  const gramsByUnit = catalogue?.gramsByUnit ?? undefined;
   const density = catalogue?.densityGPerMl;
 
   let grams: number | null = null;
@@ -238,15 +238,19 @@ function resolveIngredient(
   } else {
     const amount = primary.amount;
     const unit = primary.unit || '';
-    // Resolve aliases (e.g. "Stk." → "Stück") so gramsByUnit lookups match the
-    // canonical unit names used in the catalogue map.
     const canonicalUnit = findUnit(unit)?.name ?? unit;
     const weightGrams = convertToGrams(amount, unit);
+    const productGramsPerUnit = lookupGramsPerUnit(product?.gramsByUnit, unit);
+    const catalogueGramsPerUnit = lookupGramsPerUnit(catalogue?.gramsByUnit, unit);
     if (weightGrams != null) {
       grams = weightGrams;
       state = 'exact';
-    } else if (gramsByUnit && canonicalUnit && gramsByUnit[canonicalUnit] != null) {
-      grams = amount * gramsByUnit[canonicalUnit];
+    } else if (productGramsPerUnit != null) {
+      grams = amount * productGramsPerUnit;
+      state = 'estimated';
+      reason = `~ Produkt (${canonicalUnit})`;
+    } else if (catalogueGramsPerUnit != null) {
+      grams = amount * catalogueGramsPerUnit;
       state = 'estimated';
       reason = `~ Stückgewicht (${canonicalUnit})`;
     } else {

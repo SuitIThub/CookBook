@@ -222,6 +222,11 @@ export class CookbookDatabase {
     } catch (error) {
       // column already exists
     }
+    try {
+      this.db.exec(`ALTER TABLE products ADD COLUMN grams_by_unit_json TEXT`);
+    } catch (error) {
+      // column already exists
+    }
 
     // Shopping list: preferred supermarket for price lookups.
     try {
@@ -252,6 +257,7 @@ export class CookbookDatabase {
         image_url TEXT,
         source TEXT NOT NULL DEFAULT 'manual',
         off_code TEXT,
+        grams_by_unit_json TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -2230,6 +2236,7 @@ export class CookbookDatabase {
     netGrams?: number | null;
     packageLabel?: string | null;
     nutritionPer100g?: NutritionData | null;
+    gramsByUnit?: Record<string, number> | null;
     defaultPrice?: number | null;
     imageUrl?: string | null;
     source?: 'manual' | 'openfoodfacts';
@@ -2242,6 +2249,9 @@ export class CookbookDatabase {
     const ean = input.ean ? input.ean.trim() : null;
     const nutritionJson = input.nutritionPer100g == null ? null : JSON.stringify(input.nutritionPer100g);
     const source = input.source ?? 'manual';
+    const gramsByUnitProvided = input.gramsByUnit !== undefined;
+    const incomingGramsByUnitJson =
+      input.gramsByUnit == null ? null : JSON.stringify(input.gramsByUnit);
 
     let productId = input.id ?? null;
     if (!productId && ean) {
@@ -2251,11 +2261,15 @@ export class CookbookDatabase {
     if (productId) {
       const existing = this.getProduct(productId);
       if (existing) {
+        const gramsByUnitJson = gramsByUnitProvided
+          ? incomingGramsByUnitJson
+          : (existing.gramsByUnit == null ? null : JSON.stringify(existing.gramsByUnit));
         this.db
           .prepare(
             `UPDATE products SET
                ean = ?, name = ?, brand = ?, net_grams = ?, package_label = ?,
                nutrition_json = ?, default_price = ?, image_url = ?, source = ?, off_code = ?,
+               grams_by_unit_json = ?,
                updated_at = CURRENT_TIMESTAMP
              WHERE id = ?`
           )
@@ -2270,6 +2284,7 @@ export class CookbookDatabase {
             input.imageUrl ?? null,
             source,
             input.offCode ?? null,
+            gramsByUnitJson,
             productId
           );
       } else {
@@ -2281,8 +2296,8 @@ export class CookbookDatabase {
       this.db
         .prepare(
           `INSERT INTO products
-             (id, ean, name, brand, net_grams, package_label, nutrition_json, default_price, image_url, source, off_code)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             (id, ean, name, brand, net_grams, package_label, nutrition_json, default_price, image_url, source, off_code, grams_by_unit_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           productId,
@@ -2295,7 +2310,8 @@ export class CookbookDatabase {
           input.defaultPrice ?? null,
           input.imageUrl ?? null,
           source,
-          input.offCode ?? null
+          input.offCode ?? null,
+          incomingGramsByUnitJson
         );
     }
 
@@ -2380,6 +2396,7 @@ export class CookbookDatabase {
       netGrams: row.net_grams ?? undefined,
       packageLabel: row.package_label || undefined,
       nutritionPer100g: row.nutrition_json ? safeParseJson<NutritionData>(row.nutrition_json) : undefined,
+      gramsByUnit: row.grams_by_unit_json ? safeParseJson<Record<string, number>>(row.grams_by_unit_json) : undefined,
       defaultPrice: row.default_price ?? undefined,
       imageUrl: row.image_url || undefined,
       source: row.source === 'openfoodfacts' ? 'openfoodfacts' : 'manual',

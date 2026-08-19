@@ -81,6 +81,11 @@ try {
 } catch (error) {
   // column already exists
 }
+try {
+  db.exec(`ALTER TABLE products ADD COLUMN grams_by_unit_json TEXT`);
+} catch (error) {
+  // column already exists
+}
 
 // Phase 1 nutrition/tracker tables (see plan and src/lib/database.ts).
 db.exec(`
@@ -105,6 +110,7 @@ db.exec(`
     image_url TEXT,
     source TEXT NOT NULL DEFAULT 'manual',
     off_code TEXT,
+    grams_by_unit_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )

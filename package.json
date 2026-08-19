@@ -12,6 +12,7 @@
     "start": "HOST=0.0.0.0 node dist/server/entry.mjs",
     "build:start": "npm run build && npm run start",
     "astro": "astro",
+    "test": "tsx --test src/lib/openFoodFacts.test.ts",
     "db:init": "node scripts/init-db.js",
     "db:migrate": "node scripts/migrate-db.js",
     "db:unify-units": "node scripts/unify-recipe-units.js",
@@ -34,6 +35,7 @@
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "^20.0.0",
     "@types/uuid": "^9.0.8",
+    "tsx": "^4.23.12",
     "typescript": "^5.0.0"
   }
 }

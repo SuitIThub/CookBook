@@ -460,7 +460,7 @@ export function getUnitVariations(): Array<{ unit: string; variations: string[] 
  * `units.ts` (deliberately kept independent from the base-unit graph — spoons
  * and cups vary too much per ingredient to be a hard conversion). These are
  * used ONLY in nutrition/price calculation as a fallback (density path) when
- * no ingredient-specific `gramsByUnit[unit]` is set.
+ * neither product nor ingredient `gramsByUnit[unit]` is set.
  *
  * Values are conventional Central-European kitchen defaults.
  */
@@ -512,5 +512,91 @@ export function convertToGrams(amount: number, unitName: string): number | null 
     return amount * unit.conversionFactor;
   }
   return null;
+}
+
+/**
+ * Grams of ONE unit from a gramsByUnit map (e.g. Scheibe → 30).
+ * Matches canonical names, aliases ("Stk." ↔ "Stück") and case.
+ */
+export function lookupGramsPerUnit(
+  gramsByUnit: Record<string, number> | undefined | null,
+  unitName: string
+): number | undefined {
+  if (!gramsByUnit || !unitName) return undefined;
+  const raw = unitName.trim();
+  if (!raw) return undefined;
+  const canonical = findUnit(raw)?.name ?? raw;
+  const candidates = [canonical, raw];
+  for (const key of candidates) {
+    const value = gramsByUnit[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+  }
+  const wanted = new Set(candidates.map((k) => k.toLowerCase()));
+  const wantedCanonical = findUnit(raw)?.name?.toLowerCase();
+  if (wantedCanonical) wanted.add(wantedCanonical);
+  for (const [key, value] of Object.entries(gramsByUnit)) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) continue;
+    if (wanted.has(key.toLowerCase())) return value;
+    const keyCanonical = findUnit(key)?.name?.toLowerCase();
+    if (keyCanonical && wanted.has(keyCanonical)) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Cross-language / synonym words for units as they appear in Open Food Facts
+ * serving and quantity texts, mapped to our canonical unit names. German
+ * plurals are already covered by each unit's `aliases`, so only foreign words
+ * and a few extra synonyms live here.
+ */
+const UNIT_WORD_SYNONYMS: Record<string, string> = {
+  slice: 'Scheibe',
+  slices: 'Scheibe',
+  tranche: 'Scheibe',
+  tranches: 'Scheibe',
+  scheiben: 'Scheibe',
+  piece: 'Stück',
+  pieces: 'Stück',
+  pcs: 'Stück',
+  clove: 'Zehe',
+  cloves: 'Zehe',
+  bar: 'Riegel',
+  bars: 'Riegel',
+  cup: 'Tasse',
+  cups: 'Tasse',
+  tbsp: 'EL',
+  tablespoon: 'EL',
+  tablespoons: 'EL',
+  tsp: 'TL',
+  teaspoon: 'TL',
+  teaspoons: 'TL',
+};
+
+/** Metric mass/volume units we never treat as a "piece" unit for gramsByUnit. */
+const METRIC_UNITS = new Set(['g', 'kg', 'ml', 'l', 'cl']);
+
+/**
+ * Find the first recognizable non-metric unit word in a free-text string
+ * (e.g. OFF "2 Scheiben (60 g)" → "Scheibe", "10 slices" → "Scheibe").
+ * Metric mass/volume units (g/kg/ml/l/cl) are ignored so a serving weight like
+ * "30 g" does not get mistaken for a piece unit. Returns the canonical unit
+ * name, or null if none is found.
+ */
+export function detectUnitInText(text: string | undefined | null): string | null {
+  if (!text) return null;
+  const tokens = text.toLowerCase().match(/[a-zà-ÿß]+/gi) || [];
+  for (const token of tokens) {
+    if (METRIC_UNITS.has(token)) continue;
+    const synonym = UNIT_WORD_SYNONYMS[token];
+    if (synonym) return synonym;
+    const found = findUnit(token);
+    if (found && !METRIC_UNITS.has(found.name)) return found.name;
+  }
+  return null;
+}
+
+/** Guess a unit name from serving-size text such as "1 Scheibe (30 g)". */
+export function servingUnitName(label?: string): string {
+  return detectUnitInText(label) || 'Portion';
 }
 
