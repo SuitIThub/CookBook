@@ -90,6 +90,41 @@
   @apply grid grid-cols-1 not-mobile:grid-cols-2 gap-6;
 }
 
+/* Product-per-ingredient picker: stack by viewport WIDTH, not the fold/aspect
+   `not-mobile` variant. Fold covers and short chrome were matching `not-mobile`
+   and squeezing name + select + button into one truncated row. */
+.live-product-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.live-product-row .live-product-slot,
+.live-product-row .live-product-select,
+.live-product-row .live-link-product {
+  width: 100%;
+}
+@media (min-width: 1024px) {
+  .live-product-row {
+    flex-direction: row;
+    align-items: center;
+  }
+  .live-product-row .live-product-name {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .live-product-row .live-product-slot {
+    width: auto;
+  }
+  .live-product-row .live-product-select {
+    width: auto;
+    max-width: 20rem;
+  }
+  .live-product-row .live-link-product {
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
 .grid-four-cols {
   @apply grid grid-cols-2 md:grid-cols-4 gap-4;
 }

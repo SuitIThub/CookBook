@@ -99,6 +99,13 @@ const bootstrap = {
   servings: recipe.metadata.servings,
   ingredients: nutritionByIngredient,
   supermarkets: supermarkets.map((s) => ({ id: s.id, name: s.name })),
+  productAssignments: Object.fromEntries(
+    visibleIngredients.map((ing) => {
+      const info = nutritionByIngredient[ing.id];
+      return [ing.id, resolveAssignedProductId(ing.id, savedAssignments, info?.defaultProductId) || ''];
+    })
+  ),
+  preferredSupermarketId: recipe.preferredSupermarketId || '',
 };
 
 const showPanel = visibleIngredients.length > 0;
@@ -177,21 +184,21 @@ function formatEuroValue(value: number, estimated: boolean): string {
           const selectedProductId = resolveAssignedProductId(ing.id, savedAssignments, info.defaultProductId) || '';
           return (
             <div
-              class="flex flex-col gap-2 text-sm not-mobile:flex-row not-mobile:items-center"
+              class="live-product-row text-sm"
               data-ingredient-row
               data-ingredient-id={ing.id}
               data-ingredient-name={info.name}
             >
-              <span class="font-medium text-gray-800 dark:text-gray-100 break-words not-mobile:flex-1 not-mobile:truncate">{info.name}</span>
-              <div class="live-product-slot min-w-0 w-full not-mobile:w-auto">
+              <span class="live-product-name font-medium text-gray-800 dark:text-gray-100 break-words">{info.name}</span>
+              <div class="live-product-slot min-w-0">
                 {hasProducts ? (
                   <select
                     data-ingredient-id={ing.id}
-                    class="live-product-select w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm not-mobile:w-auto not-mobile:max-w-xs"
+                    class="live-product-select px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"
                   >
-                    <option value="" selected={!selectedProductId}>Kein Produkt</option>
+                    <option value="" selected={selectedProductId ? undefined : true}>Kein Produkt</option>
                     {info.products.map((p) => (
-                      <option value={p.id} selected={p.id === selectedProductId}>
+                      <option value={p.id} selected={p.id === selectedProductId ? true : undefined}>
                         {p.brand ? `${p.brand} – ${p.name}` : p.name}
                       </option>
                     ))}
@@ -202,7 +209,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
               </div>
               <button
                 type="button"
-                class="live-link-product text-xs px-2 py-1.5 border border-emerald-500 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 w-full text-center not-mobile:w-auto not-mobile:whitespace-nowrap"
+                class="live-link-product text-xs px-2 py-1.5 border border-emerald-500 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-center"
                 data-ingredient-name={info.name}
                 title="Produkte für diese Zutat verwalten"
               >
@@ -261,6 +268,8 @@ function formatEuroValue(value: number, estimated: boolean): string {
     servings: number;
     ingredients: Record<string, { name: string; catalogueId?: string; defaultProductId?: string; products: { id: string; name: string; brand?: string }[] }>;
     supermarkets: { id: string; name: string }[];
+    productAssignments?: Record<string, string>;
+    preferredSupermarketId?: string;
   }
 
   const boot: Bootstrap | undefined = (window as any).__cbLiveNutrition;
@@ -290,6 +299,11 @@ function formatEuroValue(value: number, estimated: boolean): string {
         if (Array.from(sel.options).some((opt) => opt.value === next)) sel.value = next;
       });
     }
+
+    if (boot.preferredSupermarketId && supermarketSelect) {
+      supermarketSelect.value = boot.preferredSupermarketId;
+    }
+    applyAssignmentsToSelects(boot.productAssignments);
 
     async function recompute(opts: { persist?: boolean; applySupermarket?: boolean } = {}) {
       const assignments = collectAssignments();
@@ -398,7 +412,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
               const selected = p.id === preferred ? ' selected' : '';
               return `<option value="${p.id}"${selected}>${escapeHtml(label)}</option>`;
             }).join('');
-            slot.innerHTML = `<select data-ingredient-id="${ingredientId}" class="live-product-select w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm not-mobile:w-auto not-mobile:max-w-xs"><option value=""${!preferred ? ' selected' : ''}>Kein Produkt</option>${options}</select>`;
+            slot.innerHTML = `<select data-ingredient-id="${ingredientId}" class="live-product-select px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"><option value=""${!preferred ? ' selected' : ''}>Kein Produkt</option>${options}</select>`;
           }
         }
         if (btn) btn.textContent = products.length > 0 ? '+ / verwalten' : '+ Produkt verknüpfen';

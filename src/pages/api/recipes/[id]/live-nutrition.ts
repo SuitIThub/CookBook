@@ -84,10 +84,14 @@ export const POST: APIRoute = async ({ params, request }) => {
   }
 
   if (persist) {
-    db.setRecipeProductSelection(id, {
-      productAssignments,
-      preferredSupermarketId: supermarketId ?? null,
-    });
+    try {
+      db.setRecipeProductSelection(id, {
+        productAssignments,
+        preferredSupermarketId: supermarketId ?? null,
+      });
+    } catch (error) {
+      console.error('Failed to persist recipe product selection', error);
+    }
   }
 
   const nutrition = computeRecipeNutrition({
