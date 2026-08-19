@@ -194,11 +194,18 @@
       // Mark CSS as loaded
       document.documentElement.classList.add('css-loaded');
 
-      // Register service worker for PWA
+      // Register service worker for PWA — never use a cached copy of sw.js.
       if ('serviceWorker' in navigator) {
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
             .then((registration) => {
+              registration.update();
               console.log('ServiceWorker registration successful with scope: ', registration.scope);
             })
             .catch((error) => {
