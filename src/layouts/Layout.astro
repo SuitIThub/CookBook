@@ -50,12 +50,9 @@ const { title } = Astro.props;
         const w = window.innerWidth;
         const h = window.innerHeight;
         const aspect = h > 0 ? w / h : 0;
-        const shortSide = Math.min(w, h);
-        let mode = 'mobile';
-        // Mobile only when tall AND phone-sized (Fold main short side ≳ 600 → tablet)
-        if (!(aspect <= 0.75 && shortSide < 600)) {
-          mode = w < 1280 ? 'tablet' : 'desktop';
-        }
+        // Mirrors src/lib/layoutMode.ts — Fold 7 cover (~21:9, CSS width often ≥ 600) is mobile.
+        const isMobile = (aspect <= 0.62 && w < 1280) || (aspect <= 0.84 && w < 700);
+        const mode = isMobile ? 'mobile' : (w < 1280 ? 'tablet' : 'desktop');
         document.documentElement.dataset.layout = mode;
       }
       applyLayoutMode();
@@ -603,7 +600,8 @@ const { title } = Astro.props;
         function layoutBucket(): string {
           const w = window.innerWidth;
           const h = window.innerHeight;
-          if (h > 0 && w / h <= 0.75 && Math.min(w, h) < 600) return 'mobile';
+          const aspect = h > 0 ? w / h : 0;
+          if ((aspect <= 0.62 && w < 1280) || (aspect <= 0.84 && w < 700)) return 'mobile';
           if (w < 1280) return 'tablet';
           return 'desktop';
         }

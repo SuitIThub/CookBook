@@ -23,6 +23,7 @@ import {
   type AlternativeSelection,
 } from './alternatives';
 import { resolveMainCategory } from './recipeCategories';
+import { collectIngredientsFromGroups } from './recipeNutrition';
 
 export class CookbookDatabase {
   private db: Database.Database;
@@ -69,6 +70,16 @@ export class CookbookDatabase {
     }
     try {
       this.db.exec(`ALTER TABLE recipes ADD COLUMN variant_name TEXT`);
+    } catch (error) {
+      // Ignore error if column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE recipes ADD COLUMN product_assignments_json TEXT`);
+    } catch (error) {
+      // Ignore error if column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE recipes ADD COLUMN preferred_supermarket_id TEXT`);
     } catch (error) {
       // Ignore error if column already exists
     }
@@ -328,8 +339,8 @@ export class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, parent_recipe_id, variant_name, is_draft, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, parent_recipe_id, variant_name, product_assignments_json, preferred_supermarket_id, is_draft, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -347,6 +358,8 @@ export class CookbookDatabase {
       newRecipe.sourceUrl,
       newRecipe.parentRecipeId || null,
       newRecipe.variantName || null,
+      JSON.stringify(newRecipe.productAssignments ?? {}),
+      newRecipe.preferredSupermarketId || null,
       0, // is_draft = false for regular recipes
       newRecipe.createdAt.toISOString(),
       newRecipe.updatedAt.toISOString()
@@ -376,24 +389,7 @@ export class CookbookDatabase {
       return null;
     }
 
-    return {
-      id: row.id,
-      title: row.title,
-      subtitle: row.subtitle,
-      description: row.description,
-      metadata: JSON.parse(row.metadata),
-      category: row.category,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      ingredientGroups: JSON.parse(row.ingredient_groups),
-      preparationGroups: JSON.parse(row.preparation_groups),
-      imageUrl: row.image_url,
-      images: row.images ? JSON.parse(row.images) : [],
-      sourceUrl: row.source_url,
-      parentRecipeId: row.parent_recipe_id || undefined,
-      variantName: row.variant_name || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    };
+    return rowToRecipe(row);
   }
   
   // Get recipe including drafts (for internal use)
@@ -405,48 +401,14 @@ export class CookbookDatabase {
       return null;
     }
 
-    return {
-      id: row.id,
-      title: row.title,
-      subtitle: row.subtitle,
-      description: row.description,
-      metadata: JSON.parse(row.metadata),
-      category: row.category,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      ingredientGroups: JSON.parse(row.ingredient_groups),
-      preparationGroups: JSON.parse(row.preparation_groups),
-      imageUrl: row.image_url,
-      images: row.images ? JSON.parse(row.images) : [],
-      sourceUrl: row.source_url,
-      parentRecipeId: row.parent_recipe_id || undefined,
-      variantName: row.variant_name || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    };
+    return rowToRecipe(row);
   }
 
   getAllRecipes(): Recipe[] {
     const stmt = this.db.prepare('SELECT * FROM recipes WHERE is_draft = 0 ORDER BY updated_at DESC');
     const rows = stmt.all() as any[];
 
-    return rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      subtitle: row.subtitle,
-      description: row.description,
-      metadata: JSON.parse(row.metadata),
-      category: row.category,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      ingredientGroups: JSON.parse(row.ingredient_groups),
-      preparationGroups: JSON.parse(row.preparation_groups),
-      imageUrl: row.image_url,
-      images: row.images ? JSON.parse(row.images) : [],
-      sourceUrl: row.source_url,
-      parentRecipeId: row.parent_recipe_id || undefined,
-      variantName: row.variant_name || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    }));
+    return rows.map(row => rowToRecipe(row));
   }
 
   getRecipeBySourceUrl(sourceUrl: string): Recipe | null {
@@ -457,24 +419,7 @@ export class CookbookDatabase {
       return null;
     }
 
-    return {
-      id: row.id,
-      title: row.title,
-      subtitle: row.subtitle,
-      description: row.description,
-      metadata: JSON.parse(row.metadata),
-      category: row.category,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      ingredientGroups: JSON.parse(row.ingredient_groups),
-      preparationGroups: JSON.parse(row.preparation_groups),
-      imageUrl: row.image_url,
-      images: row.images ? JSON.parse(row.images) : [],
-      sourceUrl: row.source_url,
-      parentRecipeId: row.parent_recipe_id || undefined,
-      variantName: row.variant_name || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    };
+    return rowToRecipe(row);
   }
 
   /**
@@ -484,24 +429,7 @@ export class CookbookDatabase {
     const stmt = this.db.prepare('SELECT * FROM recipes WHERE parent_recipe_id = ? AND is_draft = 0 ORDER BY created_at ASC');
     const rows = stmt.all(parentId) as any[];
 
-    return rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      subtitle: row.subtitle,
-      description: row.description,
-      metadata: JSON.parse(row.metadata),
-      category: row.category,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      ingredientGroups: JSON.parse(row.ingredient_groups),
-      preparationGroups: JSON.parse(row.preparation_groups),
-      imageUrl: row.image_url,
-      images: row.images ? JSON.parse(row.images) : [],
-      sourceUrl: row.source_url,
-      parentRecipeId: row.parent_recipe_id || undefined,
-      variantName: row.variant_name || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    }));
+    return rows.map(row => rowToRecipe(row));
   }
 
   updateRecipe(id: string, updates: Partial<Recipe> & { imageUrl?: string | null }): Recipe | null {
@@ -517,16 +445,31 @@ export class CookbookDatabase {
       normalizedUpdates.imageUrl = normalizedUpdates.images[0]?.url ?? null;
     }
 
-    const updatedRecipe = {
+    const updatedRecipe: Recipe = {
       ...existingRecipe,
       ...normalizedUpdates,
+      productAssignments: normalizedUpdates.productAssignments !== undefined
+        ? normalizedUpdates.productAssignments
+        : existingRecipe.productAssignments,
+      preferredSupermarketId: 'preferredSupermarketId' in normalizedUpdates
+        ? normalizedUpdates.preferredSupermarketId
+        : existingRecipe.preferredSupermarketId,
       updatedAt: new Date()
     };
+
+    if (updates.ingredientGroups) {
+      const liveIds = new Set(collectIngredientsFromGroups(updatedRecipe.ingredientGroups).map((ing) => ing.id));
+      const pruned: Record<string, string> = {};
+      for (const [ingredientId, productId] of Object.entries(updatedRecipe.productAssignments || {})) {
+        if (liveIds.has(ingredientId)) pruned[ingredientId] = productId;
+      }
+      updatedRecipe.productAssignments = pruned;
+    }
 
     const stmt = this.db.prepare(`
       UPDATE recipes 
       SET title = ?, subtitle = ?, description = ?, metadata = ?, category = ?, tags = ?,
-          ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, source_url = ?, parent_recipe_id = ?, variant_name = ?, updated_at = ?
+          ingredient_groups = ?, preparation_groups = ?, image_url = ?, images = ?, source_url = ?, parent_recipe_id = ?, variant_name = ?, product_assignments_json = ?, preferred_supermarket_id = ?, updated_at = ?
       WHERE id = ? AND is_draft = 0
     `);
 
@@ -544,6 +487,8 @@ export class CookbookDatabase {
       updatedRecipe.sourceUrl,
       updatedRecipe.parentRecipeId || null,
       updatedRecipe.variantName || null,
+      JSON.stringify(updatedRecipe.productAssignments ?? {}),
+      updatedRecipe.preferredSupermarketId || null,
       updatedRecipe.updatedAt.toISOString(),
       id
     );
@@ -569,6 +514,33 @@ export class CookbookDatabase {
     }
 
     return updatedRecipe;
+  }
+
+  /**
+   * Persist recipe-level product picks / supermarket without bumping updated_at.
+   * Incoming assignments are merged; empty string means "explicitly no product".
+   */
+  setRecipeProductSelection(
+    id: string,
+    input: {
+      productAssignments?: Record<string, string>;
+      preferredSupermarketId?: string | null;
+    }
+  ): Recipe | null {
+    const existing = this.getRecipe(id);
+    if (!existing) return null;
+    const productAssignments = input.productAssignments
+      ? { ...(existing.productAssignments || {}), ...input.productAssignments }
+      : existing.productAssignments;
+    const preferredSupermarketId = input.preferredSupermarketId === undefined
+      ? existing.preferredSupermarketId
+      : input.preferredSupermarketId || undefined;
+    this.db.prepare(`
+      UPDATE recipes
+      SET product_assignments_json = ?, preferred_supermarket_id = ?
+      WHERE id = ? AND is_draft = 0
+    `).run(JSON.stringify(productAssignments ?? {}), preferredSupermarketId ?? null, id);
+    return { ...existing, productAssignments, preferredSupermarketId };
   }
 
   /**
@@ -889,6 +861,8 @@ export class CookbookDatabase {
                   recipeId: recipe.id,
                   recipeIngredientId: item.id
                 };
+                const assignedProductId = recipe.productAssignments?.[item.id];
+                if (assignedProductId) shoppingItem.productId = assignedProductId;
                 if (item.alternativeGroupId) {
                   shoppingItem.alternativeGroupId = item.alternativeGroupId;
                   shoppingItem.alternativeOptionId = item.id;
@@ -1860,22 +1834,10 @@ export class CookbookDatabase {
     const currentImageUrl = currentRecipe?.imageUrl;
 
     const draft: Recipe & { draftLastUpdated?: Date } = {
-      id: row.id,
-      title: row.title,
-      subtitle: row.subtitle || undefined,
-      description: row.description || undefined,
-      metadata: JSON.parse(row.metadata),
-      category: row.category || undefined,
-      tags: JSON.parse(row.tags || '[]'),
-      ingredientGroups: JSON.parse(row.ingredient_groups),
-      preparationGroups: JSON.parse(row.preparation_groups),
-      imageUrl: currentImageUrl, // Always use current recipe's imageUrl
-      images: currentImages, // Always use current recipe's images
-      sourceUrl: row.source_url || undefined,
-      parentRecipeId: row.parent_recipe_id || undefined,
-      variantName: row.variant_name || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.draft_last_updated || row.updated_at), // Use draft's last_updated timestamp
+      ...rowToRecipe(row),
+      imageUrl: currentImageUrl,
+      images: currentImages,
+      updatedAt: new Date(row.draft_last_updated || row.updated_at),
       draftLastUpdated: new Date(row.draft_last_updated || row.updated_at)
     };
     
@@ -2650,6 +2612,32 @@ function safeParseJson<T>(value: string | null): T | undefined {
   } catch (error) {
     return undefined;
   }
+}
+
+function rowToRecipe(row: any): Recipe {
+  const assignments = row.product_assignments_json
+    ? safeParseJson<Record<string, string>>(row.product_assignments_json)
+    : undefined;
+  return {
+    id: row.id,
+    title: row.title,
+    subtitle: row.subtitle || undefined,
+    description: row.description || undefined,
+    metadata: JSON.parse(row.metadata),
+    category: row.category || undefined,
+    tags: row.tags ? JSON.parse(row.tags) : [],
+    ingredientGroups: JSON.parse(row.ingredient_groups),
+    preparationGroups: JSON.parse(row.preparation_groups),
+    imageUrl: row.image_url,
+    images: row.images ? JSON.parse(row.images) : [],
+    sourceUrl: row.source_url || undefined,
+    parentRecipeId: row.parent_recipe_id || undefined,
+    variantName: row.variant_name || undefined,
+    productAssignments: assignments && typeof assignments === 'object' ? assignments : undefined,
+    preferredSupermarketId: row.preferred_supermarket_id || undefined,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at)
+  };
 }
 
 function parseDate(value: unknown): Date {

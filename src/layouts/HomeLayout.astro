@@ -34,11 +34,8 @@
         const w = window.innerWidth;
         const h = window.innerHeight;
         const aspect = h > 0 ? w / h : 0;
-        const shortSide = Math.min(w, h);
-        let mode = 'mobile';
-        if (!(aspect <= 0.75 && shortSide < 600)) {
-          mode = w < 1280 ? 'tablet' : 'desktop';
-        }
+        const isMobile = (aspect <= 0.62 && w < 1280) || (aspect <= 0.84 && w < 700);
+        const mode = isMobile ? 'mobile' : (w < 1280 ? 'tablet' : 'desktop');
         document.documentElement.dataset.layout = mode;
       }
       applyLayoutMode();

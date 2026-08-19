@@ -140,7 +140,14 @@ function formatEuro(v: number): string {
               </button>
             </div>
             <div id="pf-off-status" class="text-[11px] text-gray-500 dark:text-gray-400 mt-1"></div>
-            <div id="pf-off-results" class="mt-2 space-y-1 max-h-56 overflow-y-auto"></div>
+            <div id="pf-off-results" class="mt-2 space-y-1 max-h-[min(24rem,50vh)] overflow-y-auto"></div>
+            <button
+              type="button"
+              id="pf-off-more"
+              class="hidden mt-2 w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            >
+              Weitere Ergebnisse laden
+            </button>
             <p class="text-[11px] text-gray-500 mt-2">
               Community-Daten (ODbL). „Übernehmen“ füllt das Formular – erst Speichern legt das Produkt an.
             </p>
@@ -323,6 +330,12 @@ function formatEuro(v: number): string {
   let savedProductImageUrl = '';
   let pendingLocalUploadUrl = '';
   let lastOffRemoteByEan: Record<string, OffSearchHit> = {};
+  let offSearchQuery = '';
+  let offSearchPage = 0;
+  let offSearchHasMore = false;
+  let offSearchRemoteShown = 0;
+  let offSearchLocalShown = 0;
+  let offSearchTotalCount: number | undefined;
 
   async function loadSupermarkets(): Promise<Supermarket[]> {
     const res = await fetch('/api/supermarkets');
@@ -460,12 +473,43 @@ function formatEuro(v: number): string {
 
   function resetOffSearchUi() {
     lastOffRemoteByEan = {};
+    offSearchQuery = '';
+    offSearchPage = 0;
+    offSearchHasMore = false;
+    offSearchRemoteShown = 0;
+    offSearchLocalShown = 0;
+    offSearchTotalCount = undefined;
     const input = document.getElementById('pf-off-input') as HTMLInputElement | null;
     const status = document.getElementById('pf-off-status');
     const results = document.getElementById('pf-off-results');
     if (input) input.value = '';
     if (status) status.textContent = '';
     if (results) results.innerHTML = '';
+    setOffMoreVisible(false);
+  }
+
+  function setOffMoreVisible(visible: boolean, loading = false) {
+    const btn = document.getElementById('pf-off-more') as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.classList.toggle('hidden', !visible);
+    btn.disabled = loading || !visible;
+    btn.textContent = loading ? 'Weitere Ergebnisse werden geladen …' : 'Weitere Ergebnisse laden';
+  }
+
+  function updateOffSearchStatus(errorMessage = '') {
+    const status = document.getElementById('pf-off-status');
+    if (!status) return;
+    if (errorMessage) {
+      status.textContent = `Online-Suche fehlgeschlagen: ${errorMessage}`;
+      return;
+    }
+    const shown = offSearchLocalShown + offSearchRemoteShown;
+    if (shown === 0) {
+      status.textContent = 'Keine Treffer.';
+      return;
+    }
+    const totalPart = offSearchTotalCount != null ? ` von ${offSearchTotalCount}` : '';
+    status.textContent = `${shown} Treffer angezeigt${totalPart}${offSearchLocalShown ? ` (${offSearchLocalShown} lokal)` : ''}.`;
   }
 
   async function applyOffProductToForm(hit: OffSearchHit) {
@@ -490,34 +534,41 @@ function formatEuro(v: number): string {
     if (status) status.textContent = 'Daten übernommen. Bitte prüfen und speichern.';
   }
 
-  function renderOffSearchResults(localHits: Product[], remoteHits: OffSearchHit[]) {
+  function renderOffSearchResults(localHits: Product[], remoteHits: OffSearchHit[], append = false) {
     const results = document.getElementById('pf-off-results');
     if (!results) return;
-    results.innerHTML = '';
-    lastOffRemoteByEan = {};
-    for (const p of localHits) {
-      const subtitleParts: string[] = [];
-      if (p.brand) subtitleParts.push(p.brand);
-      if (p.ean) subtitleParts.push(`EAN ${p.ean}`);
-      const subtitle = subtitleParts.join(' · ');
-      const row = document.createElement('div');
-      row.className = 'flex items-start gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-emerald-50/50 dark:bg-emerald-900/10';
-      row.innerHTML = `
-        <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
-          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 break-words" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
-          <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
-            <span class="uppercase font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">lokal</span>
-            ${subtitle ? `<span class="line-clamp-1 break-all" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</span>` : ''}
+    if (!append) {
+      results.innerHTML = '';
+      lastOffRemoteByEan = {};
+    }
+    if (!append) {
+      for (const p of localHits) {
+        const subtitleParts: string[] = [];
+        if (p.brand) subtitleParts.push(p.brand);
+        if (p.ean) subtitleParts.push(`EAN ${p.ean}`);
+        const subtitle = subtitleParts.join(' · ');
+        const row = document.createElement('div');
+        row.className = 'flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-emerald-50/50 dark:bg-emerald-900/10';
+        row.innerHTML = `
+          <div class="flex items-start gap-2 min-w-0">
+            <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+              ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-900 dark:text-white break-words" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+              <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                <span class="uppercase font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">lokal</span>
+                ${subtitle ? `<span class="break-all" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</span>` : ''}
+              </div>
+            </div>
           </div>
-        </div>
-        <button type="button" data-action="open-local" data-product-id="${p.id}" class="text-xs px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded shrink-0">Öffnen</button>
-      `;
-      results.appendChild(row);
+          <button type="button" data-action="open-local" data-product-id="${p.id}" class="text-xs px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded w-full not-mobile:w-auto">Öffnen</button>
+        `;
+        results.appendChild(row);
+      }
     }
     for (const p of remoteHits) {
+      if (!p.ean || lastOffRemoteByEan[p.ean]) continue;
       lastOffRemoteByEan[p.ean] = p;
       const kcal = p.nutritionPer100g?.calories;
       const name = p.name || '(ohne Name)';
@@ -527,65 +578,89 @@ function formatEuro(v: number): string {
       else if (p.netGrams) metaParts.push(`${p.netGrams} g`);
       const meta = metaParts.join(' · ');
       const row = document.createElement('div');
-      row.className = 'flex items-start gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900';
+      row.className = 'flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900';
       row.innerHTML = `
-        <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
-          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 break-words" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
-          <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
-            <span class="uppercase font-semibold text-blue-600 dark:text-blue-400 shrink-0">OFF</span>
-            ${meta ? `<span class="line-clamp-1 break-words min-w-0" title="${escapeHtml(meta)}">${escapeHtml(meta)}</span>` : ''}
-            <span class="shrink-0 text-gray-400">·</span>
-            <span class="font-mono text-gray-400 shrink-0" title="EAN ${escapeHtml(p.ean)}">EAN ${escapeHtml(p.ean)}</span>
+        <div class="flex items-start gap-2 min-w-0">
+          <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+            ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
           </div>
-          <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
-            ${kcal != null ? `${Math.round(kcal)} kcal / 100 g` : '<span class="text-gray-400 italic">keine Nährwerte</span>'}
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white break-words" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+            <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+              <span class="uppercase font-semibold text-blue-600 dark:text-blue-400 shrink-0">OFF</span>
+              ${meta ? `<span class="break-words min-w-0" title="${escapeHtml(meta)}">${escapeHtml(meta)}</span>` : ''}
+              <span class="font-mono text-gray-400" title="EAN ${escapeHtml(p.ean)}">EAN ${escapeHtml(p.ean)}</span>
+            </div>
+            <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+              ${kcal != null ? `${Math.round(kcal)} kcal / 100 g` : '<span class="text-gray-400 italic">keine Nährwerte</span>'}
+            </div>
           </div>
         </div>
-        <button type="button" data-action="apply-off" data-ean="${escapeHtml(p.ean)}" class="text-xs px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded shrink-0">Übernehmen</button>
+        <button type="button" data-action="apply-off" data-ean="${escapeHtml(p.ean)}" class="text-xs px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded w-full not-mobile:w-auto">Übernehmen</button>
       `;
       results.appendChild(row);
     }
   }
 
-  async function searchOpenFoodFacts() {
+  async function searchOpenFoodFacts(append = false) {
     const input = document.getElementById('pf-off-input') as HTMLInputElement | null;
     const status = document.getElementById('pf-off-status');
     const results = document.getElementById('pf-off-results');
     if (!input || !status || !results) return;
     const query = input.value.trim();
     if (!query) return;
-    status.textContent = 'Suche läuft …';
-    results.innerHTML = '';
+    if (!append) {
+      offSearchQuery = query;
+      offSearchPage = 0;
+      offSearchRemoteShown = 0;
+      offSearchLocalShown = 0;
+      offSearchTotalCount = undefined;
+      results.innerHTML = '';
+      lastOffRemoteByEan = {};
+      setOffMoreVisible(false);
+    } else if (query !== offSearchQuery) {
+      return searchOpenFoodFacts(false);
+    }
+    const nextPage = append ? offSearchPage + 1 : 1;
+    status.textContent = append ? 'Weitere Ergebnisse werden geladen …' : 'Suche läuft …';
+    setOffMoreVisible(append && offSearchHasMore, true);
     try {
-      let localHits: Product[] = [];
-      let remoteHits: OffSearchHit[] = [];
-      let errorMessage = '';
       if (/^\d{6,14}$/.test(query)) {
         const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(query)}`);
         if (!res.ok) throw new Error('lookup failed');
         const data = await res.json();
-        if (data.source === 'local' && data.product) localHits = [data.product];
-        else if (data.source === 'openfoodfacts' && data.product) remoteHits = [data.product];
-      } else {
-        const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}`);
-        if (!res.ok) throw new Error('search failed');
-        const data = await res.json();
-        localHits = Array.isArray(data.local) ? data.local : [];
-        remoteHits = Array.isArray(data.results) ? data.results : [];
-        if (data.error) errorMessage = String(data.error);
+        const localHits = data.source === 'local' && data.product ? [data.product] : [];
+        const remoteHits = data.source === 'openfoodfacts' && data.product ? [data.product] : [];
+        offSearchLocalShown = localHits.length;
+        offSearchRemoteShown = remoteHits.length;
+        offSearchPage = 1;
+        offSearchHasMore = false;
+        renderOffSearchResults(localHits, remoteHits, false);
+        updateOffSearchStatus();
+        setOffMoreVisible(false);
+        return;
       }
-      renderOffSearchResults(localHits, remoteHits);
-      const total = localHits.length + remoteHits.length;
-      status.textContent = errorMessage
-        ? `Online-Suche fehlgeschlagen: ${errorMessage}`
-        : total > 0
-          ? `${total} Treffer (${localHits.length} lokal, ${remoteHits.length} online)`
-          : 'Keine Treffer.';
+      const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}&page=${nextPage}&pageSize=20`);
+      if (!res.ok) throw new Error('search failed');
+      const data = await res.json();
+      if (data.error) {
+        updateOffSearchStatus(String(data.error));
+        setOffMoreVisible(offSearchHasMore);
+        return;
+      }
+      const localHits = Array.isArray(data.local) ? data.local : [];
+      const remoteHits = Array.isArray(data.results) ? data.results : [];
+      renderOffSearchResults(localHits, remoteHits, append);
+      offSearchPage = Number(data.page) || nextPage;
+      offSearchHasMore = Boolean(data.hasMore) && remoteHits.length > 0;
+      offSearchTotalCount = typeof data.count === 'number' ? data.count : offSearchTotalCount;
+      if (!append) offSearchLocalShown = localHits.length;
+      offSearchRemoteShown = Object.keys(lastOffRemoteByEan).length;
+      updateOffSearchStatus();
+      setOffMoreVisible(offSearchHasMore);
     } catch (error) {
       status.textContent = 'Suche fehlgeschlagen. Bitte später erneut versuchen.';
+      setOffMoreVisible(append && offSearchHasMore);
     }
   }
 
@@ -843,7 +918,8 @@ function formatEuro(v: number): string {
     if (target.id === 'btn-new') { openProductModal({ supermarkets: [], ingredientIds: [] } as any); return; }
     if (target.id === 'btn-scan') { await openScanFlow(); return; }
     if (target.id === 'btn-markets') { await openMarketModal(); return; }
-    if (target.id === 'pf-off-search') { await searchOpenFoodFacts(); return; }
+    if (target.id === 'pf-off-search') { await searchOpenFoodFacts(false); return; }
+    if (target.id === 'pf-off-more') { await searchOpenFoodFacts(true); return; }
     if (target.id === 'pf-off-scan') { await openScanFlow(); return; }
     if (target.id === 'product-modal-close' || target.id === 'pf-cancel') { closeProductModal(); return; }
     if (target.id === 'pf-image-remove') {
@@ -931,7 +1007,7 @@ function formatEuro(v: number): string {
   (document.getElementById('pf-off-input') as HTMLInputElement | null)?.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    searchOpenFoodFacts();
+    searchOpenFoodFacts(false);
   });
   (document.getElementById('pf-image-file') as HTMLInputElement | null)?.addEventListener('change', (e) => {
     const file = (e.currentTarget as HTMLInputElement).files?.[0];

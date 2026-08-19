@@ -85,7 +85,14 @@
               </button>
             </div>
             <div id="cat-off-status" class="text-[11px] text-gray-500 mt-1"></div>
-            <div id="cat-off-results" class="mt-2 space-y-1 max-h-64 overflow-y-auto"></div>
+            <div id="cat-off-results" class="mt-2 space-y-1 max-h-[min(24rem,50vh)] overflow-y-auto"></div>
+            <button
+              type="button"
+              id="cat-off-more"
+              class="hidden mt-2 w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            >
+              Weitere Ergebnisse laden
+            </button>
             <p class="text-[11px] text-gray-500 mt-2">
               Daten community-basiert (ODbL). Bei Übernahme wird das Produkt lokal gespeichert und verknüpft.
             </p>
@@ -135,6 +142,13 @@
   let productsCache: ProductLite[] = [];
   let currentGramsByUnit: Record<string, number> = {};
   let listenersBound = false;
+  let catOffQuery = '';
+  let catOffPage = 0;
+  let catOffHasMore = false;
+  let catOffRemoteShown = 0;
+  let catOffLocalShown = 0;
+  let catOffTotalCount: number | undefined;
+  let catOffSeenEans = new Set<string>();
 
   function notifyCatalogueUpdated() {
     window.dispatchEvent(new CustomEvent('catalogue-updated', {
@@ -180,6 +194,14 @@
     if (offResults) offResults.innerHTML = '';
     const offStatus = document.getElementById('cat-off-status');
     if (offStatus) offStatus.textContent = '';
+    catOffQuery = '';
+    catOffPage = 0;
+    catOffHasMore = false;
+    catOffRemoteShown = 0;
+    catOffLocalShown = 0;
+    catOffTotalCount = undefined;
+    catOffSeenEans = new Set();
+    setCatOffMoreVisible(false);
     const productInput = document.getElementById('cat-product-input') as HTMLInputElement | null;
     if (productInput) productInput.value = '';
     await refreshLinkedProducts();
@@ -301,16 +323,43 @@
     }
   }
 
-  function renderOffResults(data: any) {
+  function setCatOffMoreVisible(visible: boolean, loading = false) {
+    const btn = document.getElementById('cat-off-more') as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.classList.toggle('hidden', !visible);
+    btn.disabled = loading || !visible;
+    btn.textContent = loading ? 'Weitere Ergebnisse werden geladen …' : 'Weitere Ergebnisse laden';
+  }
+
+  function updateCatOffStatus(errorMessage = '') {
+    const status = document.getElementById('cat-off-status');
+    if (!status) return;
+    if (errorMessage) {
+      status.textContent = `Online-Suche fehlgeschlagen: ${errorMessage}`;
+      return;
+    }
+    const shown = catOffLocalShown + catOffRemoteShown;
+    if (shown === 0) {
+      status.textContent = 'Keine Treffer.';
+      return;
+    }
+    const totalPart = catOffTotalCount != null ? ` von ${catOffTotalCount}` : '';
+    status.textContent = `${shown} Treffer angezeigt${totalPart}${catOffLocalShown ? ` (${catOffLocalShown} lokal)` : ''}.`;
+  }
+
+  function renderOffResults(data: any, append = false) {
     const results = document.getElementById('cat-off-results');
     if (!results) return;
-    results.innerHTML = '';
+    if (!append) {
+      results.innerHTML = '';
+      catOffSeenEans = new Set();
+    }
     const linkedIds = new Set(currentLinkedProducts.map((p) => p.id));
-    const localHits = (data?.local || []) as ProductLite[];
+    const localHits = (append ? [] : (data?.local || [])) as ProductLite[];
     const remoteHits = (data?.results || []) as Array<{ ean: string; name?: string; brand?: string; packageLabel?: string; imageUrl?: string; nutritionPer100g?: Record<string, number>; netGrams?: number; }>;
-    if (localHits.length === 0 && remoteHits.length === 0) return;
 
     for (const p of localHits) {
+      if (p.ean) catOffSeenEans.add(p.ean);
       const alreadyLinked = linkedIds.has(p.id);
       const subtitleParts: string[] = [];
       if (p.brand) subtitleParts.push(p.brand);
@@ -342,6 +391,8 @@
     }
 
     for (const p of remoteHits) {
+      if (!p.ean || catOffSeenEans.has(p.ean)) continue;
+      catOffSeenEans.add(p.ean);
       const kcal = p?.nutritionPer100g?.calories;
       const name = p.name || '(ohne Name)';
       const metaParts: string[] = [];
@@ -530,34 +581,56 @@
       if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); productLinkHandler(); }
     });
 
-    const offSearchHandler = async () => {
+    const offSearchHandler = async (append = false) => {
       const input = document.getElementById('cat-off-input') as HTMLInputElement | null;
       const status = document.getElementById('cat-off-status');
       const results = document.getElementById('cat-off-results');
       if (!input || !status || !results) return;
       const query = input.value.trim();
       if (!query) return;
-      status.textContent = 'Suche läuft …';
-      results.innerHTML = '';
+      if (!append) {
+        catOffQuery = query;
+        catOffPage = 0;
+        catOffRemoteShown = 0;
+        catOffLocalShown = 0;
+        catOffTotalCount = undefined;
+        results.innerHTML = '';
+        catOffSeenEans = new Set();
+        setCatOffMoreVisible(false);
+      } else if (query !== catOffQuery) {
+        return offSearchHandler(false);
+      }
+      const nextPage = append ? catOffPage + 1 : 1;
+      status.textContent = append ? 'Weitere Ergebnisse werden geladen …' : 'Suche läuft …';
+      setCatOffMoreVisible(append && catOffHasMore, true);
       try {
-        const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}&page=${nextPage}&pageSize=20`);
         if (!res.ok) throw new Error('search failed');
         const data = await res.json();
-        renderOffResults(data);
-        const total = (data?.results?.length || 0) + (data?.local?.length || 0);
-        status.textContent = data?.error
-          ? `Online-Suche fehlgeschlagen: ${data.error}`
-          : total > 0
-            ? `${total} Treffer (${data?.local?.length || 0} lokal, ${data?.results?.length || 0} online)`
-            : 'Keine Treffer.';
+        if (data?.error) {
+          updateCatOffStatus(String(data.error));
+          setCatOffMoreVisible(catOffHasMore);
+          return;
+        }
+        const remoteHits = Array.isArray(data.results) ? data.results : [];
+        renderOffResults(data, append);
+        catOffPage = Number(data.page) || nextPage;
+        catOffHasMore = Boolean(data.hasMore) && remoteHits.length > 0;
+        catOffTotalCount = typeof data.count === 'number' ? data.count : catOffTotalCount;
+        if (!append) catOffLocalShown = Array.isArray(data.local) ? data.local.length : 0;
+        catOffRemoteShown = Math.max(0, catOffSeenEans.size - catOffLocalShown);
+        updateCatOffStatus();
+        setCatOffMoreVisible(catOffHasMore);
       } catch (error) {
         status.textContent = 'Suche fehlgeschlagen. Bitte später erneut versuchen.';
+        setCatOffMoreVisible(append && catOffHasMore);
       }
     };
 
-    document.getElementById('cat-off-search')?.addEventListener('click', offSearchHandler);
+    document.getElementById('cat-off-search')?.addEventListener('click', () => offSearchHandler(false));
+    document.getElementById('cat-off-more')?.addEventListener('click', () => offSearchHandler(true));
     document.getElementById('cat-off-input')?.addEventListener('keydown', (e) => {
-      if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); offSearchHandler(); }
+      if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); offSearchHandler(false); }
     });
 
     document.getElementById('cat-off-scan')?.addEventListener('click', () => {
@@ -587,7 +660,7 @@
           if (filled > 0 && status) {
             status.textContent = `${filled} fehlende Nährwert${filled === 1 ? '' : 'e'} aus Produkt übernommen.`;
           }
-          await offSearchHandler();
+          target.textContent = 'Verknüpft';
         } else {
           target.removeAttribute('disabled');
           target.textContent = 'Übernehmen';

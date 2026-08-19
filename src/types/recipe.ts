@@ -118,6 +118,9 @@ export interface Recipe {
   sourceUrl?: string; // URL of the recipe if imported via URL
   parentRecipeId?: string; // Optional: ID of the original recipe if this is a variant
   variantName?: string; // Optional: short title/name to identify this variant
+  /** recipeIngredientId → productId; empty string means explicitly no product. */
+  productAssignments?: Record<string, string>;
+  preferredSupermarketId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
