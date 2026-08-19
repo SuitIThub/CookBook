@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database';
-import { lookupOpenFoodFactsProduct, searchOpenFoodFactsProducts } from '../../../lib/openFoodFacts';
+import { lookupOpenFoodFactsProduct, searchOpenFoodFactsProducts, suggestOpenFoodFactsTerms } from '../../../lib/openFoodFacts';
 
 /**
  * Barcode/EAN lookup and text search.
@@ -13,6 +13,12 @@ export const GET: APIRoute = async ({ url }) => {
   const params = new URL(url).searchParams;
   const ean = (params.get('ean') || '').trim();
   const query = (params.get('q') || '').trim();
+  const suggest = (params.get('suggest') || '').trim();
+
+  if (suggest) {
+    const suggestions = await suggestOpenFoodFactsTerms(suggest);
+    return json({ suggestions });
+  }
 
   if (ean) {
     const skipRemote = params.get('remote') === 'false';
