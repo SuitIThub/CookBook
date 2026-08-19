@@ -49,6 +49,10 @@ import Layout from '../layouts/Layout.astro';
         <div id="tracker-today-empty" class="hidden text-xs text-gray-500 mt-2">
           Noch keine Einträge — streiche Meal-Prep-Portionen ab oder trage ein Produkt / etwas Freies ein.
         </div>
+        <div id="tracker-suggestions" class="hidden mt-4">
+          <h3 id="tracker-suggestions-heading" class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2"></h3>
+          <div id="tracker-suggestions-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+        </div>
       </section>
 
       <!-- Open meal-prep batches -->
@@ -230,11 +234,11 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <script>
-  import { calculateCalorieGoal, addNutrition, scaleNutrition, calculateBmi, weightForBmi, bmiCategoryLabel, BMI_BANDS, BMI_BOUNDARIES } from '../lib/calorieGoal';
+  import { calculateCalorieGoal, addNutrition, scaleNutrition, calculateBmi, weightForBmi, bmiCategoryLabel, BMI_BANDS, BMI_BOUNDARIES, estimateLearnedTdee, computeWeightTrend, TDEE_MIN_SPAN_DAYS, TDEE_MIN_WEIGH_INS } from '../lib/calorieGoal';
   import { lookupGramsPerUnit, servingUnitName } from '../lib/units';
   import { NUTRITION_FIELDS } from '../lib/nutrition';
   import type { NutritionData } from '../types/recipe';
-  import type { BodyProfile, DiaryEntry, MealPlan, WeightLog } from '../types/tracker';
+  import type { BodyProfile, DiaryEntry, MealPlan, WeightLog, LearnedTdee } from '../types/tracker';
 
   const PROFILE_KEY = 'cookbook.tracker.profile';
   const WEIGHT_RANGE_KEY = 'cookbook.tracker.weightRange';
@@ -250,7 +254,9 @@ import Layout from '../layouts/Layout.astro';
   const WEEK_MS = 7 * 86400000;
   const TREND_WINDOW_MS = 28 * 86400000;
 
+  const TDEE_WINDOW_DAYS = 28;
   let weightLogs: WeightLog[] = [];
+  let learnedTdee: LearnedTdee | null = null;
   let weightRange: WeightRange = readWeightRange();
   let showBmiBands = readShowBmi();
   let weightChartThemeWatch = false;
@@ -552,12 +558,21 @@ import Layout from '../layouts/Layout.astro';
     const text = dark ? '#e5e7eb' : '#374151';
     const weeklyChange = Number.isFinite(profile.weeklyChangeKg) ? Number(profile.weeklyChangeKg) : null;
     const forecastOn = weeklyChange != null && weightLogs.length > 0;
+    // Only project the measured trend once it is statistically meaningful — a few
+    // days of weigh-ins are dominated by water noise (see estimateLearnedTdee).
+    const nowMs = Date.now();
+    const weightTrend = computeWeightTrend(weightLogs, { now: nowMs, windowDays: 28 });
+    const trendReliable = weightTrend.count >= TDEE_MIN_WEIGH_INS && weightTrend.spanDays >= TDEE_MIN_SPAN_DAYS;
     const lastLog = weightLogs[0];
     const lastKg = lastLog ? Number(lastLog.weightKg) : null;
     const forecastNote = document.getElementById('tracker-weight-forecast');
     if (forecastNote) {
       forecastNote.classList.add('hidden');
       forecastNote.textContent = '';
+      if (forecastOn && !trendReliable) {
+        forecastNote.textContent = `Trend-Prognose sammelt noch Daten (${weightTrend.count}/${TDEE_MIN_WEIGH_INS} Wägungen, ${Math.round(weightTrend.spanDays)}/${TDEE_MIN_SPAN_DAYS} Tage).`;
+        forecastNote.classList.remove('hidden');
+      }
     }
 
     if (legend) {
@@ -566,7 +581,9 @@ import Layout from '../layouts/Layout.astro';
       ];
       if (forecastOn) {
         items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-px border-t border-dashed border-teal-500"></span>Ziel ${formatSignedKg(weeklyChange!)} / Woche</span>`);
-        items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-px border-t border-dotted border-orange-400"></span>Trend (4 Wochen)</span>`);
+        if (trendReliable) {
+          items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-px border-t border-dotted border-orange-400"></span>Trend (4 Wochen)</span>`);
+        }
       }
       if (profile.targetWeightKg && profile.targetWeightKg > 0) {
         items.push(`<span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-px border-t border-dashed border-indigo-500"></span>Zielgewicht ${profile.targetWeightKg} kg</span>`);
@@ -596,9 +613,9 @@ import Layout from '../layouts/Layout.astro';
       .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.kg) && p.t >= from && p.t <= now)
       .sort((a, b) => a.t - b.t);
 
-    const slope = forecastOn ? trendSlopeKgPerMs(weightLogs, now) : 0;
+    const slope = forecastOn && trendReliable ? trendSlopeKgPerMs(weightLogs, now) : 0;
     const goalEndKg = forecastOn && lastKg != null ? lastKg + weeklyChange! * (FORECAST_MS / WEEK_MS) : null;
-    const trendEndKg = forecastOn && lastKg != null ? lastKg + slope * FORECAST_MS : null;
+    const trendEndKg = forecastOn && trendReliable && lastKg != null ? lastKg + slope * FORECAST_MS : null;
 
     const W = 720;
     const H = 208;
@@ -789,8 +806,51 @@ import Layout from '../layouts/Layout.astro';
     const data = await fetchJson<{ entries: DiaryEntry[] }>(`/api/tracker/diary?alias=${encodeURIComponent(alias)}&from=${encodeURIComponent(startOfSelectedDayIso())}&to=${encodeURIComponent(endOfSelectedDayIso())}`);
     const entries = data?.entries || [];
     const total = entries.reduce((sum, e) => addNutrition(sum, e.nutrition), {} as any);
-    renderTodayRings(total, entries.length);
+    const costEntries = entries.filter((e) => Number.isFinite(Number(e.costSnapshot)) && Number(e.costSnapshot) > 0);
+    const dayCost = costEntries.reduce((s, e) => s + Number(e.costSnapshot), 0);
+    renderTodayRings(total, entries.length, { dayCost, costCount: costEntries.length, totalCount: entries.length });
     renderDayLog(entries);
+    refreshSuggestions(total).catch(() => undefined);
+  }
+
+  /** Suggest published recipes that fit today's remaining kcal / protein budget. */
+  async function refreshSuggestions(total: Record<string, number>): Promise<void> {
+    const wrap = document.getElementById('tracker-suggestions');
+    const heading = document.getElementById('tracker-suggestions-heading');
+    const list = document.getElementById('tracker-suggestions-list');
+    if (!wrap || !heading || !list) return;
+    const goal = getGoal();
+    const remainingKcal = Math.round(goal.targetKcal - Number(total.calories || 0));
+    const remainingProtein = Math.round(goal.targetProteinG - Number(total.protein || 0));
+    // Only for today, and only when there is a meaningful budget left.
+    if (!isSelectedToday() || !(goal.targetKcal > 0) || remainingKcal < 200) {
+      wrap.classList.add('hidden');
+      return;
+    }
+    const params = new URLSearchParams({ kcal: String(remainingKcal), limit: '4' });
+    if (remainingProtein > 0) params.set('protein', String(remainingProtein));
+    const data = await fetchJson<{ suggestions: Array<{ id: string; title: string; imageUrl?: string; kcal: number; protein: number; estimated: boolean }> }>(
+      `/api/tracker/recipe-suggestions?${params.toString()}`
+    );
+    const suggestions = data?.suggestions || [];
+    if (suggestions.length === 0) {
+      wrap.classList.add('hidden');
+      return;
+    }
+    heading.textContent = `Passt in dein Restbudget (noch ~${remainingKcal} kcal${remainingProtein > 0 ? `, ${remainingProtein} g Eiweiß` : ''})`;
+    list.innerHTML = suggestions
+      .map((s) => `
+        <a href="/rezept/${s.id}" class="flex items-center gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40">
+          <div class="w-10 h-10 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+            ${s.imageUrl ? `<img src="${escapeHtml(s.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span>🍽️</span>'}
+          </div>
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white truncate">${escapeHtml(s.title)}</div>
+            <div class="text-[11px] text-gray-500 dark:text-gray-400">${s.estimated ? '~' : ''}${s.kcal} kcal · ${s.protein} g Eiweiß / Portion</div>
+          </div>
+        </a>`)
+      .join('');
+    wrap.classList.remove('hidden');
   }
 
   function diaryEntryTitle(entry: DiaryEntry): string {
@@ -959,7 +1019,11 @@ import Layout from '../layouts/Layout.astro';
     return parts.join('');
   }
 
-  function renderTodayRings(total: Record<string, number>, entryCount: number) {
+  function renderTodayRings(
+    total: Record<string, number>,
+    entryCount: number,
+    cost?: { dayCost: number; costCount: number; totalCount: number }
+  ) {
     const goal = getGoal();
     const rings = document.getElementById('tracker-today-rings')!;
     const empty = document.getElementById('tracker-today-empty')!;
@@ -1020,6 +1084,19 @@ import Layout from '../layouts/Layout.astro';
     }
     rings.appendChild(macros);
 
+    if (cost && cost.dayCost > 0) {
+      const kcalForCost = Number(total.calories || 0);
+      const per100 = kcalForCost > 0 ? (cost.dayCost / kcalForCost) * 100 : null;
+      const partial = cost.costCount < cost.totalCount;
+      const line = document.createElement('p');
+      line.className = 'text-xs text-gray-600 dark:text-gray-300 max-w-md text-center';
+      line.innerHTML =
+        `Kosten heute: <strong>~${formatEuroClient(cost.dayCost)}</strong>` +
+        (per100 != null ? ` · ${formatEuroClient(per100)} / 100 kcal` : '') +
+        (partial ? ` <span class="text-gray-400">(${cost.costCount}/${cost.totalCount} Einträge mit Preis)</span>` : '');
+      rings.appendChild(line);
+    }
+
     if (goal.lowEnergyWarning || goal.clampedToBmr) {
       const note = document.createElement('p');
       note.className = 'text-[11px] text-amber-700 dark:text-amber-300 max-w-md text-center';
@@ -1034,26 +1111,83 @@ import Layout from '../layouts/Layout.astro';
 
   let currentWeight = 0;
 
-  function getGoal() {
-    const profile = readProfile();
-    return calculateCalorieGoal(profile, currentWeight || (profile.targetWeightKg || 70));
+  function formatEuroClient(value: number): string {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
   }
 
-  function recomputeGoal() {
-    fetch(`/api/tracker/weight?alias=${encodeURIComponent(readAlias())}`)
-      .then((r) => r.ok ? r.json() : { logs: [] })
-      .then((data) => {
-        currentWeight = data?.logs?.[0]?.weightKg || 0;
-        const goal = getGoal();
-        const summary = document.getElementById('tracker-goal-summary');
-        if (summary) {
-          summary.textContent = goal.targetKcal > 0
-            ? `Grundumsatz ~${goal.bmr} · Erhalt ~${goal.tdee} · Ziel ~${goal.targetKcal} kcal · E ${goal.targetProteinG} g · KH ${goal.targetCarbsG} g · F ${goal.targetFatG} g`
-            : '';
-        }
-        refreshDiary().catch(() => undefined);
-      })
-      .catch(() => undefined);
+  /** Frozen cost of a product amount: grams / net_grams × (default or first market price). */
+  function productCostForGrams(product: any, grams: number): number | undefined {
+    if (!Number.isFinite(grams) || grams <= 0) return undefined;
+    const rawPrice = Number.isFinite(Number(product?.defaultPrice))
+      ? Number(product.defaultPrice)
+      : (Array.isArray(product?.supermarkets) && product.supermarkets.length > 0 ? Number(product.supermarkets[0]?.price) : NaN);
+    const net = Number(product?.netGrams);
+    if (!Number.isFinite(rawPrice) || rawPrice < 0 || !Number.isFinite(net) || net <= 0) return undefined;
+    return (grams / net) * rawPrice;
+  }
+
+  function getGoal() {
+    const profile = readProfile();
+    const override = learnedTdee?.confidence === 'ok' && learnedTdee.tdee ? learnedTdee.tdee : undefined;
+    return calculateCalorieGoal(profile, currentWeight || (profile.targetWeightKg || 70), override);
+  }
+
+  /**
+   * Learn maintenance from the last 28 days of logged intake + weight trend.
+   * Sums diary calories per local day; estimateLearnedTdee ignores partial days
+   * and only produces a value once there is enough data.
+   */
+  async function refreshLearnedTdee(): Promise<void> {
+    const alias = readAlias();
+    if (!alias) { learnedTdee = null; return; }
+    const now = Date.now();
+    const from = new Date(now - TDEE_WINDOW_DAYS * 86400000).toISOString();
+    const to = new Date(now).toISOString();
+    const data = await fetchJson<{ entries: DiaryEntry[] }>(
+      `/api/tracker/diary?alias=${encodeURIComponent(alias)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+    );
+    const byDay = new Map<number, number>();
+    for (const e of data?.entries || []) {
+      const kcal = Number(e.nutrition?.calories);
+      if (!Number.isFinite(kcal)) continue;
+      const key = startOfLocalDay(new Date(e.eatenAt)).getTime();
+      byDay.set(key, (byDay.get(key) || 0) + kcal);
+    }
+    learnedTdee = estimateLearnedTdee({
+      dailyIntakeKcal: [...byDay.values()],
+      weightLogs,
+      windowDays: TDEE_WINDOW_DAYS,
+      now,
+    });
+  }
+
+  function tdeeSourceLabel(): string {
+    if (learnedTdee?.confidence === 'ok') {
+      return ' <span class="text-emerald-600 dark:text-emerald-400" title="Erhalt aus geloggtem Essen + Gewichtstrend gelernt">(gelernt)</span>';
+    }
+    if (learnedTdee?.confidence === 'learning') {
+      return ' <span class="text-gray-400" title="Sammelt noch genug Log-Tage und Wägungen für einen belastbaren Wert">(Formel – lernt noch)</span>';
+    }
+    return ' <span class="text-gray-400">(Formel)</span>';
+  }
+
+  async function recomputeGoal() {
+    try {
+      const data = await fetchJson<{ logs: WeightLog[] }>(`/api/tracker/weight?alias=${encodeURIComponent(readAlias())}`);
+      if (data?.logs) weightLogs = data.logs;
+      currentWeight = weightLogs[0]?.weightKg || 0;
+      await refreshLearnedTdee();
+      const goal = getGoal();
+      const summary = document.getElementById('tracker-goal-summary');
+      if (summary) {
+        summary.innerHTML = goal.targetKcal > 0
+          ? `Grundumsatz ~${goal.bmr} · Erhalt ~${goal.tdee} kcal${tdeeSourceLabel()} · Ziel ~${goal.targetKcal} kcal · E ${goal.targetProteinG} g · KH ${goal.targetCarbsG} g · F ${goal.targetFatG} g`
+          : '';
+      }
+      refreshDiary().catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
   }
 
   document.getElementById('tracker-profile-form')?.addEventListener('submit', (e) => {
@@ -1609,6 +1743,8 @@ import Layout from '../layouts/Layout.astro';
         protein: nutrition.protein ?? scaled.protein,
         fat: nutrition.fat ?? scaled.fat,
       };
+      const cost = productCostForGrams(pickedProduct, grams);
+      if (cost != null) body.costSnapshot = cost;
     }
     const res = await fetch('/api/tracker/diary', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -1682,11 +1818,14 @@ import Layout from '../layouts/Layout.astro';
       const liveData = live.ok ? await live.json() : null;
       const perServing = liveData?.nutrition?.perServing || {};
       const snapshot = scaleNutrition(perServing, eatenCount);
+      const perServingPrice = liveData?.price?.hasAnyData ? Number(liveData.price.perServing) : NaN;
+      const costSnapshot = Number.isFinite(perServingPrice) ? perServingPrice * eatenCount : undefined;
       const diaryRes = await fetch('/api/tracker/diary', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           alias, source: 'plan', planId: plan.id, recipeId: plan.recipeId,
           servings: eatenCount, nutrition: snapshot, eatenAt: defaultEatenAt().toISOString(),
+          costSnapshot,
         }),
       });
       if (diaryRes.ok) { await Promise.all([refreshPlans(), refreshDiary()]); }

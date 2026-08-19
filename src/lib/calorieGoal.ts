@@ -1,4 +1,4 @@
-import type { BodyProfile, CalorieGoal } from '../types/tracker';
+import type { BodyProfile, CalorieGoal, LearnedTdee } from '../types/tracker';
 
 /** Wishnofsky / 3500 kcal per lb — first-order planning only; Hall et al. show it overestimates long-term loss. */
 export const KCAL_PER_KG_CHANGE = 7700;
@@ -46,15 +46,25 @@ function defaultProteinGPerKg(profile: BodyProfile, weeklyChangeKg: number): num
  * - Unsupervised floor is estimated BMR, not a universal 1200/1500 kcal cut-off.
  * - 1200 (women/other) / 1500 (men) are warning thresholds (NICE LED is medically supervised).
  * - Macros: protein and fat first (AMDR fat 20–35 E%), carbs as remainder. Fibre DGE 30 g, salt WHO 5 g.
+ *
+ * `overrideTdee` (optional): a maintenance value learned from real data
+ * (see estimateLearnedTdee). When given and positive it replaces the formula
+ * TDEE for the target/macros; BMR (and thus the floor) still comes from the
+ * formula.
  */
-export function calculateCalorieGoal(profile: BodyProfile, currentWeightKg: number): CalorieGoal {
+export function calculateCalorieGoal(
+  profile: BodyProfile,
+  currentWeightKg: number,
+  overrideTdee?: number
+): CalorieGoal {
   const activity = profile.activity && profile.activity > 0 ? profile.activity : 1.4;
   const weight = Number.isFinite(currentWeightKg) && currentWeightKg > 0 ? currentWeightKg : 0;
   const height = profile.heightCm && profile.heightCm > 0 ? profile.heightCm : 0;
   const age = profile.ageYears && profile.ageYears > 0 ? profile.ageYears : 0;
 
   const bmr = calculateBmr(weight, height, age, profile.gender);
-  const tdee = bmr * activity;
+  const useLearned = Number.isFinite(overrideTdee ?? NaN) && (overrideTdee ?? 0) > 0;
+  const tdee = useLearned ? (overrideTdee as number) : bmr * activity;
 
   const requestedWeekly = Number.isFinite(profile.weeklyChangeKg ?? 0) ? profile.weeklyChangeKg ?? 0 : 0;
   const weeklyChange = clamp(requestedWeekly, -MAX_WEEKLY_LOSS_KG, MAX_WEEKLY_GAIN_KG);
@@ -100,7 +110,123 @@ export function calculateCalorieGoal(profile: BodyProfile, currentWeightKg: numb
     targetSaltG: SALT_WHO_G,
     clampedToBmr,
     lowEnergyWarning,
+    tdeeSource: useLearned ? 'learned' : 'formula',
   };
+}
+
+const DAY_MS = 86400000;
+
+export interface WeightTrend {
+  slopeKgPerDay: number;
+  count: number; // weigh-ins in window
+  spanDays: number; // days between first and last weigh-in in window
+  r2: number; // goodness of fit, 0..1
+}
+
+/**
+ * Least-squares weight trend over the last `windowDays` of weigh-ins. Using a
+ * regression over many recent points averages out day-to-day water noise
+ * (~±1 kg) so the slope reflects real change (~0.1 kg/day), not the scale on a
+ * given morning. Needs ≥2 points; returns a zero slope otherwise.
+ */
+export function computeWeightTrend(
+  logs: { loggedAt: Date | string; weightKg: number }[],
+  opts: { windowDays?: number; now?: number } = {}
+): WeightTrend {
+  const windowDays = opts.windowDays ?? 28;
+  const now = opts.now ?? Date.now();
+  const windowMs = windowDays * DAY_MS;
+  const pts = logs
+    .map((l) => ({ t: new Date(l.loggedAt).getTime(), kg: Number(l.weightKg) }))
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.kg) && p.t <= now && p.t >= now - windowMs)
+    .sort((a, b) => a.t - b.t);
+  if (pts.length < 2) return { slopeKgPerDay: 0, count: pts.length, spanDays: 0, r2: 0 };
+  const n = pts.length;
+  let sumT = 0;
+  let sumK = 0;
+  for (const p of pts) {
+    sumT += p.t;
+    sumK += p.kg;
+  }
+  const meanT = sumT / n;
+  const meanK = sumK / n;
+  let num = 0;
+  let den = 0;
+  let ssTot = 0;
+  for (const p of pts) {
+    const dt = p.t - meanT;
+    num += dt * (p.kg - meanK);
+    den += dt * dt;
+    ssTot += (p.kg - meanK) ** 2;
+  }
+  const slopePerMs = den > 0 ? num / den : 0;
+  let ssRes = 0;
+  for (const p of pts) {
+    const pred = meanK + slopePerMs * (p.t - meanT);
+    ssRes += (p.kg - pred) ** 2;
+  }
+  const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
+  return {
+    slopeKgPerDay: slopePerMs * DAY_MS,
+    count: n,
+    spanDays: (pts[n - 1].t - pts[0].t) / DAY_MS,
+    r2,
+  };
+}
+
+/** A logged day only counts toward average intake above this (drops forgotten/partial days). */
+export const MIN_COMPLETE_DAY_KCAL = 1000;
+export const TDEE_MIN_SPAN_DAYS = 14;
+export const TDEE_MIN_WEIGH_INS = 8;
+export const TDEE_MIN_LOG_DAYS = 10;
+
+/**
+ * Learn maintenance (TDEE) from reality: average logged intake minus the energy
+ * equivalent of the measured weight trend.
+ *
+ *   TDEE ≈ avgIntake − (slope_kg/day × 7700)
+ *
+ * Uses the smoothed trend (not raw first/last weight) so water noise doesn't
+ * corrupt it, and only counts days with a plausibly complete food log so a
+ * forgotten day doesn't fake a deficit. Returns tdee=null until there is enough
+ * span, enough weigh-ins AND enough complete log days — before that the estimate
+ * would swing wildly, so callers should fall back to the formula.
+ */
+export function estimateLearnedTdee(input: {
+  dailyIntakeKcal: number[]; // per-day totals over the window (days that had entries)
+  weightLogs: { loggedAt: Date | string; weightKg: number }[];
+  windowDays?: number;
+  now?: number;
+}): LearnedTdee {
+  const windowDays = input.windowDays ?? 28;
+  const trend = computeWeightTrend(input.weightLogs, { windowDays, now: input.now });
+  const completeDays = input.dailyIntakeKcal.filter((k) => Number.isFinite(k) && k >= MIN_COMPLETE_DAY_KCAL);
+  const completeLogDays = completeDays.length;
+  const avgIntake = completeLogDays > 0 ? completeDays.reduce((a, b) => a + b, 0) / completeLogDays : 0;
+
+  const base = {
+    avgIntakeKcal: Math.round(avgIntake),
+    completeLogDays,
+    weighIns: trend.count,
+    spanDays: Math.round(Math.min(trend.spanDays, windowDays)),
+    slopeKgPerDay: trend.slopeKgPerDay,
+  };
+
+  const enough =
+    trend.count >= TDEE_MIN_WEIGH_INS &&
+    trend.spanDays >= TDEE_MIN_SPAN_DAYS &&
+    completeLogDays >= TDEE_MIN_LOG_DAYS;
+
+  if (!enough) {
+    const started = trend.count >= 2 || completeLogDays > 0;
+    return { ...base, tdee: null, confidence: started ? 'learning' : 'insufficient' };
+  }
+
+  const tdee = Math.round(avgIntake - trend.slopeKgPerDay * KCAL_PER_KG_CHANGE);
+  if (!Number.isFinite(tdee) || tdee < 800 || tdee > 6000) {
+    return { ...base, tdee: null, confidence: 'learning' };
+  }
+  return { ...base, tdee, confidence: 'ok' };
 }
 
 /** WHO adult BMI category boundaries (kg/m²). */
