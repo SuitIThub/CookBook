@@ -50,6 +50,8 @@ export interface Ingredient {
   // Kept as a separate axis so alternatives.ts / shopping list / cooking mode
   // don't need to know about the product selection.
   visibleWhenProducts?: ProductVisibilityCondition;
+  /** Persisted product pick for this recipe ingredient. */
+  productId?: string;
 }
 
 export interface IngredientGroup {

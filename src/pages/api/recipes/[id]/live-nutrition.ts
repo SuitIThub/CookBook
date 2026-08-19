@@ -6,6 +6,7 @@ import {
   computeRecipePrice,
   roundNutritionValues,
   applySupermarketProductAssignments,
+  productAssignmentsFromRecipe,
 } from '../../../../lib/recipeNutrition';
 import {
   filterRecipeBySelection,
@@ -38,7 +39,7 @@ export const POST: APIRoute = async ({ params, request }) => {
       )
     : {};
   let productAssignments: Record<string, string> = {
-    ...(recipe.productAssignments || {}),
+    ...productAssignmentsFromRecipe(recipe),
     ...incomingAssignments,
   };
   const supermarketId: string | undefined = typeof body?.supermarketId === 'string' && body.supermarketId ? body.supermarketId : undefined;

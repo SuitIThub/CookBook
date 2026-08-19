@@ -83,7 +83,7 @@ const { title } = Astro.props;
     <meta name="theme-color" content="#f97316" />
     
     <!-- PWA Links -->
-    <link rel="manifest" href="/manifest.v2.json" />
+    <link rel="manifest" href="/manifest.v3.json" />
     <link rel="shortcut icon" href="/favicon.svg" />
     
     <!-- Apple Touch Icons -->
@@ -903,18 +903,11 @@ const { title } = Astro.props;
         });
       }
 
-      // Register service worker for PWA — never use a cached copy of sw.js.
+      // Register service worker for PWA
       if ('serviceWorker' in navigator) {
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (refreshing) return;
-          refreshing = true;
-          window.location.reload();
-        });
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+          navigator.serviceWorker.register('/sw.js')
             .then((registration) => {
-              registration.update();
               console.log('ServiceWorker registration successful with scope: ', registration.scope);
             })
             .catch((error) => {

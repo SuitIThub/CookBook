@@ -8,6 +8,7 @@ import {
   computeRecipeNutrition,
   computeRecipePrice,
   resolveAssignedProductId,
+  productAssignmentsFromRecipe,
 } from '../../../lib/recipeNutrition';
 import {
   filterRecipeBySelection,
@@ -56,7 +57,7 @@ for (const productId of Object.values(recipe.productAssignments || {})) {
 }
 
 const supermarkets = db.getAllSupermarkets();
-const savedAssignments = recipe.productAssignments;
+const savedAssignments = productAssignmentsFromRecipe(recipe);
 
 const nutritionResult = computeRecipeNutrition({
   recipe,
@@ -181,20 +182,22 @@ function formatEuroValue(value: number, estimated: boolean): string {
         {visibleIngredients.map((ing) => {
           const info = nutritionByIngredient[ing.id];
           const hasProducts = info.products.length > 0;
-          const selectedProductId = resolveAssignedProductId(ing.id, savedAssignments, info.defaultProductId) || '';
+          const selectedProductId = resolveAssignedProductId(ing.id, savedAssignments, info.defaultProductId, ing.productId) || '';
           return (
             <div
               class="live-product-row text-sm"
+              style="display:flex;flex-direction:column;gap:0.5rem;width:100%"
               data-ingredient-row
               data-ingredient-id={ing.id}
               data-ingredient-name={info.name}
             >
-              <span class="live-product-name font-medium text-gray-800 dark:text-gray-100 break-words">{info.name}</span>
-              <div class="live-product-slot min-w-0">
+              <span class="live-product-name font-medium text-gray-800 dark:text-gray-100" style="overflow-wrap:anywhere">{info.name}</span>
+              <div class="live-product-slot" style="width:100%;min-width:0">
                 {hasProducts ? (
                   <select
                     data-ingredient-id={ing.id}
                     class="live-product-select px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"
+                    style="width:100%"
                   >
                     <option value="" selected={selectedProductId ? undefined : true}>Kein Produkt</option>
                     {info.products.map((p) => (
@@ -210,6 +213,7 @@ function formatEuroValue(value: number, estimated: boolean): string {
               <button
                 type="button"
                 class="live-link-product text-xs px-2 py-1.5 border border-emerald-500 text-emerald-600 dark:text-emerald-400 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-center"
+                style="width:100%"
                 data-ingredient-name={info.name}
                 title="Produkte für diese Zutat verwalten"
               >

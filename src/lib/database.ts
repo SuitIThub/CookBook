@@ -23,7 +23,7 @@ import {
   type AlternativeSelection,
 } from './alternatives';
 import { resolveMainCategory } from './recipeCategories';
-import { collectIngredientsFromGroups } from './recipeNutrition';
+import { collectIngredientsFromGroups, applyProductAssignmentsToGroups } from './recipeNutrition';
 
 export class CookbookDatabase {
   private db: Database.Database;
@@ -464,10 +464,28 @@ export class CookbookDatabase {
     };
 
     if (updates.ingredientGroups) {
+      const previousIds = new Map<string, string>();
+      for (const ing of collectIngredientsFromGroups(existingRecipe.ingredientGroups)) {
+        if (ing.productId) previousIds.set(ing.id, ing.productId);
+      }
+      const restoreProductIds = (items: typeof updatedRecipe.ingredientGroups): typeof updatedRecipe.ingredientGroups =>
+        items.map((item: any) => {
+          if (item && Array.isArray(item.ingredients)) {
+            return { ...item, ingredients: restoreProductIds(item.ingredients) };
+          }
+          if (item && !item.productId && previousIds.has(item.id)) {
+            return { ...item, productId: previousIds.get(item.id) };
+          }
+          return item;
+        });
+      updatedRecipe.ingredientGroups = restoreProductIds(updatedRecipe.ingredientGroups);
       const liveIds = new Set(collectIngredientsFromGroups(updatedRecipe.ingredientGroups).map((ing) => ing.id));
       const pruned: Record<string, string> = {};
       for (const [ingredientId, productId] of Object.entries(updatedRecipe.productAssignments || {})) {
         if (liveIds.has(ingredientId)) pruned[ingredientId] = productId;
+      }
+      for (const ing of collectIngredientsFromGroups(updatedRecipe.ingredientGroups)) {
+        if (ing.productId && pruned[ing.id] == null) pruned[ing.id] = ing.productId;
       }
       updatedRecipe.productAssignments = pruned;
     }
@@ -542,12 +560,24 @@ export class CookbookDatabase {
     const preferredSupermarketId = input.preferredSupermarketId === undefined
       ? existing.preferredSupermarketId
       : input.preferredSupermarketId || undefined;
-    this.db.prepare(`
-      UPDATE recipes
-      SET product_assignments_json = ?, preferred_supermarket_id = ?
-      WHERE id = ? AND is_draft = 0
-    `).run(JSON.stringify(productAssignments ?? {}), preferredSupermarketId ?? null, id);
-    return { ...existing, productAssignments, preferredSupermarketId };
+    const ingredientGroups = applyProductAssignmentsToGroups(
+      existing.ingredientGroups,
+      productAssignments || {}
+    ) as typeof existing.ingredientGroups;
+    const groupsJson = JSON.stringify(ingredientGroups);
+    const assignmentsJson = JSON.stringify(productAssignments ?? {});
+    try {
+      this.db.prepare(`
+        UPDATE recipes
+        SET ingredient_groups = ?, product_assignments_json = ?, preferred_supermarket_id = ?
+        WHERE id = ? AND is_draft = 0
+      `).run(groupsJson, assignmentsJson, preferredSupermarketId ?? null, id);
+    } catch {
+      this.db.prepare(`
+        UPDATE recipes SET ingredient_groups = ? WHERE id = ? AND is_draft = 0
+      `).run(groupsJson, id);
+    }
+    return { ...existing, ingredientGroups, productAssignments, preferredSupermarketId };
   }
 
   /**

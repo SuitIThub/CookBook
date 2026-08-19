@@ -66,13 +66,52 @@ export interface RecipePriceInput extends RecipeNutritionInput {
 export function resolveAssignedProductId(
   ingredientId: string,
   assignments: Record<string, string> | undefined,
-  defaultProductId?: string
+  defaultProductId?: string,
+  ingredientProductId?: string
 ): string | undefined {
   if (assignments && Object.prototype.hasOwnProperty.call(assignments, ingredientId)) {
     const value = assignments[ingredientId];
     return value ? value : undefined;
   }
+  if (ingredientProductId) return ingredientProductId;
   return defaultProductId || undefined;
+}
+
+/** Write recipeIngredientId → productId onto the matching ingredients in the recipe JSON. */
+export function applyProductAssignmentsToGroups(
+  groups: (Ingredient | IngredientGroup)[] | undefined,
+  assignments: Record<string, string>
+): (Ingredient | IngredientGroup)[] {
+  if (!Array.isArray(groups)) return [];
+  return groups.map((item) => {
+    if (!item) return item;
+    if (Array.isArray((item as IngredientGroup).ingredients)) {
+      const group = item as IngredientGroup;
+      return {
+        ...group,
+        ingredients: applyProductAssignmentsToGroups(group.ingredients, assignments),
+      };
+    }
+    const ing = item as Ingredient;
+    if (!Object.prototype.hasOwnProperty.call(assignments, ing.id)) return ing;
+    const value = assignments[ing.id];
+    if (!value) {
+      const { productId: _unused, ...rest } = ing;
+      return rest;
+    }
+    return { ...ing, productId: value };
+  });
+}
+
+/** Combine map + per-ingredient productId into one assignment map. */
+export function productAssignmentsFromRecipe(recipe: Recipe): Record<string, string> {
+  const map: Record<string, string> = { ...(recipe.productAssignments || {}) };
+  for (const ing of collectIngredientsFromGroups(recipe.ingredientGroups)) {
+    if (!Object.prototype.hasOwnProperty.call(map, ing.id) && ing.productId) {
+      map[ing.id] = ing.productId;
+    }
+  }
+  return map;
 }
 
 /**
@@ -168,7 +207,8 @@ function resolveIngredient(
   const assignedProductId = resolveAssignedProductId(
     ingredient.id,
     productAssignments,
-    catalogue?.defaultProductId
+    catalogue?.defaultProductId,
+    ingredient.productId
   );
   const product = assignedProductId ? productsById?.get(assignedProductId) : undefined;
 
