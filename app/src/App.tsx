@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from 'react-router-dom';
 import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
+import LocalDbTestPage from './pages/LocalDbTestPage';
 
 /** Top-level navigation. Only Rezepte is wired in Phase 1; the rest are stubs. */
 const NAV: { to: string; label: string; enabled: boolean }[] = [
@@ -57,6 +58,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<RecipesPage />} />
           <Route path="/rezept/:id" element={<RecipeDetailPage />} />
+          <Route path="/_localtest" element={<LocalDbTestPage />} />
           <Route
             path="*"
             element={<p className="text-secondary-500">Seite nicht gefunden.</p>}
