@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 import Layout from '../../../layouts/Layout.astro';
-import { db } from '../../../lib/database';
+import { apiGet } from '../../../lib/apiClient';
 import type { ShoppingList } from '../../../types/recipe';
 
 const { id } = Astro.params;
@@ -10,10 +10,10 @@ if (!id) {
   return Astro.redirect('/einkaufslisten');
 }
 
-// Einkaufsliste laden
+// Einkaufsliste laden (404 -> apiGet wirft -> Liste bleibt null -> redirect)
 let shoppingList: ShoppingList | null = null;
 try {
-  shoppingList = db.getShoppingList(id);
+  shoppingList = await apiGet<ShoppingList>(`/api/shopping-lists?id=${encodeURIComponent(id)}`, Astro);
 } catch (error) {
   console.error('Error loading shopping list:', error);
 }
