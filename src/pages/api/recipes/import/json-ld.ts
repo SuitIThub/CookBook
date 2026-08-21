@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import type { RecipeImage } from '../../../../types/recipe';
-import { db } from '../../../../lib/database';
+import { db } from '../../../../lib/database.server';
 import { JsonLdRecipeExtractor } from '../../../../lib/recipe-extractors/json-ld-extractor';
 
 /**

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 import type { MealPlanStatus } from '../../../types/tracker';
 
 function normalizeAlias(value: unknown): string {

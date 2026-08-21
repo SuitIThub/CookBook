@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../../lib/database';
+import { db } from '../../../../lib/database.server';
 import { parseShoppingListItemInput } from '../../../../lib/shoppingListItemInput';
 
 const json = (body: unknown, status: number) =>

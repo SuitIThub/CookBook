@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 import type { Recipe, RecipeImage } from '../../../types/recipe';
 import * as fs from 'fs';
 import * as path from 'path';

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 import { eventBus, EVENTS } from '../../../lib/events';
 
 // Store active connections

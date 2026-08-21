@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import type { RecipeImage } from '../../../../types/recipe';
-import { db } from '../../../../lib/database';
+import { db } from '../../../../lib/database.server';
 import { RecipeExtractorFactory } from '../../../../lib/recipe-extractors/factory';
 import { v4 as uuidv4 } from 'uuid';
 

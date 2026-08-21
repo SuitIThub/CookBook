@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../lib/database';
+import { db } from '../../lib/database.server';
 
 // Keys that are allowed to be synced across devices via an alias.
 const ALLOWED_KEYS = new Set([

@@ -3,9 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs/promises';
 import path from 'path';
 import type { RecipeImage } from '../../../types/recipe';
-import CookbookDatabase from '../../../lib/database';
-
-const db = new CookbookDatabase();
+import { db } from '../../../lib/database.server';
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads', 'recipes');

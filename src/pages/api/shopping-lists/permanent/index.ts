@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../../lib/database';
+import { db } from '../../../../lib/database.server';
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 import { openRouterChat, type AIRequestConfig } from '../../../lib/ai';
 import { createAiEditPreviewToken } from '../../../lib/aiRecipeEditPreviewStore';
 import { recipeToMarkdown } from '../../../lib/recipeMarkdown';

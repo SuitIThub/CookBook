@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../lib/database';
+import { db } from '../../lib/database.server';
 import { v4 as uuidv4 } from 'uuid';
 
 // GET all active global timers
