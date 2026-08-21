@@ -1,10 +1,11 @@
 ---
 export const prerender = false;
 import Layout from '../layouts/Layout.astro';
-import { db } from '../lib/database';
+import { apiGet } from '../lib/apiClient';
+import type { Product, Supermarket } from '../types/tracker';
 
-const products = db.getAllProducts();
-const supermarkets = db.getAllSupermarkets();
+const products = await apiGet<Product[]>('/api/products', Astro);
+const supermarkets = await apiGet<Supermarket[]>('/api/supermarkets', Astro);
 
 function formatEuro(v: number): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(v);
