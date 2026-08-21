@@ -389,28 +389,150 @@ export class CookbookDatabase {
       `CREATE INDEX IF NOT EXISTS idx_sync_tombstones_deleted_at ON sync_tombstones(deleted_at)`
     );
 
-    // Epoch milliseconds (second resolution is fine for tombstones), matching
-    // the ms convention already used by alias_settings.updated_at.
+    // Append-only change log: gives every insert/update/delete a monotonic `seq`
+    // used as the sync cursor (robust against timestamp skew, unlike updated_at).
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_changes (
+        seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id   TEXT NOT NULL,
+        alias       TEXT,
+        op          TEXT NOT NULL,          -- 'upsert' | 'delete'
+        changed_at  INTEGER NOT NULL
+      )
+    `);
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_sync_changes_type_seq ON sync_changes(entity_type, seq)`
+    );
+
+    // Epoch milliseconds (second resolution is fine here), matching the ms
+    // convention already used by alias_settings.updated_at.
     const NOW_MS = `CAST(strftime('%s','now') AS INTEGER) * 1000`;
-    const specs: { table: string; type: string; alias: string }[] = [
-      { table: 'recipes', type: 'recipe', alias: 'NULL' },
-      { table: 'shopping_lists', type: 'shopping_list', alias: 'NULL' },
-      { table: 'products', type: 'product', alias: 'NULL' },
-      { table: 'supermarkets', type: 'supermarket', alias: 'NULL' },
-      { table: 'ingredients', type: 'ingredient', alias: 'NULL' },
-      { table: 'meal_plans', type: 'meal_plan', alias: 'OLD.alias' },
-      { table: 'weight_logs', type: 'weight_log', alias: 'OLD.alias' },
-      { table: 'diary_entries', type: 'diary_entry', alias: 'OLD.alias' }
+    const specs: { table: string; type: string; scoped: boolean }[] = [
+      { table: 'recipes', type: 'recipe', scoped: false },
+      { table: 'shopping_lists', type: 'shopping_list', scoped: false },
+      { table: 'products', type: 'product', scoped: false },
+      { table: 'supermarkets', type: 'supermarket', scoped: false },
+      { table: 'ingredients', type: 'ingredient', scoped: false },
+      { table: 'meal_plans', type: 'meal_plan', scoped: true },
+      { table: 'weight_logs', type: 'weight_log', scoped: true },
+      { table: 'diary_entries', type: 'diary_entry', scoped: true }
     ];
     for (const s of specs) {
+      const aliasNew = s.scoped ? 'NEW.alias' : 'NULL';
+      const aliasOld = s.scoped ? 'OLD.alias' : 'NULL';
+      // DROP + CREATE (not CREATE IF NOT EXISTS): triggers are metadata, and a
+      // body change (e.g. adding the sync_changes write to the pre-existing
+      // tombstone trigger) must replace the old definition on existing DBs.
+      this.db.exec(`DROP TRIGGER IF EXISTS trg_tombstone_${s.table}`);
+      this.db.exec(`DROP TRIGGER IF EXISTS trg_sync_ins_${s.table}`);
+      this.db.exec(`DROP TRIGGER IF EXISTS trg_sync_upd_${s.table}`);
+      // Delete: tombstone (for merge) + change-log 'delete' (for the cursor).
       this.db.exec(`
-        CREATE TRIGGER IF NOT EXISTS trg_tombstone_${s.table} AFTER DELETE ON ${s.table}
+        CREATE TRIGGER trg_tombstone_${s.table} AFTER DELETE ON ${s.table}
         BEGIN
           INSERT OR REPLACE INTO sync_tombstones (entity_type, entity_id, alias, deleted_at)
-          VALUES ('${s.type}', OLD.id, ${s.alias}, ${NOW_MS});
+          VALUES ('${s.type}', OLD.id, ${aliasOld}, ${NOW_MS});
+          INSERT INTO sync_changes (entity_type, entity_id, alias, op, changed_at)
+          VALUES ('${s.type}', OLD.id, ${aliasOld}, 'delete', ${NOW_MS});
+        END
+      `);
+      this.db.exec(`
+        CREATE TRIGGER trg_sync_ins_${s.table} AFTER INSERT ON ${s.table}
+        BEGIN
+          INSERT INTO sync_changes (entity_type, entity_id, alias, op, changed_at)
+          VALUES ('${s.type}', NEW.id, ${aliasNew}, 'upsert', ${NOW_MS});
+        END
+      `);
+      this.db.exec(`
+        CREATE TRIGGER trg_sync_upd_${s.table} AFTER UPDATE ON ${s.table}
+        BEGIN
+          INSERT INTO sync_changes (entity_type, entity_id, alias, op, changed_at)
+          VALUES ('${s.type}', NEW.id, ${aliasNew}, 'upsert', ${NOW_MS});
         END
       `);
     }
+  }
+
+  // --- Sync support (Phase 2) ---
+
+  /** Highest change-log sequence, used as the sync cursor high-water mark. */
+  getMaxSyncSeq(): number {
+    const r = this.db.prepare('SELECT COALESCE(MAX(seq), 0) AS m FROM sync_changes').get();
+    return Number(r?.m ?? 0);
+  }
+
+  /** Change-log rows after `sinceSeq` for the given entity types, oldest first. */
+  getSyncChangesSince(
+    sinceSeq: number,
+    types: string[]
+  ): { seq: number; entity_type: string; entity_id: string; op: string }[] {
+    if (types.length === 0) return [];
+    const placeholders = types.map(() => '?').join(',');
+    return this.db
+      .prepare(
+        `SELECT seq, entity_type, entity_id, op FROM sync_changes
+         WHERE seq > ? AND entity_type IN (${placeholders}) ORDER BY seq`
+      )
+      .all(sinceSeq, ...types) as { seq: number; entity_type: string; entity_id: string; op: string }[];
+  }
+
+  /**
+   * Insert-or-update a recipe preserving its id (used when applying synced rows
+   * from the server). Uses ON CONFLICT DO UPDATE — not INSERT OR REPLACE, which
+   * would fire the delete trigger and leave a spurious tombstone.
+   */
+  upsertRecipe(recipe: Recipe): void {
+    const toIso = (v: unknown): string =>
+      v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO recipes (
+           id, title, subtitle, description, metadata, category, tags,
+           ingredient_groups, preparation_groups, image_url, images, source_url,
+           parent_recipe_id, variant_name, product_assignments_json,
+           preferred_supermarket_id, is_draft, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           title=excluded.title, subtitle=excluded.subtitle, description=excluded.description,
+           metadata=excluded.metadata, category=excluded.category, tags=excluded.tags,
+           ingredient_groups=excluded.ingredient_groups, preparation_groups=excluded.preparation_groups,
+           image_url=excluded.image_url, images=excluded.images, source_url=excluded.source_url,
+           parent_recipe_id=excluded.parent_recipe_id, variant_name=excluded.variant_name,
+           product_assignments_json=excluded.product_assignments_json,
+           preferred_supermarket_id=excluded.preferred_supermarket_id,
+           is_draft=excluded.is_draft, created_at=excluded.created_at, updated_at=excluded.updated_at`
+      )
+      .run(
+        recipe.id,
+        recipe.title,
+        recipe.subtitle ?? null,
+        recipe.description ?? null,
+        JSON.stringify(recipe.metadata),
+        recipe.category ?? null,
+        JSON.stringify(recipe.tags || []),
+        JSON.stringify(recipe.ingredientGroups),
+        JSON.stringify(recipe.preparationGroups),
+        recipe.imageUrl ?? null,
+        JSON.stringify(recipe.images || []),
+        recipe.sourceUrl ?? null,
+        recipe.parentRecipeId || null,
+        recipe.variantName || null,
+        JSON.stringify(recipe.productAssignments ?? {}),
+        recipe.preferredSupermarketId || null,
+        0,
+        toIso(recipe.createdAt),
+        toIso(recipe.updatedAt)
+      );
+  }
+
+  /**
+   * Raw row delete for applying a synced delete. Unlike deleteRecipe() this runs
+   * no business side-effects (variant promotion, autocomplete cleanup) — the
+   * server already computed the authoritative state and streams the results.
+   */
+  deleteRecipeForSync(id: string): void {
+    this.db.prepare('DELETE FROM recipes WHERE id = ?').run(id);
   }
 
   // Recipe CRUD operations

@@ -15,6 +15,7 @@ import { GET as productsGET } from '../pages/api/products/index';
 import { GET as supermarketsGET } from '../pages/api/supermarkets';
 import { GET as ingredientsGET } from '../pages/api/ingredients';
 import { GET as permanentGET } from '../pages/api/shopping-lists/permanent/index';
+import { GET as syncPullGET } from '../pages/api/sync/pull';
 
 /** Build a minimal APIContext-like object; handlers only read url/request/site. */
 function ctx(path: string): any {
@@ -72,4 +73,14 @@ test('GET /api/ingredients?all=true returns an array (used by zutaten page)', as
 test('GET /api/shopping-lists/permanent returns object or null', async () => {
   const data = await json(await permanentGET(ctx('/api/shopping-lists/permanent')));
   assert.ok(data === null || typeof data === 'object', 'permanent list is object|null');
+});
+
+test('GET /api/sync/pull?since=0 returns a full recipe snapshot', async () => {
+  const body = await json(await syncPullGET(ctx('/api/sync/pull?since=0&types=recipe')));
+  assert.equal(typeof body.cursor, 'number', 'cursor is a number');
+  assert.ok(Array.isArray(body.changes), 'changes is an array');
+  assert.ok(
+    body.changes.every((c: any) => c.type === 'recipe' && c.op === 'upsert' && c.data),
+    'snapshot rows are recipe upserts carrying data'
+  );
 });
