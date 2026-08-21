@@ -3,12 +3,12 @@ export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import RecipesModal from '../components/modals/RecipesModal.astro';
 import MergeSuggestionsModal from '../components/modals/MergeSuggestionsModal.astro';
-import { db } from '../lib/database';
+import { apiGet } from '../lib/apiClient';
 
-// Load all ingredients from database
+// Load all ingredients via the API boundary
 let ingredients: Array<{ name: string; usageCount: number }> = [];
 try {
-  ingredients = db.getAllIngredientsFromRecipes();
+  ingredients = await apiGet<Array<{ name: string; usageCount: number }>>('/api/ingredients?all=true', Astro);
 } catch (error) {
   console.error('Error loading ingredients:', error);
 }

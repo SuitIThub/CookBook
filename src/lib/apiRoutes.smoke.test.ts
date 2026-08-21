@@ -64,8 +64,8 @@ test('GET /api/supermarkets returns an array', async () => {
   assert.ok(Array.isArray(data), 'supermarkets should be an array');
 });
 
-test('GET /api/ingredients returns an array', async () => {
-  const data = await json(await ingredientsGET(ctx('/api/ingredients')));
+test('GET /api/ingredients?all=true returns an array (used by zutaten page)', async () => {
+  const data = await json(await ingredientsGET(ctx('/api/ingredients?all=true')));
   assert.ok(Array.isArray(data), 'ingredients should be an array');
 });
 
