@@ -1,5 +1,16 @@
 # Migration: harte Frontend/Backend-Grenze (Weg A)
 
+> **Status: ABGESCHLOSSEN.** Alle `.astro`-Seiten lesen über die API-Grenze.
+> DoD-Invariante hält: `grep -rn "lib/database" src/pages --include=*.astro`
+> liefert nichts mehr.
+>
+> **Korrektur ggü. Erstanalyse:** Es waren **9** SSR-Seiten, nicht 6. Das
+> initiale `grep`-Glob `src/pages/**/*.astro` lief ohne `globstar` und erfasste
+> nur eine Verzeichnisebene. Die DoD-Invariante (rekursiv, `grep -r`) hat die
+> drei tiefer liegenden Seiten aufgedeckt: `einkaufsliste/[id]/edit.astro`,
+> `rezept/[id]/kochen.astro` (hatte sogar eine eigene `new CookbookDatabase`),
+> `rezept/[parentId]/variante-neu.astro`. Alle drei nachmigriert (S7–S9).
+
 **Branch:** `standalone-project`
 **Ziel:** Kein View-Code importiert mehr `db` direkt. Alle Seiten lesen Daten
 ausschließlich über die HTTP-API. Base-URL wird konfigurierbar → Voraussetzung
