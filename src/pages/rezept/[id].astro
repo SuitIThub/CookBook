@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
-import { db } from '../../lib/database';
+import { apiGet } from '../../lib/apiClient';
 import type { Recipe } from '../../types/recipe';
 
 // Import the new components
@@ -26,7 +26,8 @@ let variants: Recipe[] = [];
 let originalRecipe: Recipe | null = null;
 let aiDraftMode = false;
 try {
-  recipe = id ? db.getRecipe(id as string) : null;
+  // 404 from the API surfaces as a thrown ApiError -> caught below -> redirect
+  recipe = id ? await apiGet<Recipe>(`/api/recipes?id=${encodeURIComponent(id as string)}`, Astro) : null;
   if (!recipe) {
     return Astro.redirect('/404');
   }
@@ -34,15 +35,21 @@ try {
   // Determine original recipe and load its variants
   const isVariant = !!recipe.parentRecipeId;
   const rootOriginalId = isVariant && recipe.parentRecipeId ? recipe.parentRecipeId : recipe.id;
-  const rootOriginal = db.getRecipe(rootOriginalId) || recipe;
+  const rootOriginal =
+    (await apiGet<Recipe>(`/api/recipes?id=${encodeURIComponent(rootOriginalId)}`, Astro).catch(() => null)) || recipe;
 
   originalRecipe = rootOriginal;
-  variants = db.getVariantsForRecipe(rootOriginalId);
+  variants = await apiGet<Recipe[]>(
+    `/api/recipes?id=${encodeURIComponent(rootOriginalId)}&action=variants`,
+    Astro
+  ).catch(() => []);
   aiDraftMode = Astro.url.searchParams.get('aiDraft') === '1';
-  const draftRecipe = aiDraftMode ? db.getDraft(recipe.id) : null;
+  const draftRecipe = aiDraftMode
+    ? await apiGet<Recipe | null>(`/api/drafts?recipeId=${encodeURIComponent(recipe.id)}`, Astro).catch(() => null)
+    : null;
   editRecipe = draftRecipe || recipe;
 } catch (error) {
-  console.error('Error loading recipe from database:', error);
+  console.error('Error loading recipe:', error);
   return Astro.redirect('/404');
 }
 ---
