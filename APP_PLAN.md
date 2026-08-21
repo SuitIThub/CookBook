@@ -111,6 +111,18 @@ Capacitor-WebView laden (kurzer Geräte-Check); Persistenz (sql.js exportiert
 Bytes → Capacitor Filesystem/IndexedDB, Reload beim Start); `pragma`-Handling im
 Adapter; der 12-MB-shopping_lists-Smell separat untersuchen.
 
+## Phase 2 — Y-Fortschritt
+
+- ✅ **Y-Kern**: `database.ts` treiber-agnostisch (`SqlDriver` + better-sqlite3-Adapter).
+- ✅ **Y-split**: Server-Singleton in `database.server.ts`, `database.ts` import-clean
+  (kein better-sqlite3 im Graph), 42 Importe umgebogen.
+- ✅ **Y-app**: geteilter Kern läuft in der App auf **sql.js** (WASM) via `@core`-Alias,
+  Persistenz in IndexedDB. Im Browser verifiziert (Schema, CRUD, Reload-Persistenz).
+  Rest-Check: sql.js-WASM im echten Capacitor-WebView (Route `/_localtest` als Probe).
+- ⏭️ **Y-sync** (offen, design-schwer): pull/push-Endpoints (`updated_at` + `sync_tombstones`),
+  Outbox, Last-Write-Wins, Opt-out pro Entity (alias-Achse), „Server First, lokal als Fallback".
+  Braucht Design-Entscheidungen → separat besprechen.
+
 ## Bewusst später
 - Lokale SQLite / Sync / Tombstones (Phase 2).
 - Weitere Features (Einkaufsliste, Tracker, Produkte) nach bewiesenem Stack.
