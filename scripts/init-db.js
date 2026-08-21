@@ -184,6 +184,8 @@ db.exec(`
     grams REAL,
     servings REAL,
     nutrition_json TEXT NOT NULL,
+    cost_snapshot REAL,
+    composition_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `);

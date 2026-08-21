@@ -231,6 +231,64 @@ import Layout from '../layouts/Layout.astro';
 
     </div>
   </div>
+
+  <div
+    id="tracker-composition-modal"
+    class="hidden fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="tcm-title"
+  >
+    <div class="absolute inset-0 bg-black/50" data-action="close-composition-modal"></div>
+    <div class="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-t-xl sm:rounded-xl p-4 shadow-xl">
+      <div class="flex items-start justify-between gap-2 mb-3">
+        <div class="min-w-0">
+          <h3 id="tcm-title" class="text-lg font-semibold text-gray-900 dark:text-white">Tauschen</h3>
+          <p id="tcm-context" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5"></p>
+        </div>
+        <button type="button" data-action="close-composition-modal" class="text-gray-500 hover:text-gray-800 dark:hover:text-white text-xl leading-none px-1" aria-label="Schließen">×</button>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <input
+          id="tcm-search"
+          type="search"
+          placeholder="Produkt, Zutat, Marke oder EAN …"
+          class="flex-1 min-w-[12rem] px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm"
+        />
+        <button type="button" id="tcm-off-search" class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm">
+          Online suchen
+        </button>
+        <button type="button" id="tcm-scan" class="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm">
+          Barcode scannen
+        </button>
+      </div>
+      <p id="tcm-status" class="text-[11px] text-gray-500 mt-1"></p>
+      <div id="tcm-results" class="mt-2 space-y-1 max-h-56 overflow-y-auto"></div>
+      <button
+        type="button"
+        id="tcm-more"
+        class="hidden mt-2 w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"
+      >
+        Weitere Ergebnisse laden
+      </button>
+      <div id="tcm-selected" class="hidden mt-2 p-2 border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 rounded"></div>
+      <div id="tcm-amount-wrap" class="hidden mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+        <label class="block">Menge
+          <input id="tcm-amount" type="number" step="0.1" min="0" value="100" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900" />
+        </label>
+        <label class="block">Einheit
+          <select id="tcm-unit" class="mt-1 w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900">
+            <option value="g">Gramm</option>
+          </select>
+        </label>
+        <p id="tcm-preview" class="text-xs text-gray-600 dark:text-gray-300 self-end pb-1"></p>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" data-action="close-composition-modal" class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Abbrechen</button>
+        <button type="button" id="tcm-apply" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm disabled:opacity-40" disabled>Übernehmen</button>
+      </div>
+    </div>
+  </div>
 </Layout>
 
 <script>
@@ -238,7 +296,7 @@ import Layout from '../layouts/Layout.astro';
   import { lookupGramsPerUnit, servingUnitName } from '../lib/units';
   import { NUTRITION_FIELDS } from '../lib/nutrition';
   import type { NutritionData } from '../types/recipe';
-  import type { BodyProfile, DiaryEntry, MealPlan, WeightLog, LearnedTdee } from '../types/tracker';
+  import type { BodyProfile, DiaryComponent, DiaryComposition, DiaryEntry, MealPlan, WeightLog, LearnedTdee } from '../types/tracker';
 
   const PROFILE_KEY = 'cookbook.tracker.profile';
   const WEIGHT_RANGE_KEY = 'cookbook.tracker.weightRange';
@@ -882,34 +940,637 @@ import Layout from '../layouts/Layout.astro';
     list.innerHTML = '';
     for (const entry of entries) {
       const li = document.createElement('li');
-      li.className = 'flex items-start justify-between gap-2 py-2';
+      li.dataset.diaryId = entry.id;
+      const expandable = entry.source === 'plan';
+      li.className = expandable ? 'py-2' : 'flex items-start justify-between gap-2 py-2';
       const when = new Date(entry.eatenAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
       const title = diaryEntryTitle(entry);
       const href = entry.recipeId ? `/rezept/${entry.recipeId}` : '';
-      const kcal = Math.round(Number(entry.nutrition?.calories || 0));
-      const protein = Number(entry.nutrition?.protein || 0);
-      const carbs = Number(entry.nutrition?.carbohydrates || 0);
-      const fat = Number(entry.nutrition?.fat || 0);
       const amount = diaryAmountLabel(entry);
-      const macros = [kcal ? `${kcal} kcal` : '', protein ? `E ${Math.round(protein)} g` : '', carbs ? `KH ${Math.round(carbs)} g` : '', fat ? `F ${Math.round(fat)} g` : '']
-        .filter(Boolean)
-        .join(' · ');
+      const macros = formatMacroLine(entry.nutrition);
       const titleHtml = href
         ? `<a href="${href}" class="hover:underline">${escapeHtml(title)}</a>`
         : escapeHtml(title);
+      const expandBtn = expandable
+        ? `<button type="button" data-action="toggle-plan-details" data-id="${entry.id}" class="text-[10px] uppercase tracking-wide text-orange-600 dark:text-orange-400 flex-shrink-0 inline-flex items-center gap-0.5" title="Zutaten anzeigen">
+             Zutaten <span class="plan-chevron inline-block transition-transform text-[9px]" aria-hidden="true">▼</span>
+           </button>`
+        : `<span class="text-[10px] uppercase tracking-wide text-gray-400 flex-shrink-0">${diarySourceLabel(entry.source)}</span>`;
+      const details = expandable
+        ? `<div class="hidden plan-details mt-2 ml-0 sm:ml-12" data-plan-details="${entry.id}"></div>`
+        : '';
       li.innerHTML = `
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xs text-gray-500 tabular-nums w-10 flex-shrink-0">${when}</span>
-            <span class="font-medium text-gray-900 dark:text-white truncate">${titleHtml}</span>
-            <span class="text-[10px] uppercase tracking-wide text-gray-400 flex-shrink-0">${diarySourceLabel(entry.source)}</span>
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xs text-gray-500 tabular-nums w-10 flex-shrink-0">${when}</span>
+              <span class="font-medium text-gray-900 dark:text-white truncate">${titleHtml}</span>
+              ${expandable ? `<span class="text-[10px] uppercase tracking-wide text-gray-400 flex-shrink-0">${diarySourceLabel(entry.source)}</span>` : ''}
+              ${expandBtn}
+            </div>
+            <div class="text-xs text-gray-500 ml-12">${[amount, macros].filter(Boolean).join(' · ') || 'ohne Nährwerte'}</div>
+            ${details}
           </div>
-          <div class="text-xs text-gray-500 ml-12">${[amount, macros].filter(Boolean).join(' · ') || 'ohne Nährwerte'}</div>
+          <button type="button" data-action="del-diary" data-id="${entry.id}" class="text-red-500 text-xs flex-shrink-0" title="Eintrag löschen">×</button>
         </div>
-        <button type="button" data-action="del-diary" data-id="${entry.id}" class="text-red-500 text-xs flex-shrink-0" title="Eintrag löschen">×</button>
       `;
       list.appendChild(li);
     }
+    for (const id of expandedDiaryIds) {
+      restorePlanDetails(id).catch(() => undefined);
+    }
+  }
+
+  function formatMacroLine(nutrition: NutritionData | undefined): string {
+    const kcal = Math.round(Number(nutrition?.calories || 0));
+    const protein = Number(nutrition?.protein || 0);
+    const carbs = Number(nutrition?.carbohydrates || 0);
+    const fat = Number(nutrition?.fat || 0);
+    return [kcal ? `${kcal} kcal` : '', protein ? `E ${Math.round(protein)} g` : '', carbs ? `KH ${Math.round(carbs)} g` : '', fat ? `F ${Math.round(fat)} g` : '']
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  type PickedProduct = {
+    id?: string;
+    ean?: string;
+    name: string;
+    brand?: string;
+    netGrams?: number;
+    servingGrams?: number;
+    servingLabel?: string;
+    packageLabel?: string;
+    nutritionPer100g?: NutritionData;
+    gramsByUnit?: Record<string, number>;
+    source: 'local' | 'openfoodfacts';
+    offCode?: string;
+    imageUrl?: string;
+  };
+
+  const expandedDiaryIds = new Set<string>();
+  const compositionCache = new Map<string, { composition: DiaryComposition; reconstructed?: boolean }>();
+
+  type TcmProductPick = PickedProduct & { pickKind: 'product' };
+  type TcmIngredientPick = {
+    pickKind: 'ingredient';
+    id: string;
+    name: string;
+    nutritionPer100g?: NutritionData;
+    gramsByUnit?: Record<string, number>;
+  };
+  type TcmPick = TcmProductPick | TcmIngredientPick;
+  type CompositionModalState = {
+    mode: 'swap' | 'add';
+    entryId: string;
+    componentId?: string;
+    currentGrams?: number;
+    catalogueIngredientId?: string;
+    slotName?: string;
+  };
+
+  let compositionModal: CompositionModalState | null = null;
+  let tcmPicked: TcmPick | null = null;
+  let tcmLocalTimer: number | undefined;
+  let tcmOffQuery = '';
+  let tcmOffPage = 0;
+  let tcmOffHasMore = false;
+  let tcmResultPicks: TcmPick[] = [];
+  let trackerScanTarget: 'free' | 'composition' | null = null;
+
+  function componentProductLabel(component: DiaryComponent): string {
+    if (component.productBrand && component.productName) return `${component.productBrand} – ${component.productName}`;
+    return component.productName || '';
+  }
+
+  function renderPlanDetails(entryId: string, host: HTMLElement, composition: DiaryComposition, reconstructed?: boolean): void {
+    if (!composition.components.length) {
+      host.innerHTML = `
+        <p class="text-xs text-gray-500">Keine Zutaten hinterlegt.</p>
+        <button type="button" data-action="add-plan-product" data-id="${entryId}" class="mt-1 text-xs px-2 py-1 border border-orange-400 text-orange-600 dark:text-orange-300 rounded hover:bg-orange-50 dark:hover:bg-orange-900/20">+ Produkt hinzufügen</button>
+      `;
+      return;
+    }
+    const rows = composition.components.map((c) => {
+      const product = componentProductLabel(c);
+      const grams = Number.isFinite(c.grams) ? `${Math.round(c.grams * 10) / 10} g` : '';
+      const macros = formatMacroLine(c.nutrition);
+      const extra = c.kind === 'extra'
+        ? '<span class="text-[10px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400">extra</span>'
+        : '';
+      const remove = c.kind === 'extra'
+        ? `<button type="button" data-action="remove-plan-item" data-id="${entryId}" data-component-id="${c.id}" class="text-xs px-2 py-1 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20">Entfernen</button>`
+        : '';
+      return `
+        <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 py-1.5 px-2 rounded bg-gray-50 dark:bg-gray-900/40">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="text-xs font-medium text-gray-900 dark:text-white truncate">${escapeHtml(c.name)}</span>
+              ${extra}
+            </div>
+            <div class="text-[11px] text-gray-500">${[product, grams].filter(Boolean).map((s) => escapeHtml(s)).join(' · ')}</div>
+            <div class="text-[11px] text-gray-500">${macros || 'ohne Nährwerte'}${c.isEstimated ? ' · ~' : ''}</div>
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <button type="button" data-action="swap-plan-item" data-id="${entryId}" data-component-id="${c.id}" class="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Tauschen</button>
+            ${remove}
+          </div>
+        </div>`;
+    }).join('');
+    host.innerHTML = `
+      ${reconstructed ? '<p class="text-[11px] text-gray-400 mb-1">Aus dem Rezept rekonstruiert — Änderungen gelten nur für diesen Eintrag.</p>' : ''}
+      <div class="space-y-1">${rows}</div>
+      <button type="button" data-action="add-plan-product" data-id="${entryId}" class="mt-2 text-xs px-2 py-1 border border-orange-400 text-orange-600 dark:text-orange-300 rounded hover:bg-orange-50 dark:hover:bg-orange-900/20">+ Produkt / Zutat hinzufügen</button>
+    `;
+  }
+
+  async function restorePlanDetails(entryId: string): Promise<void> {
+    const host = document.querySelector(`[data-plan-details="${entryId}"]`) as HTMLElement | null;
+    const chevron = document.querySelector(`[data-action="toggle-plan-details"][data-id="${entryId}"] .plan-chevron`);
+    const open = expandedDiaryIds.has(entryId);
+    host?.classList.toggle('hidden', !open);
+    chevron?.classList.toggle('rotate-180', open);
+    if (!open || !host) return;
+    const cached = compositionCache.get(entryId);
+    if (cached) {
+      renderPlanDetails(entryId, host, cached.composition, cached.reconstructed);
+      return;
+    }
+    host.innerHTML = '<p class="text-xs text-gray-500">Zutaten werden geladen …</p>';
+    const data = await fetchJson<{ composition?: DiaryComposition; compositionReconstructed?: boolean }>(
+      `/api/tracker/diary?id=${encodeURIComponent(entryId)}`
+    );
+    if (!data?.composition) {
+      host.innerHTML = '<p class="text-xs text-red-500">Zusammensetzung konnte nicht geladen werden.</p>';
+      return;
+    }
+    compositionCache.set(entryId, { composition: data.composition, reconstructed: data.compositionReconstructed });
+    renderPlanDetails(entryId, host, data.composition, data.compositionReconstructed);
+  }
+
+  async function togglePlanDetails(entryId: string): Promise<void> {
+    if (expandedDiaryIds.has(entryId)) expandedDiaryIds.delete(entryId);
+    else expandedDiaryIds.add(entryId);
+    await restorePlanDetails(entryId);
+  }
+
+  function tcmStatus(text: string): void {
+    const el = document.getElementById('tcm-status');
+    if (el) el.textContent = text;
+  }
+
+  function tcmSetMoreVisible(visible: boolean, loading = false): void {
+    const btn = document.getElementById('tcm-more') as HTMLButtonElement | null;
+    if (!btn) return;
+    btn.classList.toggle('hidden', !visible);
+    btn.toggleAttribute('disabled', loading);
+    btn.textContent = loading ? 'Weitere Ergebnisse werden geladen …' : 'Weitere Ergebnisse laden';
+  }
+
+  function tcmApplyEnabled(on: boolean): void {
+    const btn = document.getElementById('tcm-apply') as HTMLButtonElement | null;
+    if (btn) btn.disabled = !on;
+  }
+
+  function closeCompositionModal(): void {
+    compositionModal = null;
+    tcmPicked = null;
+    tcmResultPicks = [];
+    document.getElementById('tracker-composition-modal')?.classList.add('hidden');
+    const results = document.getElementById('tcm-results');
+    if (results) results.innerHTML = '';
+    const selected = document.getElementById('tcm-selected');
+    if (selected) {
+      selected.classList.add('hidden');
+      selected.innerHTML = '';
+    }
+    document.getElementById('tcm-amount-wrap')?.classList.add('hidden');
+    tcmSetMoreVisible(false);
+    tcmStatus('');
+    tcmApplyEnabled(false);
+    const search = document.getElementById('tcm-search') as HTMLInputElement | null;
+    if (search) search.value = '';
+  }
+
+  function tcmFillUnits(pick: TcmPick, preferGrams?: number): void {
+    const select = document.getElementById('tcm-unit') as HTMLSelectElement | null;
+    const amountEl = document.getElementById('tcm-amount') as HTMLInputElement | null;
+    if (!select || !amountEl) return;
+    const gramsByUnit = pick.pickKind === 'product' ? pick.gramsByUnit : pick.gramsByUnit;
+    const netGrams = pick.pickKind === 'product' ? pick.netGrams : undefined;
+    const servingGrams = pick.pickKind === 'product' ? pick.servingGrams : undefined;
+    const servingLabel = pick.pickKind === 'product' ? pick.servingLabel : undefined;
+    const packageLabel = pick.pickKind === 'product' ? pick.packageLabel : undefined;
+    const options: string[] = ['<option value="g">Gramm</option>'];
+    if (netGrams && netGrams > 0) {
+      const pack = packageLabel ? `Packung (${packageLabel})` : `Packung (${netGrams} g)`;
+      options.push(`<option value="pack">${escapeHtml(pack)}</option>`);
+    }
+    if (gramsByUnit) {
+      for (const [unit, grams] of Object.entries(gramsByUnit)) {
+        if (!Number.isFinite(grams) || grams <= 0) continue;
+        options.push(`<option value="u:${escapeHtml(unit)}">${escapeHtml(unit)} (${grams} g)</option>`);
+      }
+    }
+    const servingAlreadyMapped = lookupGramsPerUnit(gramsByUnit, servingUnitName(servingLabel)) != null
+      || lookupGramsPerUnit(gramsByUnit, 'Portion') != null;
+    if (servingGrams && servingGrams > 0 && !servingAlreadyMapped) {
+      const label = servingLabel ? `Portion (${servingLabel})` : `Portion (${servingGrams} g)`;
+      options.push(`<option value="serving">${escapeHtml(label)}</option>`);
+    }
+    select.innerHTML = options.join('');
+    if (preferGrams != null && preferGrams > 0) {
+      select.value = 'g';
+      amountEl.value = String(Math.round(preferGrams * 10) / 10);
+      return;
+    }
+    let pickedUnit = 'g';
+    if (gramsByUnit) {
+      for (const name of ['Stück', 'Scheibe', 'Portion']) {
+        const key = Object.keys(gramsByUnit).find((k) => lookupGramsPerUnit({ [k]: gramsByUnit[k] }, name) != null);
+        if (key) { pickedUnit = `u:${key}`; break; }
+      }
+    }
+    if (pickedUnit === 'g' && servingGrams && !servingAlreadyMapped) pickedUnit = 'serving';
+    const values = Array.from(select.options).map((o) => o.value);
+    select.value = values.includes(pickedUnit) ? pickedUnit : 'g';
+    amountEl.value = select.value === 'g' ? '100' : '1';
+  }
+
+  function tcmResolveGrams(): number | undefined {
+    if (!tcmPicked) {
+      const amount = Number((document.getElementById('tcm-amount') as HTMLInputElement | null)?.value);
+      return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+    }
+    const amount = Number((document.getElementById('tcm-amount') as HTMLInputElement | null)?.value);
+    if (!Number.isFinite(amount) || amount <= 0) return undefined;
+    const unit = (document.getElementById('tcm-unit') as HTMLSelectElement | null)?.value || 'g';
+    const gramsByUnit = tcmPicked.gramsByUnit;
+    if (tcmPicked.pickKind === 'product') {
+      if (unit === 'pack') {
+        const net = tcmPicked.netGrams;
+        return net && net > 0 ? amount * net : undefined;
+      }
+      if (unit === 'serving') {
+        const serving = tcmPicked.servingGrams;
+        return serving && serving > 0 ? amount * serving : undefined;
+      }
+    }
+    if (unit.startsWith('u:')) {
+      const key = unit.slice(2);
+      const per = gramsByUnit?.[key] ?? lookupGramsPerUnit(gramsByUnit, key);
+      return per && per > 0 ? amount * per : undefined;
+    }
+    return amount;
+  }
+
+  function tcmApplyPreview(): void {
+    const preview = document.getElementById('tcm-preview');
+    const grams = tcmResolveGrams();
+    if (!tcmPicked || grams == null) {
+      if (preview) preview.textContent = tcmPicked ? 'Menge angeben' : '';
+      return;
+    }
+    const per100 = tcmPicked.pickKind === 'product'
+      ? (tcmPicked.nutritionPer100g || {})
+      : (tcmPicked.nutritionPer100g || {});
+    const scaled = scaleNutrition(per100, grams / 100);
+    if (preview) {
+      const kcal = scaled.calories != null ? `${Math.round(scaled.calories)} kcal` : 'ohne kcal';
+      preview.textContent = `≈ ${kcal} für ${Math.round(grams * 10) / 10} g`;
+    }
+  }
+
+  function tcmPickLabel(pick: TcmPick): string {
+    if (pick.pickKind === 'ingredient') return pick.name;
+    return displayProductName(pick);
+  }
+
+  function selectTcmPick(pick: TcmPick): void {
+    tcmPicked = pick;
+    tcmResultPicks = [];
+    tcmSetMoreVisible(false);
+    const results = document.getElementById('tcm-results');
+    if (results) results.innerHTML = '';
+    const wrap = document.getElementById('tcm-amount-wrap');
+    wrap?.classList.remove('hidden');
+    const selected = document.getElementById('tcm-selected');
+    if (selected) {
+      selected.classList.remove('hidden');
+      const meta = pick.pickKind === 'product' ? productMetaLine(pick) : 'Zutat aus dem Register';
+      const img = pick.pickKind === 'product' && pick.imageUrl
+        ? `<img src="${escapeHtml(pick.imageUrl)}" alt="" class="w-full h-full object-cover" />`
+        : `<span class="text-lg">${pick.pickKind === 'ingredient' ? '🥚' : '🥫'}</span>`;
+      selected.innerHTML = `
+        <div class="flex items-start gap-2">
+          <div class="w-12 h-12 flex-shrink-0 bg-white dark:bg-gray-800 rounded overflow-hidden flex items-center justify-center">${img}</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(tcmPickLabel(pick))}</div>
+            <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">${escapeHtml(meta)}</div>
+          </div>
+        </div>`;
+    }
+    tcmFillUnits(pick, compositionModal?.mode === 'swap' ? compositionModal.currentGrams : undefined);
+    tcmStatus(pick.pickKind === 'ingredient' ? 'Zutat übernommen.' : (pick.source === 'local' ? 'Produkt aus dem Register übernommen.' : 'Open-Food-Facts-Produkt übernommen.'));
+    tcmApplyEnabled(true);
+    tcmApplyPreview();
+  }
+
+  function renderTcmProductRow(p: PickedProduct, origin: 'lokal' | 'OFF'): string {
+    const originClass = origin === 'lokal'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : 'text-blue-600 dark:text-blue-400';
+    const pick: TcmProductPick = { ...p, pickKind: 'product' };
+    const pickIndex = tcmResultPicks.length;
+    tcmResultPicks.push(pick);
+    const meta = productMetaLine(p);
+    return `
+      <div class="flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded">
+        <div class="flex items-start gap-2 min-w-0">
+          <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center">
+            ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<span class="text-lg">🥫</span>'}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white break-words">${escapeHtml(p.name)}</div>
+            <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+              <span class="uppercase font-semibold ${originClass} shrink-0">${origin}</span>
+              ${meta ? `<span class="break-words min-w-0">${escapeHtml(meta)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <button type="button" data-tcm-pick="${pickIndex}" class="text-xs px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded w-full">Übernehmen</button>
+      </div>`;
+  }
+
+  function renderTcmIngredientRow(ing: TcmIngredientPick): string {
+    const pickIndex = tcmResultPicks.length;
+    tcmResultPicks.push(ing);
+    const kcal = ing.nutritionPer100g?.calories;
+    const meta = kcal != null ? `${Math.round(kcal)} kcal / 100 g` : 'ohne Nährwerte / 100 g';
+    return `
+      <div class="flex flex-col gap-2 p-2 border border-gray-200 dark:border-gray-700 rounded">
+        <div class="flex items-start gap-2 min-w-0">
+          <div class="w-12 h-12 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden flex items-center justify-center"><span class="text-lg">🥗</span></div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-gray-900 dark:text-white break-words">${escapeHtml(ing.name)}</div>
+            <div class="text-[11px] text-gray-500 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+              <span class="uppercase font-semibold text-amber-600 dark:text-amber-400 shrink-0">Zutat</span>
+              <span>${escapeHtml(meta)}</span>
+            </div>
+          </div>
+        </div>
+        <button type="button" data-tcm-pick="${pickIndex}" class="text-xs px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded w-full">Übernehmen</button>
+      </div>`;
+  }
+
+  async function searchTcmLocal(query: string): Promise<void> {
+    const results = document.getElementById('tcm-results');
+    if (!results) return;
+    const trimmed = query.trim();
+    tcmResultPicks = [];
+    results.innerHTML = '';
+    tcmSetMoreVisible(false);
+    if (!trimmed) {
+      if (compositionModal?.catalogueIngredientId) await loadLinkedProducts(compositionModal.catalogueIngredientId, results);
+      tcmStatus('');
+      return;
+    }
+    tcmStatus('Register …');
+    try {
+      const [productsRes, ingredientsRes] = await Promise.all([
+        fetch(`/api/products?q=${encodeURIComponent(trimmed)}&limit=8`),
+        fetch(`/api/ingredients/catalogue?q=${encodeURIComponent(trimmed)}&limit=8`),
+      ]);
+      const products = productsRes.ok ? await productsRes.json() : [];
+      const ingredients = ingredientsRes.ok ? await ingredientsRes.json() : [];
+      const productList = Array.isArray(products) ? products : [];
+      const ingredientList = Array.isArray(ingredients) ? ingredients : [];
+      if (compositionModal?.catalogueIngredientId) {
+        await loadLinkedProducts(compositionModal.catalogueIngredientId, results, new Set(productList.map((p: any) => p.id)));
+      }
+      for (const raw of ingredientList) {
+        results.insertAdjacentHTML('beforeend', renderTcmIngredientRow({
+          pickKind: 'ingredient',
+          id: raw.id,
+          name: raw.name,
+          nutritionPer100g: raw.nutritionPer100g,
+          gramsByUnit: raw.gramsByUnit,
+        }));
+      }
+      for (const raw of productList) {
+        results.insertAdjacentHTML('beforeend', renderTcmProductRow(asLocalPick(raw), 'lokal'));
+      }
+      if (!ingredientList.length && !productList.length) {
+        results.insertAdjacentHTML('beforeend', '<p class="text-[11px] text-gray-500">Keine Treffer im Register — „Online suchen“ für Open Food Facts.</p>');
+      }
+      tcmStatus(`${ingredientList.length ? `${ingredientList.length} Zutaten` : ''}${ingredientList.length && productList.length ? ' · ' : ''}${productList.length ? `${productList.length} Produkte` : ''}`.trim() || 'Nichts im Register.');
+    } catch {
+      tcmStatus('Lokale Suche fehlgeschlagen.');
+    }
+  }
+
+  async function loadLinkedProducts(catalogueIngredientId: string, results: HTMLElement, skipIds?: Set<string>): Promise<void> {
+    try {
+      const res = await fetch(`/api/products?ingredientId=${encodeURIComponent(catalogueIngredientId)}`);
+      if (!res.ok) return;
+      const list = await res.json();
+      const products = Array.isArray(list) ? list.filter((p: any) => !skipIds?.has(p.id)) : [];
+      if (!products.length) return;
+      results.insertAdjacentHTML('afterbegin', '<p class="text-[11px] text-gray-500 px-1">Verknüpfte Produkte</p>');
+      for (const raw of products) {
+        results.insertAdjacentHTML('beforeend', renderTcmProductRow(asLocalPick(raw), 'lokal'));
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function searchTcmOff(append = false): Promise<void> {
+    const input = document.getElementById('tcm-search') as HTMLInputElement | null;
+    const results = document.getElementById('tcm-results');
+    if (!input || !results) return;
+    const query = input.value.trim();
+    if (!query) return;
+    if (/^\d{6,14}$/.test(query)) {
+      await lookupTcmEan(query);
+      return;
+    }
+    if (!append) {
+      tcmOffQuery = query;
+      tcmOffPage = 0;
+      results.innerHTML = '';
+      tcmResultPicks = [];
+    } else if (query !== tcmOffQuery) {
+      return searchTcmOff(false);
+    }
+    const nextPage = append ? tcmOffPage + 1 : 1;
+    tcmStatus(append ? 'Weitere Ergebnisse werden geladen …' : 'Open Food Facts …');
+    tcmSetMoreVisible(append && tcmOffHasMore, true);
+    try {
+      const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(query)}&page=${nextPage}&pageSize=20`);
+      if (!res.ok) throw new Error('search failed');
+      const data = await res.json();
+      if (data?.error && !Array.isArray(data.results)) {
+        tcmStatus(String(data.error));
+        tcmSetMoreVisible(false);
+        return;
+      }
+      const localHits = append ? [] : (Array.isArray(data.local) ? data.local : []);
+      const remoteHits = Array.isArray(data.results) ? data.results : [];
+      if (!append) {
+        for (const raw of localHits) {
+          results.insertAdjacentHTML('beforeend', renderTcmProductRow(asLocalPick(raw), 'lokal'));
+        }
+      }
+      for (const raw of remoteHits) {
+        results.insertAdjacentHTML('beforeend', renderTcmProductRow(asOffPick(raw), 'OFF'));
+      }
+      tcmOffPage = Number(data.page) || nextPage;
+      tcmOffHasMore = Boolean(data.hasMore) && remoteHits.length > 0;
+      tcmStatus(`${localHits.length ? `${localHits.length} lokal` : ''}${localHits.length && remoteHits.length ? ' · ' : ''}${remoteHits.length ? `${remoteHits.length} Open Food Facts` : ''}${tcmOffHasMore ? ' …' : ''}`.trim() || 'Keine Treffer.');
+      tcmSetMoreVisible(tcmOffHasMore);
+    } catch {
+      tcmStatus('Online-Suche fehlgeschlagen.');
+      tcmSetMoreVisible(append && tcmOffHasMore);
+    }
+  }
+
+  async function lookupTcmEan(ean: string): Promise<void> {
+    const results = document.getElementById('tcm-results');
+    tcmStatus(`Barcode ${ean}: Produkt wird geholt …`);
+    tcmSetMoreVisible(false);
+    try {
+      const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(ean)}`);
+      if (!res.ok) throw new Error('lookup failed');
+      const data = await res.json();
+      if (data.source === 'local' && data.product) {
+        if (results) results.innerHTML = '';
+        tcmResultPicks = [];
+        selectTcmPick({ ...asLocalPick(data.product), pickKind: 'product' });
+        return;
+      }
+      if (data.source === 'openfoodfacts' && data.product) {
+        if (results) results.innerHTML = '';
+        tcmResultPicks = [];
+        selectTcmPick({ ...asOffPick(data.product), pickKind: 'product' });
+        return;
+      }
+      tcmStatus(`Kein Produkt zu EAN ${ean} gefunden.`);
+    } catch {
+      tcmStatus('Barcode-Lookup fehlgeschlagen.');
+    }
+  }
+
+  async function openCompositionModal(state: CompositionModalState): Promise<void> {
+    compositionModal = state;
+    tcmPicked = null;
+    tcmResultPicks = [];
+    tcmApplyEnabled(false);
+    const modal = document.getElementById('tracker-composition-modal');
+    const title = document.getElementById('tcm-title');
+    const context = document.getElementById('tcm-context');
+    const apply = document.getElementById('tcm-apply');
+    if (title) title.textContent = state.mode === 'swap' ? 'Zutat / Produkt tauschen' : 'Produkt hinzufügen';
+    if (context) {
+      context.textContent = state.mode === 'swap'
+        ? `${state.slotName || 'Zutat'}${state.currentGrams ? ` · aktuell ${Math.round(state.currentGrams * 10) / 10} g` : ''}`
+        : 'Menge nach der Auswahl angeben — z. B. ein Spiegelei extra.';
+    }
+    if (apply) apply.textContent = state.mode === 'swap' ? 'Tauschen' : 'Hinzufügen';
+    modal?.classList.remove('hidden');
+    const search = document.getElementById('tcm-search') as HTMLInputElement | null;
+    if (search) {
+      search.value = '';
+      search.focus();
+    }
+    const results = document.getElementById('tcm-results');
+    if (results) results.innerHTML = '';
+    document.getElementById('tcm-amount-wrap')?.classList.add('hidden');
+    const selected = document.getElementById('tcm-selected');
+    if (selected) {
+      selected.classList.add('hidden');
+      selected.innerHTML = '';
+    }
+    tcmSetMoreVisible(false);
+    tcmStatus('');
+    if (state.catalogueIngredientId && results) {
+      await loadLinkedProducts(state.catalogueIngredientId, results);
+      if (tcmResultPicks.length) tcmStatus('Verknüpfte Produkte — oder unten suchen.');
+    }
+  }
+
+  function tcmPayload(): Record<string, unknown> | null {
+    if (!compositionModal || !tcmPicked) return null;
+    const grams = tcmResolveGrams();
+    if (grams == null || grams <= 0) return null;
+    const body: Record<string, unknown> = {
+      id: compositionModal.entryId,
+      action: compositionModal.mode,
+      grams,
+    };
+    if (compositionModal.mode === 'swap') body.componentId = compositionModal.componentId;
+    if (tcmPicked.pickKind === 'ingredient') {
+      body.catalogueIngredientId = tcmPicked.id;
+    } else if (tcmPicked.id) {
+      body.productId = tcmPicked.id;
+    } else {
+      body.product = {
+        ean: tcmPicked.ean ?? null,
+        name: tcmPicked.name,
+        brand: tcmPicked.brand ?? null,
+        netGrams: tcmPicked.netGrams ?? null,
+        packageLabel: tcmPicked.packageLabel ?? null,
+        imageUrl: tcmPicked.imageUrl ?? null,
+        source: tcmPicked.source === 'openfoodfacts' ? 'openfoodfacts' : 'manual',
+        offCode: tcmPicked.offCode ?? null,
+        nutritionPer100g: tcmPicked.nutritionPer100g ?? null,
+        gramsByUnit: tcmPicked.gramsByUnit ?? null,
+      };
+    }
+    return body;
+  }
+
+  async function applyCompositionChange(): Promise<void> {
+    const body = tcmPayload();
+    if (!body) {
+      alert('Bitte eine Auswahl und eine Menge größer 0 angeben.');
+      return;
+    }
+    const res = await fetch('/api/tracker/diary', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(typeof err?.error === 'string' ? err.error : 'Änderung konnte nicht gespeichert werden.');
+      return;
+    }
+    const updated = await res.json();
+    if (updated?.id && updated.composition) {
+      compositionCache.set(updated.id, { composition: updated.composition, reconstructed: false });
+      expandedDiaryIds.add(updated.id);
+    }
+    closeCompositionModal();
+    await refreshDiary();
+  }
+
+  async function removePlanExtra(entryId: string, componentId: string): Promise<void> {
+    if (!confirm('Extra-Produkt von diesem Eintrag entfernen?')) return;
+    const res = await fetch('/api/tracker/diary', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: entryId, action: 'remove', componentId }),
+    });
+    if (!res.ok) {
+      alert('Konnte nicht entfernt werden.');
+      return;
+    }
+    const updated = await res.json();
+    if (updated?.id && updated.composition) {
+      compositionCache.set(updated.id, { composition: updated.composition, reconstructed: false });
+      expandedDiaryIds.add(updated.id);
+    }
+    await refreshDiary();
   }
 
   async function refreshPlans() {
@@ -1234,22 +1895,6 @@ import Layout from '../layouts/Layout.astro';
       await refreshWeight();
     }
   });
-
-  type PickedProduct = {
-    id?: string;
-    ean?: string;
-    name: string;
-    brand?: string;
-    netGrams?: number;
-    servingGrams?: number;
-    servingLabel?: string;
-    packageLabel?: string;
-    nutritionPer100g?: NutritionData;
-    gramsByUnit?: Record<string, number>;
-    source: 'local' | 'openfoodfacts';
-    offCode?: string;
-    imageUrl?: string;
-  };
 
   let pickedProduct: PickedProduct | null = null;
   let tdLocalTimer: number | undefined;
@@ -1676,7 +2321,7 @@ import Layout from '../layouts/Layout.astro';
   document.getElementById('td-off-search')?.addEventListener('click', () => searchOffProducts(false));
   document.getElementById('td-product-more')?.addEventListener('click', () => searchOffProducts(true));
   document.getElementById('td-scan')?.addEventListener('click', () => {
-    (window as any).__cbTrackerScanTarget = true;
+    trackerScanTarget = 'free';
     (window as any).openBarcodeScanner?.();
   });
   document.getElementById('td-amount')?.addEventListener('input', applyScaledNutrition);
@@ -1695,13 +2340,57 @@ import Layout from '../layouts/Layout.astro';
     if (picked) selectPickedProduct(picked);
   });
   window.addEventListener('barcode-scanned', (event) => {
-    if (!(window as any).__cbTrackerScanTarget) return;
-    (window as any).__cbTrackerScanTarget = false;
+    const target = trackerScanTarget;
+    trackerScanTarget = null;
     const ean = (event as CustomEvent).detail?.ean?.trim();
-    if (!ean) return;
+    if (!ean || !target) return;
+    if (target === 'composition') {
+      const search = document.getElementById('tcm-search') as HTMLInputElement | null;
+      if (search) search.value = ean;
+      lookupTcmEan(ean);
+      return;
+    }
     const search = document.getElementById('td-product-search') as HTMLInputElement | null;
     if (search) search.value = ean;
     lookupEan(ean);
+  });
+
+  document.getElementById('tcm-search')?.addEventListener('input', () => {
+    const query = (document.getElementById('tcm-search') as HTMLInputElement).value;
+    window.clearTimeout(tcmLocalTimer);
+    tcmLocalTimer = window.setTimeout(() => { searchTcmLocal(query); }, 250);
+  });
+  document.getElementById('tcm-search')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    searchTcmOff(false);
+  });
+  document.getElementById('tcm-off-search')?.addEventListener('click', () => searchTcmOff(false));
+  document.getElementById('tcm-more')?.addEventListener('click', () => searchTcmOff(true));
+  document.getElementById('tcm-scan')?.addEventListener('click', () => {
+    trackerScanTarget = 'composition';
+    (window as any).openBarcodeScanner?.();
+  });
+  document.getElementById('tcm-amount')?.addEventListener('input', tcmApplyPreview);
+  document.getElementById('tcm-unit')?.addEventListener('change', () => {
+    const unit = (document.getElementById('tcm-unit') as HTMLSelectElement).value;
+    const amount = document.getElementById('tcm-amount') as HTMLInputElement;
+    if (unit === 'g' && (amount.value === '1' || amount.value === '')) amount.value = '100';
+    if ((unit === 'pack' || unit === 'serving' || unit.startsWith('u:')) && (amount.value === '100' || amount.value === '')) amount.value = '1';
+    tcmApplyPreview();
+  });
+  document.getElementById('tcm-results')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('button[data-tcm-pick]') as HTMLButtonElement | null;
+    if (btn?.dataset.tcmPick == null) return;
+    const picked = tcmResultPicks[Number(btn.dataset.tcmPick)];
+    if (picked) selectTcmPick(picked);
+  });
+  document.getElementById('tcm-apply')?.addEventListener('click', () => { applyCompositionChange().catch(() => undefined); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('tracker-composition-modal')?.classList.contains('hidden')) {
+      closeCompositionModal();
+    }
   });
 
   document.getElementById('tracker-diary-form')?.addEventListener('submit', async (e) => {
@@ -1771,8 +2460,10 @@ import Layout from '../layouts/Layout.astro';
   document.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
     if (!target) return;
-    const action = target.dataset.action;
-    const id = target.dataset.id;
+    const actionEl = target.closest('[data-action]') as HTMLElement | null;
+    if (!actionEl) return;
+    const action = actionEl.dataset.action;
+    const id = actionEl.dataset.id;
     if (action === 'day-prev') {
       shiftSelectedDay(-1);
       return;
@@ -1787,6 +2478,38 @@ import Layout from '../layouts/Layout.astro';
       Promise.all([refreshDiary(), refreshPlans()]).catch(() => undefined);
       return;
     }
+    if (action === 'close-composition-modal') {
+      closeCompositionModal();
+      return;
+    }
+    if (action === 'toggle-plan-details' && id) {
+      await togglePlanDetails(id);
+      return;
+    }
+    if (action === 'swap-plan-item' && id) {
+      const componentId = actionEl.dataset.componentId;
+      if (!componentId) return;
+      const cached = compositionCache.get(id);
+      const component = cached?.composition.components.find((c) => c.id === componentId);
+      await openCompositionModal({
+        mode: 'swap',
+        entryId: id,
+        componentId,
+        currentGrams: component?.grams,
+        catalogueIngredientId: component?.catalogueIngredientId,
+        slotName: component?.name,
+      });
+      return;
+    }
+    if (action === 'add-plan-product' && id) {
+      await openCompositionModal({ mode: 'add', entryId: id });
+      return;
+    }
+    if (action === 'remove-plan-item' && id) {
+      const componentId = actionEl.dataset.componentId;
+      if (componentId) await removePlanExtra(id, componentId);
+      return;
+    }
     if (action === 'del-weight' && id) {
       if (!confirm('Gewichtseintrag löschen?')) return;
       const res = await fetch(`/api/tracker/weight?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -1795,13 +2518,15 @@ import Layout from '../layouts/Layout.astro';
     }
     if (action === 'del-diary' && id) {
       if (!confirm('Eintrag aus dem Tagebuch löschen?')) return;
+      compositionCache.delete(id);
+      expandedDiaryIds.delete(id);
       const res = await fetch(`/api/tracker/diary?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (res.ok) await Promise.all([refreshDiary(), refreshPlans()]);
       return;
     }
     if (action === 'mark-eaten' && id) {
       const alias = readAlias();
-      const row = target.closest('[data-plan-row]') as HTMLElement | null;
+      const row = actionEl.closest('[data-plan-row]') as HTMLElement | null;
       const portionsInput = row?.querySelector('.eat-portions') as HTMLInputElement | null;
       const requested = Number(portionsInput?.value || '1');
       const dataRes = await fetch(`/api/tracker/meal-plans?alias=${encodeURIComponent(alias)}&activeOn=${encodeURIComponent(endOfSelectedDayIso())}`);
@@ -1832,8 +2557,8 @@ import Layout from '../layouts/Layout.astro';
       return;
     }
     if (action === 'plan-to-list' && id) {
-      const recipeId = target.dataset.recipeId;
-      const servings = Number(target.dataset.servings || '0') || undefined;
+      const recipeId = actionEl.dataset.recipeId;
+      const servings = Number(actionEl.dataset.servings || '0') || undefined;
       if (!recipeId) return;
       const alias = readAlias();
       const dataRes = await fetch(`/api/tracker/meal-plans?alias=${encodeURIComponent(alias)}&activeOn=${encodeURIComponent(endOfSelectedDayIso())}`);

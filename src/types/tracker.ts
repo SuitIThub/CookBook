@@ -112,6 +112,34 @@ export interface MealPlan {
 
 export type DiarySource = 'plan' | 'recipe' | 'product' | 'free';
 
+/** Recipe slot vs. something added on top of this eaten portion (e.g. a fried egg). */
+export type DiaryComponentKind = 'ingredient' | 'extra';
+
+/**
+ * One line in a tracked meal-prep portion: a recipe ingredient (optionally
+ * bound to a register product) or an extra product/ingredient added later.
+ * Nutrition/cost are absolute for the amount that was eaten.
+ */
+export interface DiaryComponent {
+  id: string;
+  kind: DiaryComponentKind;
+  recipeIngredientId?: string;
+  catalogueIngredientId?: string;
+  name: string;
+  productId?: string;
+  productName?: string;
+  productBrand?: string;
+  productImageUrl?: string;
+  grams: number;
+  nutrition: NutritionData;
+  costSnapshot?: number;
+  isEstimated?: boolean;
+}
+
+export interface DiaryComposition {
+  components: DiaryComponent[];
+}
+
 export interface DiaryEntry {
   id: string;
   alias: string;
@@ -127,6 +155,8 @@ export interface DiaryEntry {
   servings?: number; // for recipe/plan
   nutrition: NutritionData; // absolute snapshot of what was consumed
   costSnapshot?: number; // EUR cost of this entry, frozen at log time
+  /** Frozen ingredient/product breakdown for meal-prep (source=plan) entries. */
+  composition?: DiaryComposition;
   createdAt: Date;
 }
 

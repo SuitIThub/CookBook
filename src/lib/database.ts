@@ -4,6 +4,7 @@ import type { NutritionData, Recipe, ShoppingList, ShoppingListItem, ShoppingLis
 import type {
   BodyProfile,
   CatalogueIngredient,
+  DiaryComposition,
   DiaryEntry,
   MealPlan,
   MealPlanStatus,
@@ -23,7 +24,14 @@ import {
   type AlternativeSelection,
 } from './alternatives';
 import { resolveMainCategory } from './recipeCategories';
-import { collectIngredientsFromGroups, applyProductAssignmentsToGroups } from './recipeNutrition';
+import {
+  collectIngredientsFromGroups,
+  applyProductAssignmentsToGroups,
+  computeRecipeNutrition,
+  computeRecipePrice,
+  assignmentsFromCatalogueDefaults,
+} from './recipeNutrition';
+import { componentsFromResolutions, emptyComposition } from './diaryComposition';
 
 export class CookbookDatabase {
   private db: Database.Database;
@@ -332,6 +340,7 @@ export class CookbookDatabase {
         servings REAL,
         nutrition_json TEXT NOT NULL,
         cost_snapshot REAL,
+        composition_json TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -340,6 +349,11 @@ export class CookbookDatabase {
     // Cost snapshot column for existing databases (frozen price at log time).
     try {
       this.db.exec(`ALTER TABLE diary_entries ADD COLUMN cost_snapshot REAL`);
+    } catch {
+      // column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE diary_entries ADD COLUMN composition_json TEXT`);
     } catch {
       // column already exists
     }
@@ -2050,6 +2064,20 @@ export class CookbookDatabase {
     return rows.map(rowToCatalogueIngredient);
   }
 
+  searchCatalogueIngredients(query: string, limit = 20): CatalogueIngredient[] {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM ingredients
+         WHERE LOWER(name) LIKE LOWER(?)
+         ORDER BY usage_count DESC, LOWER(name) ASC
+         LIMIT ?`
+      )
+      .all(`%${trimmed}%`, Math.min(50, Math.max(1, limit))) as any[];
+    return rows.map(rowToCatalogueIngredient);
+  }
+
   /**
    * Upsert catalogue metadata (nutrition, density, gramsByUnit, defaultProductId)
    * for an ingredient identified by name. Creates the row if it doesn't exist.
@@ -2656,8 +2684,8 @@ export class CookbookDatabase {
     const id = uuidv4();
     this.db
       .prepare(
-        `INSERT INTO diary_entries (id, alias, eaten_at, source, plan_id, recipe_id, product_id, label, grams, servings, nutrition_json, cost_snapshot)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO diary_entries (id, alias, eaten_at, source, plan_id, recipe_id, product_id, label, grams, servings, nutrition_json, cost_snapshot, composition_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -2671,11 +2699,123 @@ export class CookbookDatabase {
         input.grams ?? null,
         input.servings ?? null,
         JSON.stringify(input.nutrition ?? {}),
-        input.costSnapshot ?? null
+        input.costSnapshot ?? null,
+        input.composition ? JSON.stringify(input.composition) : null
       );
     const entry = this.getDiaryEntry(id)!;
     eventBus.emit(EVENTS.DIARY_UPSERTED, { entry });
     return entry;
+  }
+
+  updateDiaryEntry(
+    id: string,
+    updates: Partial<Pick<DiaryEntry, 'nutrition' | 'costSnapshot' | 'composition' | 'grams' | 'label'>>
+  ): DiaryEntry | null {
+    const existing = this.getDiaryEntry(id);
+    if (!existing) return null;
+    const nutrition = updates.nutrition ?? existing.nutrition;
+    const costSnapshot = Object.prototype.hasOwnProperty.call(updates, 'costSnapshot')
+      ? updates.costSnapshot
+      : existing.costSnapshot;
+    const composition = Object.prototype.hasOwnProperty.call(updates, 'composition')
+      ? updates.composition
+      : existing.composition;
+    const grams = Object.prototype.hasOwnProperty.call(updates, 'grams') ? updates.grams : existing.grams;
+    const label = Object.prototype.hasOwnProperty.call(updates, 'label') ? updates.label : existing.label;
+    this.db
+      .prepare(
+        `UPDATE diary_entries SET
+           nutrition_json = ?,
+           cost_snapshot = ?,
+           composition_json = ?,
+           grams = ?,
+           label = ?
+         WHERE id = ?`
+      )
+      .run(
+        JSON.stringify(nutrition ?? {}),
+        costSnapshot ?? null,
+        composition ? JSON.stringify(composition) : null,
+        grams ?? null,
+        label ?? null,
+        id
+      );
+    const entry = this.getDiaryEntry(id)!;
+    eventBus.emit(EVENTS.DIARY_UPSERTED, { entry });
+    return entry;
+  }
+
+  /**
+   * Frozen ingredient/product breakdown for one eaten meal-prep portion,
+   * scaled from the recipe as written (same basis as live-nutrition per serving).
+   */
+  buildDiaryCompositionForPlan(planId: string, eatenServings: number): DiaryComposition | null {
+    const plan = this.getMealPlan(planId);
+    if (!plan) return null;
+    const recipe = this.getRecipe(plan.recipeId);
+    if (!recipe) return emptyComposition();
+    const eaten = Number.isFinite(eatenServings) && eatenServings > 0 ? eatenServings : 0;
+    if (eaten <= 0) return emptyComposition();
+
+    const alternativeSelection = mergeSelection(recipe, {});
+    const filtered = filterRecipeBySelection(recipe, alternativeSelection);
+    const visible = collectIngredientsFromGroups(filtered.ingredientGroups);
+
+    const catalogueByName = new Map<string, CatalogueIngredient>();
+    const productsById = new Map<string, Product>();
+    const uniqueNames = Array.from(new Set(visible.map((i) => i.name.trim().toLowerCase()).filter(Boolean)));
+    for (const name of uniqueNames) {
+      const cat = this.getCatalogueIngredientByName(name);
+      if (!cat) continue;
+      catalogueByName.set(name, cat);
+      const products = this.getProductsForIngredient(cat.id);
+      for (const product of products) productsById.set(product.id, product);
+      if (cat.defaultProductId && !productsById.has(cat.defaultProductId)) {
+        const dp = this.getProduct(cat.defaultProductId);
+        if (dp) productsById.set(dp.id, dp);
+      }
+    }
+    const productAssignments: Record<string, string> = {
+      ...assignmentsFromCatalogueDefaults(visible, catalogueByName),
+      ...(plan.productAssignments || {}),
+    };
+    for (const productId of Object.values(productAssignments)) {
+      if (productId && !productsById.has(productId)) {
+        const p = this.getProduct(productId);
+        if (p) productsById.set(p.id, p);
+      }
+    }
+
+    const recipeServings = Math.max(1, recipe.metadata?.servings || 1);
+    const factor = eaten / recipeServings;
+    const nutrition = computeRecipeNutrition({
+      recipe,
+      visibleIngredients: visible,
+      servings: recipeServings,
+      productAssignments,
+      catalogueByName,
+      productsById,
+    });
+    const price = computeRecipePrice({
+      recipe,
+      visibleIngredients: visible,
+      servings: recipeServings,
+      productAssignments,
+      catalogueByName,
+      productsById,
+      supermarketId: plan.supermarketId,
+    });
+    const priceById = new Map(price.ingredients.map((r) => [r.ingredientId, r]));
+    const components = componentsFromResolutions(nutrition.ingredients, priceById, factor, () => uuidv4());
+    for (const component of components) {
+      if (!component.productId) continue;
+      const product = productsById.get(component.productId);
+      if (!product) continue;
+      component.productName = product.name;
+      component.productBrand = product.brand;
+      component.productImageUrl = product.imageUrl;
+    }
+    return { components };
   }
 
   deleteDiaryEntry(id: string): boolean {
@@ -2804,8 +2944,16 @@ function rowToDiaryEntry(row: any): DiaryEntry {
     servings: row.servings ?? undefined,
     nutrition: row.nutrition_json ? safeParseJson<NutritionData>(row.nutrition_json) ?? {} : {},
     costSnapshot: row.cost_snapshot ?? undefined,
+    composition: parseDiaryComposition(row.composition_json),
     createdAt: parseDate(row.created_at),
   };
+}
+
+function parseDiaryComposition(raw: unknown): DiaryComposition | undefined {
+  const parsed = typeof raw === 'string' ? safeParseJson<DiaryComposition>(raw) : undefined;
+  if (!parsed || !Array.isArray(parsed.components)) return undefined;
+  const components = parsed.components.filter((c) => c && typeof c.id === 'string' && typeof c.name === 'string');
+  return { components };
 }
 
 // Create a singleton instance
