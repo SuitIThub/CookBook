@@ -12,7 +12,7 @@
     "start": "HOST=0.0.0.0 node dist/server/entry.mjs",
     "build:start": "npm run build && npm run start",
     "astro": "astro",
-    "test": "tsx --test src/lib/openFoodFacts.test.ts src/lib/calorieGoal.test.ts src/lib/diaryComposition.test.ts",
+    "test": "tsx --test src/lib/openFoodFacts.test.ts src/lib/calorieGoal.test.ts src/lib/diaryComposition.test.ts src/lib/apiRoutes.smoke.test.ts",
     "db:init": "node scripts/init-db.js",
     "db:migrate": "node scripts/migrate-db.js",
     "db:unify-units": "node scripts/unify-recipe-units.js",
