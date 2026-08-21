@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3';
+import type { SqlDriver } from './db/driver';
+import { BetterSqlite3Driver } from './db/betterSqlite3Driver';
 import { v4 as uuidv4 } from 'uuid';
 import type { NutritionData, Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe, Quantity } from '../types/recipe';
 import type {
@@ -34,10 +35,16 @@ import {
 import { componentsFromResolutions, emptyComposition } from './diaryComposition';
 
 export class CookbookDatabase {
-  private db: Database.Database;
+  private db: SqlDriver;
 
-  constructor(dbPath: string = './cookbook.db') {
-    this.db = new Database(dbPath);
+  /**
+   * Accepts any SqlDriver so the same data layer runs on the server
+   * (better-sqlite3) and in the app (sql.js). Defaults to a better-sqlite3
+   * driver so existing server call sites (`new CookbookDatabase()`) are
+   * unchanged.
+   */
+  constructor(driver: SqlDriver = new BetterSqlite3Driver('./cookbook.db')) {
+    this.db = driver;
     this.db.pragma('journal_mode = WAL');
     // Enforce foreign keys so ON DELETE CASCADE on the tracker junction tables
     // (ingredient_products, product_supermarkets) actually fires. better-sqlite3
