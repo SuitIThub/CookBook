@@ -8,7 +8,14 @@ export const GET: APIRoute = async ({ url }) => {
     const id = searchParams.get('id');
     const action = searchParams.get('action');
 
-    if (id && action === 'recipes') {
+    if (action === 'global-template') {
+      // Get the global template shopping list (may be null if not configured)
+      const globalTemplate = db.getGlobalTemplateShoppingList();
+      return new Response(JSON.stringify(globalTemplate), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } else if (id && action === 'recipes') {
       // Get available recipes for adding to shopping list
       const recipes = db.getAllRecipes();
       const recipeSummaries = recipes.map(recipe => ({

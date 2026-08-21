@@ -63,8 +63,15 @@ export const GET: APIRoute = async ({ url, request, site }) => {
       });
     }
 
-    // If id parameter is provided, get single recipe
+    // If id parameter is provided, get single recipe (or its variants)
     if (id) {
+      if (searchParams.get('action') === 'variants') {
+        const variants = db.getVariantsForRecipe(id);
+        return new Response(JSON.stringify(variants), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
       const recipe = db.getRecipe(id);
       if (!recipe) {
         return new Response(JSON.stringify({ error: 'Recipe not found' }), {
