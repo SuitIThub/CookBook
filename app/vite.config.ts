@@ -26,5 +26,11 @@ export default defineConfig({
       '/api': { target: ASTRO_DEV, changeOrigin: true },
       '/uploads': { target: ASTRO_DEV, changeOrigin: true }
     }
+  },
+  preview: {
+    proxy: {
+      '/api': { target: ASTRO_DEV, changeOrigin: true },
+      '/uploads': { target: ASTRO_DEV, changeOrigin: true }
+    }
   }
 });

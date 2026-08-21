@@ -405,9 +405,20 @@ export class CookbookDatabase {
       `CREATE INDEX IF NOT EXISTS idx_sync_changes_type_seq ON sync_changes(entity_type, seq)`
     );
 
+    // Echo-suppression flag. When a client applies rows pulled from the server,
+    // it sets applying=1 so the triggers below do NOT log those writes to
+    // sync_changes — otherwise the client would push the server's own changes
+    // back on the next sync. The server never sets this (stays 0), so its
+    // push-applied writes ARE logged and reach other clients.
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS sync_state (id INTEGER PRIMARY KEY CHECK (id = 1), applying INTEGER NOT NULL DEFAULT 0)`
+    );
+    this.db.exec(`INSERT OR IGNORE INTO sync_state (id, applying) VALUES (1, 0)`);
+
     // Epoch milliseconds (second resolution is fine here), matching the ms
     // convention already used by alias_settings.updated_at.
     const NOW_MS = `CAST(strftime('%s','now') AS INTEGER) * 1000`;
+    const NOT_APPLYING = `WHEN (SELECT applying FROM sync_state WHERE id = 1) = 0`;
     const specs: { table: string; type: string; scoped: boolean }[] = [
       { table: 'recipes', type: 'recipe', scoped: false },
       { table: 'shopping_lists', type: 'shopping_list', scoped: false },
@@ -430,6 +441,7 @@ export class CookbookDatabase {
       // Delete: tombstone (for merge) + change-log 'delete' (for the cursor).
       this.db.exec(`
         CREATE TRIGGER trg_tombstone_${s.table} AFTER DELETE ON ${s.table}
+        ${NOT_APPLYING}
         BEGIN
           INSERT OR REPLACE INTO sync_tombstones (entity_type, entity_id, alias, deleted_at)
           VALUES ('${s.type}', OLD.id, ${aliasOld}, ${NOW_MS});
@@ -439,6 +451,7 @@ export class CookbookDatabase {
       `);
       this.db.exec(`
         CREATE TRIGGER trg_sync_ins_${s.table} AFTER INSERT ON ${s.table}
+        ${NOT_APPLYING}
         BEGIN
           INSERT INTO sync_changes (entity_type, entity_id, alias, op, changed_at)
           VALUES ('${s.type}', NEW.id, ${aliasNew}, 'upsert', ${NOW_MS});
@@ -446,6 +459,7 @@ export class CookbookDatabase {
       `);
       this.db.exec(`
         CREATE TRIGGER trg_sync_upd_${s.table} AFTER UPDATE ON ${s.table}
+        ${NOT_APPLYING}
         BEGIN
           INSERT INTO sync_changes (entity_type, entity_id, alias, op, changed_at)
           VALUES ('${s.type}', NEW.id, ${aliasNew}, 'upsert', ${NOW_MS});
@@ -455,6 +469,26 @@ export class CookbookDatabase {
   }
 
   // --- Sync support (Phase 2) ---
+
+  /**
+   * Run `fn` with echo-suppression on: writes inside are NOT recorded in the
+   * change log (used by clients when applying rows pulled from the server, so
+   * those rows aren't pushed back). Resets the flag even if `fn` throws.
+   */
+  applySync<T>(fn: () => T): T {
+    const before = this.getMaxSyncSeq();
+    this.db.prepare('UPDATE sync_state SET applying = 1 WHERE id = 1').run();
+    try {
+      return fn();
+    } finally {
+      this.db.prepare('UPDATE sync_state SET applying = 0 WHERE id = 1').run();
+      // Guarantee: no net change-log entries from applied rows, so the client's
+      // outbox never re-pushes server data — even if a trigger's WHEN guard is
+      // evaluated inconsistently by the underlying engine. (sql.js was observed
+      // to let one row slip past the flag; this trim makes it deterministic.)
+      this.db.prepare('DELETE FROM sync_changes WHERE seq > ?').run(before);
+    }
+  }
 
   /** Highest change-log sequence, used as the sync cursor high-water mark. */
   getMaxSyncSeq(): number {

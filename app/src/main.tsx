@@ -11,12 +11,13 @@ const queryClient = new QueryClient({
   }
 });
 
+// Note: intentionally not wrapping in <React.StrictMode>. Its double-invoke of
+// effects re-runs data-mutating bootstrap/sync flows twice, which corrupts the
+// local replica state. Re-add once effects are side-effect-free.
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </React.StrictMode>
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </QueryClientProvider>
 );

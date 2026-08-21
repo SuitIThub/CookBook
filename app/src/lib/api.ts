@@ -29,6 +29,18 @@ export async function apiGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    throw new ApiError(`POST ${path} failed with ${res.status}`, res.status, path);
+  }
+  return (await res.json()) as T;
+}
+
 /** Resolve a server asset path (e.g. /uploads/x.jpg) against the API base. */
 export function assetUrl(path?: string | null): string | undefined {
   if (!path) return undefined;
