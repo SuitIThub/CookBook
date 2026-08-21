@@ -73,6 +73,15 @@ cd android && JAVA_HOME=<jdk17> ANDROID_HOME=<sdk> ./gradlew.bat assembleDebug
 - **Emulator vs. echtes Gerät**: AVD erreicht den Host über `10.0.2.2`, ein
   echtes Handy über die LAN-IP. Base-URL entsprechend wählen. Der aktuelle APK
   ist auf die LAN-IP gebaut → echtes Gerät im selben WLAN.
+- **Mixed Content (der teure!)**: Capacitors Default `androidScheme: 'https'`
+  macht die WebView-Origin `https://localhost`. Ein `fetch()` auf die
+  **http**-LAN-API ist dann Mixed Content und wird still geblockt → „failed to
+  fetch", obwohl Cleartext, CORS und Firewall stimmen. Symptom-Trennung: der
+  Handy-**Browser** erreicht die URL (Navigation, kein MC-Check), die **App**
+  nicht (WebView-fetch). Fix: `server.androidScheme: 'http'` in
+  `capacitor.config.ts` (Schema an die API angleichen). Bei HTTPS-Server zurück
+  auf `https`. Alternative fürs Grundproblem: `CapacitorHttp` (fetch nativ,
+  umgeht CORS + Mixed Content komplett). — **On-Device verifiziert 2026-08-21.**
 
 ## Bewusst später
 - Lokale SQLite / Sync / Tombstones (Phase 2).
