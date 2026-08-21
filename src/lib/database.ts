@@ -357,6 +357,54 @@ export class CookbookDatabase {
     } catch {
       // column already exists
     }
+
+    this.initSyncSchema();
+  }
+
+  /**
+   * Sync foundation (Phase 2): record hard deletes as tombstones so a future
+   * offline replica does not resurrect deleted rows on merge. Implemented with
+   * AFTER DELETE triggers rather than editing every delete site, so all code
+   * paths (incl. cascades and variant deletion) are covered. `alias` is captured
+   * for per-profile scoped tables — the axis for the planned per-entity sync
+   * opt-out. Decision-independent groundwork (needed for either sync strategy).
+   */
+  private initSyncSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_tombstones (
+        entity_type TEXT NOT NULL,
+        entity_id   TEXT NOT NULL,
+        alias       TEXT,
+        deleted_at  INTEGER NOT NULL,
+        PRIMARY KEY (entity_type, entity_id)
+      )
+    `);
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_sync_tombstones_deleted_at ON sync_tombstones(deleted_at)`
+    );
+
+    // Epoch milliseconds (second resolution is fine for tombstones), matching
+    // the ms convention already used by alias_settings.updated_at.
+    const NOW_MS = `CAST(strftime('%s','now') AS INTEGER) * 1000`;
+    const specs: { table: string; type: string; alias: string }[] = [
+      { table: 'recipes', type: 'recipe', alias: 'NULL' },
+      { table: 'shopping_lists', type: 'shopping_list', alias: 'NULL' },
+      { table: 'products', type: 'product', alias: 'NULL' },
+      { table: 'supermarkets', type: 'supermarket', alias: 'NULL' },
+      { table: 'ingredients', type: 'ingredient', alias: 'NULL' },
+      { table: 'meal_plans', type: 'meal_plan', alias: 'OLD.alias' },
+      { table: 'weight_logs', type: 'weight_log', alias: 'OLD.alias' },
+      { table: 'diary_entries', type: 'diary_entry', alias: 'OLD.alias' }
+    ];
+    for (const s of specs) {
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS trg_tombstone_${s.table} AFTER DELETE ON ${s.table}
+        BEGIN
+          INSERT OR REPLACE INTO sync_tombstones (entity_type, entity_id, alias, deleted_at)
+          VALUES ('${s.type}', OLD.id, ${s.alias}, ${NOW_MS});
+        END
+      `);
+    }
   }
 
   // Recipe CRUD operations
