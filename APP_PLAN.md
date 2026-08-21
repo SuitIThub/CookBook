@@ -83,6 +83,34 @@ cd android && JAVA_HOME=<jdk17> ANDROID_HOME=<sdk> ./gradlew.bat assembleDebug
   auf `https`. Alternative fürs Grundproblem: `CapacitorHttp` (fetch nativ,
   umgeht CORS + Mixed Content komplett). — **On-Device verifiziert 2026-08-21.**
 
+## Phase 2 — Spike-Ergebnis (P2-2) & Empfehlung
+
+**Datenmenge (Live-DB, gemessen):** Datei 24,5 MB, aber **48 % freie Pages
+(Bloat, per `VACUUM` rückholbar)**. Echte Daten ~12,7 MB — davon **12,0 MB
+allein `shopping_lists`** (23 Listen, ~520 KB/Liste → wahrscheinlich eingebettete
+Rezept-Snapshots/Akkumulation, separater Daten-Smell). Rezepte (alle 58) **0,25
+MB**, Produkte/Zutaten/Tracker ~0. → Größe ist **kein Blocker** für einen lokalen
+In-Memory-Store.
+
+**Treiber-Adapter (bewiesen):** `database.ts` nutzt eine kleine, standardisierte
+API-Oberfläche (102× `prepare`, 42× `exec`, 3× `transaction`, 2× `pragma`, nur
+positionale `?`-Params, kein `iterate/pluck/raw`, keine `lastInsertRowid`). Ein
+Node-Spike ließ **dieselbe** Query-Sequenz über einen dünnen Adapter gegen
+`better-sqlite3` **und** `sql.js` (synchrones WASM) laufen → **identische
+Ergebnisse**. Die sync/async-Sorge entfällt, weil `sql.js` synchron ist wie
+`better-sqlite3`.
+
+**→ Empfehlung: Strategie Y (geteilter, treiber-agnostischer Kern).** `database.ts`
+bekommt eine injizierbare `SqlDriver`-Schnittstelle; der better-sqlite3-Adapter ist
+quasi Pass-through (bestehende Aufrufe bleiben fast unverändert), der App-Adapter
+nutzt `sql.js`. Eine Implementierung, kein Drift — konsequente Fortsetzung von
+API-Grenze + geteilten Typen.
+
+**Rest-Unbekannte (geringes Risiko, Folgeschritte):** sql.js-WASM im echten
+Capacitor-WebView laden (kurzer Geräte-Check); Persistenz (sql.js exportiert
+Bytes → Capacitor Filesystem/IndexedDB, Reload beim Start); `pragma`-Handling im
+Adapter; der 12-MB-shopping_lists-Smell separat untersuchen.
+
 ## Bewusst später
 - Lokale SQLite / Sync / Tombstones (Phase 2).
 - Weitere Features (Einkaufsliste, Tracker, Produkte) nach bewiesenem Stack.
