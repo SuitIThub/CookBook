@@ -7,16 +7,16 @@ import RecipeViewControls from '../components/recipe_list/RecipeViewControls.ast
 import RecipeListHeader from '../components/recipe_list/RecipeListHeader.astro';
 import EmptyState from '../components/recipe_list/EmptyState.astro';
 import RecipeAIChatModal from '../components/modals/RecipeAIChatModal.astro';
-import { db } from '../lib/database';
+import { apiGet } from '../lib/apiClient';
 import type { Recipe } from '../types/recipe';
 
 type RecipeWithVariants = Recipe & { variants?: Recipe[] };
 
-// Load recipes from database
+// Load recipes via the API boundary (no direct db access in the view layer)
 let allRecipes: Recipe[] = [];
 let recipes: RecipeWithVariants[] = [];
 try {
-  allRecipes = db.getAllRecipes();
+  allRecipes = await apiGet<Recipe[]>('/api/recipes', Astro);
   // Only show original recipes in the overview list, but attach their variants for selection mode
   const originals = allRecipes.filter((recipe) => !recipe.parentRecipeId);
   recipes = originals.map((original) => ({
