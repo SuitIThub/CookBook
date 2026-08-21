@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 import { deleteLocalProductImage } from '../../../lib/productImages';
 
 export const GET: APIRoute = async ({ params }) => {

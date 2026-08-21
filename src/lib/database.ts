@@ -1,5 +1,4 @@
 import type { SqlDriver } from './db/driver';
-import { BetterSqlite3Driver } from './db/betterSqlite3Driver';
 import { v4 as uuidv4 } from 'uuid';
 import type { NutritionData, Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe, Quantity } from '../types/recipe';
 import type {
@@ -39,11 +38,11 @@ export class CookbookDatabase {
 
   /**
    * Accepts any SqlDriver so the same data layer runs on the server
-   * (better-sqlite3) and in the app (sql.js). Defaults to a better-sqlite3
-   * driver so existing server call sites (`new CookbookDatabase()`) are
-   * unchanged.
+   * (better-sqlite3) and in the app (sql.js). The driver is injected — the
+   * server singleton lives in database.server.ts, keeping this module free of
+   * any better-sqlite3 import so the app can import the shared core.
    */
-  constructor(driver: SqlDriver = new BetterSqlite3Driver('./cookbook.db')) {
+  constructor(driver: SqlDriver) {
     this.db = driver;
     this.db.pragma('journal_mode = WAL');
     // Enforce foreign keys so ON DELETE CASCADE on the tracker junction tables
@@ -3011,6 +3010,5 @@ function parseDiaryComposition(raw: unknown): DiaryComposition | undefined {
   return { components };
 }
 
-// Create a singleton instance
-export const db = new CookbookDatabase();
-export default CookbookDatabase; 
+// The server singleton lives in database.server.ts (constructs a better-sqlite3
+// driver). This module stays driver-agnostic and import-clean for the app. 

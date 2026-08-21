@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../../lib/database';
+import { db } from '../../../../lib/database.server';
 import { parseIngredientDefaults } from '../../../../lib/ingredientDefaults';
 
 export const POST: APIRoute = async ({ request, params }) => {

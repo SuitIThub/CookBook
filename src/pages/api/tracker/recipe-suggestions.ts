@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 import { collectIngredientsFromGroups, computeRecipeNutrition } from '../../../lib/recipeNutrition';
 import { filterRecipeBySelection, getDefaultSelection, resolveSelection } from '../../../lib/alternatives';
 import type { CatalogueIngredient, Product } from '../../../types/tracker';

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 import { lookupOpenFoodFactsProduct, searchOpenFoodFactsProducts, suggestOpenFoodFactsTerms } from '../../../lib/openFoodFacts';
 
 /**
