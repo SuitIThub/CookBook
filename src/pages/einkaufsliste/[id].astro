@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
-import { db } from '../../lib/database';
+import { apiGet } from '../../lib/apiClient';
 import type { ShoppingList } from '../../types/recipe';
 import GroupingSuggestionModal from '../../components/shopping_list/GroupingSuggestionModal.astro';
 import ViewNotesModal from '../../components/modals/ViewNotesModal.astro';
@@ -15,10 +15,10 @@ if (!id) {
   return Astro.redirect('/einkaufslisten');
 }
 
-// Einkaufsliste laden
+// Einkaufsliste laden (404 -> apiGet wirft -> Liste bleibt null -> redirect)
 let shoppingList: ShoppingList | null = null;
 try {
-  shoppingList = db.getShoppingList(id);
+  shoppingList = await apiGet<ShoppingList>(`/api/shopping-lists?id=${encodeURIComponent(id)}`, Astro);
 } catch (error) {
   console.error('Error loading shopping list:', error);
 }
@@ -31,7 +31,7 @@ if (!shoppingList) {
 let permanentListSummary: { itemCount: number; recipeCount: number } | null = null;
 let globalTemplateSummary: { itemCount: number; recipeCount: number } | null = null;
 if (!shoppingList.isPermanent) {
-  const permanentList = db.getPermanentShoppingList();
+  const permanentList = await apiGet<ShoppingList | null>('/api/shopping-lists/permanent', Astro).catch(() => null);
   if (permanentList && (permanentList.items.length > 0 || (permanentList.recipes?.length ?? 0) > 0)) {
     permanentListSummary = {
       itemCount: permanentList.items.length,
@@ -41,7 +41,7 @@ if (!shoppingList.isPermanent) {
 
   // Vorlage nur beim ersten Öffnen (Import-Modal) anbieten
   if (!shoppingList.hasSeenGlobalTemplatePrompt) {
-    const globalTemplate = db.getGlobalTemplateShoppingList();
+    const globalTemplate = await apiGet<ShoppingList | null>('/api/shopping-lists?action=global-template', Astro).catch(() => null);
     if (globalTemplate && (globalTemplate.items.length > 0 || (globalTemplate.recipes?.length ?? 0) > 0)) {
       globalTemplateSummary = {
         itemCount: globalTemplate.items.length,
