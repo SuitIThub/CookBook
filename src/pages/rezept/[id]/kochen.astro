@@ -1,12 +1,16 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import CookingMode from '../../../components/recipe/cooking/CookingMode.astro';
-import { CookbookDatabase } from '../../../lib/database';
+import { apiGet } from '../../../lib/apiClient';
+import type { Recipe } from '../../../types/recipe';
 
 const { id } = Astro.params;
-const db = new CookbookDatabase();
-const recipe = db.getRecipe(id);
-db.close();
+let recipe: Recipe | null = null;
+try {
+  recipe = id ? await apiGet<Recipe>(`/api/recipes?id=${encodeURIComponent(id)}`, Astro) : null;
+} catch (error) {
+  console.error('Error loading recipe:', error);
+}
 
 if (!recipe) {
   return Astro.redirect('/');
