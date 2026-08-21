@@ -11,7 +11,10 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       // Reuse the Astro app's type declarations without pulling in its runtime.
-      '@shared': fileURLToPath(new URL('../src/types', import.meta.url))
+      '@shared': fileURLToPath(new URL('../src/types', import.meta.url)),
+      // The shared, driver-agnostic data layer (CookbookDatabase + SqlDriver).
+      // Backed by sql.js in the app, better-sqlite3 on the server.
+      '@core': fileURLToPath(new URL('../src/lib', import.meta.url))
     }
   },
   server: {

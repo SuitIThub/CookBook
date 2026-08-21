@@ -18,7 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@shared/*": ["../src/types/*"]
+      "@shared/*": ["../src/types/*"],
+      "@core/*": ["../src/lib/*"]
     }
   },
   "include": ["src", "vite.config.ts"]
