@@ -16,6 +16,7 @@ import { GET as supermarketsGET } from '../pages/api/supermarkets';
 import { GET as ingredientsGET } from '../pages/api/ingredients';
 import { GET as permanentGET } from '../pages/api/shopping-lists/permanent/index';
 import { GET as syncPullGET } from '../pages/api/sync/pull';
+import { POST as syncPushPOST } from '../pages/api/sync/push';
 
 /** Build a minimal APIContext-like object; handlers only read url/request/site. */
 function ctx(path: string): any {
@@ -83,4 +84,15 @@ test('GET /api/sync/pull?since=0 returns a full recipe snapshot', async () => {
     body.changes.every((c: any) => c.type === 'recipe' && c.op === 'upsert' && c.data),
     'snapshot rows are recipe upserts carrying data'
   );
+});
+
+test('POST /api/sync/push with no changes is a no-op', async () => {
+  const req = new Request('http://localhost/api/sync/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ changes: [] })
+  });
+  const body = await json(await syncPushPOST({ request: req } as any));
+  assert.equal(body.ok, true, 'ok');
+  assert.equal(body.applied, 0, 'nothing applied');
 });
