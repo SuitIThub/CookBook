@@ -13,6 +13,11 @@ export const GET: APIRoute = async ({ url }) => {
     const ingredient = db.getCatalogueIngredientByName(name);
     return json(ingredient);
   }
+  const query = (params.get('q') || '').trim();
+  if (query) {
+    const limit = Math.min(50, Number.parseInt(params.get('limit') || '20', 10) || 20);
+    return json(db.searchCatalogueIngredients(query, limit));
+  }
   return json(db.getAllCatalogueIngredients());
 };
 
