@@ -1,18 +1,18 @@
 ---
 export const prerender = false;
 import Layout from '../layouts/Layout.astro';
-import { db } from '../lib/database';
+import { apiGet } from '../lib/apiClient';
 import type { ShoppingList } from '../types/recipe';
 import ShoppingListsHeader from '../components/shopping_list/ShoppingListsHeader.astro';
 import ShoppingListCard from '../components/shopping_list/ShoppingListCard.astro';
 import EmptyShoppingListsState from '../components/shopping_list/EmptyShoppingListsState.astro';
 
-// Einkaufslisten aus der Datenbank laden
+// Einkaufslisten über die API-Grenze laden
 let shoppingLists: ShoppingList[] = [];
 try {
-  shoppingLists = db.getAllShoppingLists();
+  shoppingLists = await apiGet<ShoppingList[]>('/api/shopping-lists', Astro);
 } catch (error) {
-  console.error('Error loading shopping lists from database:', error);
+  console.error('Error loading shopping lists:', error);
   shoppingLists = [];
 }
 ---
