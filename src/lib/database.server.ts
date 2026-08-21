@@ -8,7 +8,15 @@
  */
 import { CookbookDatabase } from './database';
 import { BetterSqlite3Driver } from './db/betterSqlite3Driver';
+import { ensureAuthSchema, validateToken } from './auth.server';
 
 export { CookbookDatabase } from './database';
 
-export const db = new CookbookDatabase(new BetterSqlite3Driver('./cookbook.db'));
+const driver = new BetterSqlite3Driver('./cookbook.db');
+export const db = new CookbookDatabase(driver);
+
+// Server-only token table + validation (kept out of the shared core / app bundle).
+ensureAuthSchema(driver);
+export function validateAuth(alias: string, token: string): boolean {
+  return validateToken(driver, alias, token);
+}

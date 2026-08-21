@@ -16,7 +16,8 @@
     "db:init": "node scripts/init-db.js",
     "db:migrate": "node scripts/migrate-db.js",
     "db:unify-units": "node scripts/unify-recipe-units.js",
-    "db:extract-urls": "node scripts/extract-source-urls.js"
+    "db:extract-urls": "node scripts/extract-source-urls.js",
+    "auth:gen-token": "node scripts/gen-token.js"
   },
   "dependencies": {
     "@astrojs/node": "^9.2.2",
