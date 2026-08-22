@@ -46,4 +46,9 @@ Nach Rezepten (referenzieren Rezepte + Produkte).
 ## Status
 - ✅ Fundament: geteilter Kern, Sync (Pull/Push), Auth (Token), Opt-out, Offline-
   first (Rezepte-Ansicht-Minimal).
-- ⏭️ **F1 Produkte** — als Nächstes.
+- ✅ **F1 Produkte** (Register/CRUD/Supermärkte/Barcode→OFF).
+- ✅ **F2 Zutaten-Katalog** (Liste/Nährwerte, Sync).
+- 🔄 **F3 Rezepte**: Ansicht (Live-Nährwerte/Preis/Skalierung), Bearbeiten/Anlegen,
+  Kochmodus (Timer), Varianten, **Import (URL/Text/JSON-LD)** ✅ — offen: Bilder,
+  Notizen, Export/Markdown, KI, erweiterte Zutaten-Controls (Alternativen/Verknüpfung).
+- ⏭️ Danach: F4 Einkaufslisten · F5 Tracker.

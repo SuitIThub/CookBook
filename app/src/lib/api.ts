@@ -51,7 +51,15 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body)
   });
   if (!res.ok) {
-    throw new ApiError(`POST ${path} failed with ${res.status}`, res.status, path);
+    // Surface the server's error message (e.g. import/auth failures) when present.
+    let msg = `POST ${path} failed with ${res.status}`;
+    try {
+      const j: any = await res.json();
+      if (j?.userMessage || j?.error) msg = j.userMessage || j.error;
+    } catch {
+      /* non-JSON body */
+    }
+    throw new ApiError(msg, res.status, path);
   }
   return (await res.json()) as T;
 }

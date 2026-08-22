@@ -665,6 +665,16 @@ export class CookbookDatabase {
   }
 
   upsertIngredientForSync(ci: CatalogueIngredient): void {
+    // A peer may deliver an ingredient whose name already exists locally under a
+    // different id (e.g. legacy data re-keyed by an older recipe-save path). Name
+    // is UNIQUE, so an id-keyed upsert would throw. Server First: drop the stale
+    // same-name row before inserting the authoritative one.
+    const clash = this.db
+      .prepare('SELECT id FROM ingredients WHERE name = ?')
+      .get(ci.name) as { id: string } | undefined;
+    if (clash && clash.id !== ci.id) {
+      this.db.prepare('DELETE FROM ingredients WHERE id = ?').run(clash.id);
+    }
     this.db
       .prepare(
         `INSERT INTO ingredients (
@@ -1517,9 +1527,14 @@ export class CookbookDatabase {
   private addIngredientsToAutocomplete(ingredientGroups: any[]): void {
     if (!Array.isArray(ingredientGroups)) return;
 
+    // Names are UNIQUE. Bump usage_count for an existing ingredient WITHOUT
+    // changing its id or wiping its other columns (nutrition, density, …). The
+    // old INSERT OR REPLACE re-keyed the row with a fresh uuid on every save,
+    // which churned ids across sync peers and dropped nutrition data.
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO ingredients (id, name, description, usage_count) 
-      VALUES (?, ?, ?, COALESCE((SELECT usage_count FROM ingredients WHERE name = ?) + 1, 1))
+      INSERT INTO ingredients (id, name, description, usage_count)
+      VALUES (?, ?, ?, 1)
+      ON CONFLICT(name) DO UPDATE SET usage_count = usage_count + 1
     `);
 
     const visit = (groups: any[]): void => {
@@ -1535,7 +1550,7 @@ export class CookbookDatabase {
           if (!name) continue;
           const description =
             typeof ingredient.description === 'string' ? ingredient.description : null;
-          stmt.run(uuidv4(), name, description, name);
+          stmt.run(uuidv4(), name, description);
         }
       }
     };
