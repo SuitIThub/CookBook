@@ -5,6 +5,7 @@ import { assetUrl } from '@/lib/api';
 import { localRecipe, localVariants, setLocalRecipePrivate, createLocalVariant } from '@/lib/localData';
 import { computeLocalRecipeNutrition } from '@/lib/localNutrition';
 import { exportRecipeMarkdown, exportRecipeJson, copyRecipeMarkdown } from '@/lib/recipeExport';
+import AIChatModal from '@/components/AIChatModal';
 import type {
   Ingredient,
   IngredientGroup,
@@ -94,6 +95,7 @@ export default function RecipeDetailPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
+  const [showChat, setShowChat] = useState(false);
   const baseServings = recipe?.metadata.servings ?? 1;
   const servings = servingsOverride ?? baseServings;
 
@@ -161,6 +163,9 @@ export default function RecipeDetailPage() {
           <Link to={`/rezept/${recipe.id}/kochen`} className="text-sm font-medium text-primary-600 hover:underline">
             Kochen
           </Link>
+          <button onClick={() => setShowChat(true)} className="text-sm font-medium text-primary-600 hover:underline">
+            KI
+          </button>
           <button onClick={makeVariant} className="text-sm font-medium text-primary-600 hover:underline">
             Variante
           </button>
@@ -403,6 +408,10 @@ export default function RecipeDetailPage() {
           ))}
         </ol>
       </section>
+
+      {showChat && (
+        <AIChatModal recipeId={recipe.id} recipeTitle={recipe.title} onClose={() => setShowChat(false)} />
+      )}
     </article>
   );
 }

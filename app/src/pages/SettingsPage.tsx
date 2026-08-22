@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getSettings, saveSettings } from '@/lib/settings';
+import { getSettings, saveSettings, type AiProvider } from '@/lib/settings';
 import { apiGet } from '@/lib/api';
 
 export default function SettingsPage() {
@@ -7,10 +7,13 @@ export default function SettingsPage() {
   const [serverUrl, setServerUrl] = useState(initial.serverUrl);
   const [alias, setAlias] = useState(initial.alias);
   const [token, setToken] = useState(initial.token);
+  const [aiProvider, setAiProvider] = useState<AiProvider>(initial.aiProvider);
+  const [aiModel, setAiModel] = useState(initial.aiModel);
+  const [openRouterApiKey, setOpenRouterApiKey] = useState(initial.openRouterApiKey);
   const [saved, setSaved] = useState(false);
   const [test, setTest] = useState<string | null>(null);
 
-  const persist = () => saveSettings({ serverUrl, alias, token });
+  const persist = () => saveSettings({ serverUrl, alias, token, aiProvider, aiModel, openRouterApiKey });
 
   const onSave = () => {
     persist();
@@ -85,6 +88,58 @@ export default function SettingsPage() {
             Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token: Schreiben &amp;
             Synchronisieren. Nur auf diesem Gerät gespeichert.
           </p>
+        </div>
+
+        <div className="border-t border-secondary-200 pt-5 dark:border-secondary-700">
+          <h2 className="mb-3 text-lg font-semibold">KI</h2>
+          <div className="space-y-4">
+            <div>
+              <label className={label} htmlFor="ai-provider">Anbieter</label>
+              <select
+                id="ai-provider"
+                className={field}
+                value={aiProvider}
+                onChange={(e) => setAiProvider(e.target.value as AiProvider)}
+              >
+                <option value="ollama">Ollama (Server)</option>
+                <option value="openrouter">OpenRouter</option>
+              </select>
+              <p className={hint}>
+                Ollama läuft über den Server (URL/Standardmodell serverseitig konfiguriert). OpenRouter nutzt deinen
+                eigenen Schlüssel.
+              </p>
+            </div>
+            <div>
+              <label className={label} htmlFor="ai-model">Modell (optional)</label>
+              <input
+                id="ai-model"
+                className={field}
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                placeholder={aiProvider === 'openrouter' ? 'z. B. deepseek/deepseek-chat:free' : 'leer = Serverstandard'}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </div>
+            {aiProvider === 'openrouter' && (
+              <div>
+                <label className={label} htmlFor="ai-key">OpenRouter API-Key</label>
+                <input
+                  id="ai-key"
+                  className={field}
+                  type="password"
+                  value={openRouterApiKey}
+                  onChange={(e) => setOpenRouterApiKey(e.target.value)}
+                  placeholder="sk-or-…"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <p className={hint}>Nur auf diesem Gerät gespeichert. Leer = Serverschlüssel (falls konfiguriert).</p>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
