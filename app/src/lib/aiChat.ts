@@ -191,3 +191,90 @@ export function detectVariantMarker(text: string): string | null {
   }
   return null;
 }
+
+/** Detect an edit-request marker [RECIPE_EDIT:<id>|regions=<list>]; returns the requested regions or null. */
+export function detectEditMarker(text: string): { regions: string[] } | null {
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*\[RECIPE_EDIT:([^\]|]*)(?:\|regions=([^\]]*))?\]\s*$/);
+    if (m) {
+      const regions = (m[2] ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return { regions };
+    }
+  }
+  return null;
+}
+
+export interface EditHighlight {
+  path: string;
+  before: string;
+  after: string;
+}
+
+export interface EditProposal {
+  highlights: EditHighlight[];
+  draft: any | null;
+  diagnostics: { status: string; message: string } | null;
+}
+
+/**
+ * Ask the AI for an edit patch. The server stores it as a draft and returns a
+ * preview token; we fetch the highlights and the proposed (draft) recipe so the
+ * caller can show a confirm step before applying. Online-only, token-gated.
+ */
+export async function proposeEdit(recipeId: string, editMessage: string, regions: string[]): Promise<EditProposal> {
+  const provider = getAiProvider();
+  const model = getAiModel();
+  const body: Record<string, unknown> = { recipeId, editMessage, regions, provider };
+  if (model) body.model = model;
+  if (provider === 'openrouter') {
+    const key = getOpenRouterApiKey();
+    if (key) body.openRouterApiKey = key;
+  }
+  const res = await fetch(`${apiBase()}/api/ai/propose-edit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    let msg = `Bearbeitungsvorschlag fehlgeschlagen (${res.status})`;
+    try {
+      const j: any = await res.json();
+      if (j?.error || j?.userMessage) msg = j.userMessage || j.error;
+    } catch {
+      /* non-JSON */
+    }
+    throw new Error(msg);
+  }
+  const { token } = (await res.json()) as { token?: string };
+
+  let highlights: EditHighlight[] = [];
+  let diagnostics: EditProposal['diagnostics'] = null;
+  if (token) {
+    const pv = await fetch(`${apiBase()}/api/ai/edit-preview?token=${encodeURIComponent(token)}`, {
+      headers: { Accept: 'application/json', ...authHeaders() }
+    });
+    if (pv.ok) {
+      const d: any = await pv.json();
+      highlights = Array.isArray(d?.highlights) ? d.highlights : [];
+      diagnostics = d?.diagnostics ?? null;
+    }
+  }
+
+  const dr = await fetch(`${apiBase()}/api/drafts?recipeId=${encodeURIComponent(recipeId)}`, {
+    headers: { Accept: 'application/json', ...authHeaders() }
+  });
+  const draft = dr.ok ? await dr.json() : null;
+
+  return { highlights, draft, diagnostics };
+}
+
+/** Discard a server-side draft (after applying or cancelling an edit proposal). */
+export async function discardDraft(recipeId: string): Promise<void> {
+  await fetch(`${apiBase()}/api/drafts?recipeId=${encodeURIComponent(recipeId)}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json', ...authHeaders() }
+  }).catch(() => {});
+}
