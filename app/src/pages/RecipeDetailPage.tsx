@@ -137,9 +137,14 @@ export default function RecipeDetailPage() {
 
   return (
     <article className="mx-auto max-w-3xl">
-      <Link to="/" className="text-sm text-primary-600 hover:underline">
-        ← Rezepte
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link to="/" className="text-sm text-primary-600 hover:underline">
+          ← Rezepte
+        </Link>
+        <Link to={`/rezept/${recipe.id}/bearbeiten`} className="text-sm font-medium text-primary-600 hover:underline">
+          Bearbeiten
+        </Link>
+      </div>
 
       {tabs.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1 border-b border-secondary-200 dark:border-secondary-700">

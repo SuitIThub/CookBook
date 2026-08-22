@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { runSync } from './lib/syncRunner';
 import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
+import RecipeEditPage from './pages/RecipeEditPage';
 import LocalDbTestPage from './pages/LocalDbTestPage';
 import SyncTestPage from './pages/SyncTestPage';
 import PushTestPage from './pages/PushTestPage';
@@ -85,7 +86,9 @@ export default function App() {
       <main className="mx-auto max-w-5xl px-4 py-6">
         <Routes>
           <Route path="/" element={<RecipesPage />} />
+          <Route path="/rezept/neu" element={<RecipeEditPage />} />
           <Route path="/rezept/:id" element={<RecipeDetailPage />} />
+          <Route path="/rezept/:id/bearbeiten" element={<RecipeEditPage />} />
           <Route path="/_localtest" element={<LocalDbTestPage />} />
           <Route path="/_synctest" element={<SyncTestPage />} />
           <Route path="/_pushtest" element={<PushTestPage />} />
