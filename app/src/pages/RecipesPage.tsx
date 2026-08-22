@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
 import { assetUrl } from '@/lib/api';
 import { localRecipes } from '@/lib/localData';
+import { runSync } from '@/lib/syncRunner';
+import ImportModal from '@/components/ImportModal';
 
 export default function RecipesPage() {
   // Local-first: read from the sql.js replica; a background sync keeps it fresh.
@@ -11,6 +13,16 @@ export default function RecipesPage() {
     queryFn: localRecipes
   });
   const [q, setQ] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const onImported = async (recipeId: string) => {
+    setShowImport(false);
+    await runSync(); // pull the server-created recipe into the local replica
+    queryClient.invalidateQueries();
+    navigate(`/rezept/${recipeId}`);
+  };
 
   // Overview shows originals only (variants are reached from their parent).
   const recipes = useMemo(() => {
@@ -40,12 +52,20 @@ export default function RecipesPage() {
         <h1 className="text-2xl font-bold">
           Rezepte <span className="text-sm font-normal text-secondary-500">{recipes.length}</span>
         </h1>
-        <Link
-          to="/rezept/neu"
-          className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
-        >
-          Neues Rezept
-        </Link>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="rounded-lg border border-secondary-300 px-3 py-1.5 text-sm font-medium hover:bg-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-800"
+          >
+            Importieren
+          </button>
+          <Link
+            to="/rezept/neu"
+            className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            Neues Rezept
+          </Link>
+        </div>
       </div>
 
       <input
@@ -89,6 +109,8 @@ export default function RecipesPage() {
           ))}
         </ul>
       )}
+
+      {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={onImported} />}
     </div>
   );
 }
