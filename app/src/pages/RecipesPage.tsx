@@ -37,8 +37,15 @@ export default function RecipesPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Rezepte</h1>
-        <span className="text-sm text-secondary-500">{recipes.length}</span>
+        <h1 className="text-2xl font-bold">
+          Rezepte <span className="text-sm font-normal text-secondary-500">{recipes.length}</span>
+        </h1>
+        <Link
+          to="/rezept/neu"
+          className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+        >
+          Neues Rezept
+        </Link>
       </div>
 
       <input

@@ -28,6 +28,20 @@ export async function setLocalRecipePrivate(id: string, isPrivate: boolean): Pro
   await persist();
 }
 
+/** Create (id null) or update a recipe locally via the real shared-core methods. */
+export async function saveLocalRecipe(id: string | null, data: any): Promise<Recipe> {
+  const { db, persist } = await getLocalDb();
+  const saved = id ? db.updateRecipe(id, data) : db.createRecipe(data);
+  await persist();
+  return saved as Recipe;
+}
+
+export async function deleteLocalRecipe(id: string): Promise<void> {
+  const { db, persist } = await getLocalDb();
+  db.deleteRecipe(id);
+  await persist();
+}
+
 export async function localProducts(): Promise<Product[]> {
   const { db } = await getLocalDb();
   return db.getAllProducts();
