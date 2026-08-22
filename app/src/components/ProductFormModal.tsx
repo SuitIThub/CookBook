@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { Product } from '@shared/tracker';
 import type { NutritionData } from '@shared/recipe';
 import { saveLocalProduct, deleteLocalProduct, type ProductInput } from '@/lib/localData';
+import { lookupProductByEan } from '@/lib/products';
+import BarcodeScanner from './BarcodeScanner';
 
 interface Props {
   product: Product | null; // null = new
@@ -43,6 +45,48 @@ export default function ProductFormModal({ product, onClose, onSaved }: Props) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [lookupMsg, setLookupMsg] = useState<string | null>(null);
+
+  const applyLookup = (p: {
+    name?: string;
+    brand?: string;
+    netGrams?: number;
+    packageLabel?: string;
+    nutritionPer100g?: NutritionData;
+  }) => {
+    if (p.name) setName(p.name);
+    if (p.brand) setBrand(p.brand);
+    if (p.netGrams != null) setNetGrams(String(p.netGrams));
+    if (p.packageLabel) setPackageLabel(p.packageLabel);
+    if (p.nutritionPer100g) {
+      setNutrition((prev) => {
+        const next = { ...prev };
+        for (const { key } of NUTRIENTS) {
+          const v = (p.nutritionPer100g as any)[key];
+          if (v != null) next[key] = String(v);
+        }
+        return next;
+      });
+    }
+  };
+
+  const doLookup = async (value: string) => {
+    const code = value.trim();
+    if (!code) return;
+    setLookupMsg('Suche …');
+    try {
+      const res = await lookupProductByEan(code);
+      if (!res.product) {
+        setLookupMsg('Kein Treffer für diese EAN.');
+        return;
+      }
+      applyLookup(res.product);
+      setLookupMsg(res.source === 'local' ? 'Aus lokalem Register übernommen.' : 'Von Open Food Facts übernommen.');
+    } catch (e) {
+      setLookupMsg('Lookup fehlgeschlagen: ' + (e as Error).message);
+    }
+  };
 
   const save = async () => {
     if (!name.trim()) {
@@ -112,10 +156,33 @@ export default function ProductFormModal({ product, onClose, onSaved }: Props) {
 
         <div className="space-y-3">
           <input className={field} placeholder="Name *" value={name} onChange={(e) => setName(e.target.value)} />
-          <div className="grid grid-cols-2 gap-3">
-            <input className={field} placeholder="Marke" value={brand} onChange={(e) => setBrand(e.target.value)} />
-            <input className={field} placeholder="EAN" value={ean} onChange={(e) => setEan(e.target.value)} inputMode="numeric" />
+          <input className={field} placeholder="Marke" value={brand} onChange={(e) => setBrand(e.target.value)} />
+          <div className="flex gap-2">
+            <input
+              className={field + ' flex-1'}
+              placeholder="EAN"
+              value={ean}
+              onChange={(e) => setEan(e.target.value)}
+              inputMode="numeric"
+              onKeyDown={(e) => e.key === 'Enter' && doLookup(ean)}
+            />
+            <button
+              type="button"
+              onClick={() => doLookup(ean)}
+              className="rounded-lg border border-secondary-300 px-3 text-sm font-medium hover:bg-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
+            >
+              Suchen
+            </button>
+            <button
+              type="button"
+              onClick={() => setScanning(true)}
+              title="Barcode scannen"
+              className="rounded-lg border border-secondary-300 px-3 text-lg hover:bg-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-700"
+            >
+              📷
+            </button>
           </div>
+          {lookupMsg && <p className="text-xs text-secondary-500">{lookupMsg}</p>}
           <div className="grid grid-cols-3 gap-3">
             <input className={field} placeholder="Netto g" value={netGrams} onChange={(e) => setNetGrams(e.target.value)} inputMode="decimal" />
             <input className={field} placeholder="Gebinde" value={packageLabel} onChange={(e) => setPackageLabel(e.target.value)} />
@@ -161,6 +228,17 @@ export default function ProductFormModal({ product, onClose, onSaved }: Props) {
           </div>
         </div>
       </div>
+
+      {scanning && (
+        <BarcodeScanner
+          onDetected={(code) => {
+            setEan(code);
+            setScanning(false);
+            void doLookup(code);
+          }}
+          onClose={() => setScanning(false)}
+        />
+      )}
     </div>
   );
 }
