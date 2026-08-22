@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { streamChat, clearChat, stripMarkers, type ChatMessage } from '@/lib/aiChat';
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  streamChat,
+  clearChat,
+  stripMarkers,
+  detectVariantMarker,
+  proposeVariantFromMessage,
+  type ChatMessage
+} from '@/lib/aiChat';
+import { runSync } from '@/lib/syncRunner';
 import { getAlias, getToken } from '@/lib/settings';
 
 interface Props {
@@ -13,8 +23,28 @@ export default function AIChatModal({ recipeId, recipeTitle, onClose }: Props) {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [variantBusy, setVariantBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const hasToken = !!getAlias() && !!getToken();
+
+  const saveVariant = async (message: string) => {
+    if (variantBusy) return;
+    setVariantBusy(true);
+    setError(null);
+    try {
+      const newId = await proposeVariantFromMessage(recipeId, message);
+      await runSync();
+      queryClient.invalidateQueries();
+      onClose();
+      navigate(`/rezept/${newId}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setVariantBusy(false);
+    }
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -99,6 +129,8 @@ export default function AIChatModal({ recipeId, recipeTitle, onClose }: Props) {
           {messages.map((m, i) => {
             const display = m.role === 'assistant' ? stripMarkers(m.content) : m.content;
             const isLast = i === messages.length - 1;
+            const canMakeVariant =
+              m.role === 'assistant' && !streaming && detectVariantMarker(m.content) !== null;
             return (
               <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
                 <div
@@ -111,6 +143,17 @@ export default function AIChatModal({ recipeId, recipeTitle, onClose }: Props) {
                 >
                   {display || (isLast && streaming ? '…' : '')}
                 </div>
+                {canMakeVariant && (
+                  <div className="mt-1">
+                    <button
+                      onClick={() => saveVariant(m.content)}
+                      disabled={variantBusy}
+                      className="rounded-lg border border-primary-500 px-3 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:opacity-50 dark:text-primary-400 dark:hover:bg-primary-900/30"
+                    >
+                      {variantBusy ? 'Erstelle Variante …' : '＋ Als Variante speichern'}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

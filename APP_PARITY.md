@@ -51,7 +51,7 @@ Nach Rezepten (referenzieren Rezepte + Produkte).
 - 🔄 **F3 Rezepte**: Ansicht (Live-Nährwerte/Preis/Skalierung, **Bilder-Galerie**),
   Bearbeiten/Anlegen (**Bilder-Upload/Löschen**), Kochmodus (Timer), Varianten,
   **Import (URL/Text/JSON-LD)** ✅, **Export (Markdown/JSON/Clipboard)** ✅,
-  **KI-Chat (Streaming, Ollama/OpenRouter, Verlauf)** ✅ — offen: KI-Aktionen
-  (Variante/Edit aus Chat anwenden), erweiterte Zutaten-Controls
-  (Alternativen/Verknüpfung).
+  **KI-Chat (Streaming, Ollama/OpenRouter, Verlauf)** ✅, **KI-Variante aus Chat
+  anwenden** ✅ — offen: KI-Edit (regionsbasiert) aus Chat anwenden, erweiterte
+  Zutaten-Controls (Alternativen/Verknüpfung).
 - ⏭️ Danach: F4 Einkaufslisten · F5 Tracker.

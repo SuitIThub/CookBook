@@ -122,6 +122,46 @@ export async function streamChat(
   return full;
 }
 
+/**
+ * Turn an assistant variant proposal (chat message text) into a real recipe
+ * variant. The server generates the full recipe JSON via the AI provider and
+ * creates it linked to `recipeId`; returns the new variant's id. Online-only.
+ */
+export async function proposeVariantFromMessage(recipeId: string, variantMessage: string): Promise<string> {
+  const provider = getAiProvider();
+  const model = getAiModel();
+  const body: Record<string, unknown> = {
+    recipeId,
+    targetRecipeId: recipeId,
+    variantMessage,
+    provider
+  };
+  if (model) body.model = model;
+  if (provider === 'openrouter') {
+    const key = getOpenRouterApiKey();
+    if (key) body.openRouterApiKey = key;
+  }
+  const res = await fetch(`${apiBase()}/api/ai/propose-variant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    let msg = `Variante fehlgeschlagen (${res.status})`;
+    try {
+      const j: any = await res.json();
+      if (j?.error || j?.userMessage) msg = j.userMessage || j.error;
+    } catch {
+      /* non-JSON */
+    }
+    throw new Error(msg);
+  }
+  const created: any = await res.json();
+  const id = created?.id;
+  if (!id) throw new Error('Variante lieferte kein Rezept.');
+  return id;
+}
+
 /** Clear the server-side chat history for a recipe. */
 export async function clearChat(recipeId: string, chatId?: string): Promise<void> {
   const qs = new URLSearchParams({ recipeId });
