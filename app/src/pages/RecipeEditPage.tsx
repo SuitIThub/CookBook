@@ -3,6 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Recipe, Ingredient, IngredientGroup, PreparationStep, PreparationGroup } from '@/types';
 import { localRecipe, saveLocalRecipe, deleteLocalRecipe } from '@/lib/localData';
+import { uploadRecipeImage, deleteRecipeImage } from '@/lib/recipeImages';
+import { runSync } from '@/lib/syncRunner';
+import { assetUrl } from '@/lib/api';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
 
@@ -65,6 +68,8 @@ export default function RecipeEditPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgError, setImgError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isNew) return;
@@ -137,6 +142,46 @@ export default function RecipeEditPage() {
     navigate('/');
   };
 
+  // Images live as files on the server; upload/delete is online-only, then we
+  // re-sync so the local replica reflects the recipe's updated images[].
+  const refreshImages = async () => {
+    if (!id) return;
+    await runSync();
+    const r = await localRecipe(id);
+    setExisting(r);
+    queryClient.invalidateQueries({ queryKey: ['recipe', id] });
+  };
+
+  const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file || !id) return;
+    setImgBusy(true);
+    setImgError(null);
+    try {
+      await uploadRecipeImage(id, file);
+      await refreshImages();
+    } catch (err) {
+      setImgError((err as Error).message);
+    } finally {
+      setImgBusy(false);
+    }
+  };
+
+  const removeImage = async (imageId: string) => {
+    if (!id) return;
+    setImgBusy(true);
+    setImgError(null);
+    try {
+      await deleteRecipeImage(id, imageId);
+      await refreshImages();
+    } catch (err) {
+      setImgError((err as Error).message);
+    } finally {
+      setImgBusy(false);
+    }
+  };
+
   const field =
     'w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 text-sm text-secondary-900 outline-none focus:ring-2 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-800 dark:text-white';
   const sec = 'mt-8';
@@ -202,6 +247,40 @@ export default function RecipeEditPage() {
           }}
         />
       </section>
+
+      {/* Images (existing recipes only — upload needs the recipe id; online) */}
+      {!isNew && (
+        <section className={sec}>
+          <h2 className={h2}>Bilder</h2>
+          <div className="flex flex-wrap gap-3">
+            {(existing?.images ?? []).map((img) => (
+              <div key={img.id} className="relative h-24 w-24 overflow-hidden rounded-lg border border-secondary-200 dark:border-secondary-700">
+                <img src={assetUrl(img.url)} alt="" className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removeImage(img.id)}
+                  disabled={imgBusy}
+                  aria-label="Bild löschen"
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white hover:bg-black/80 disabled:opacity-50"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <label
+              className={
+                'flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-secondary-300 text-center text-xs text-secondary-500 hover:bg-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-800 ' +
+                (imgBusy ? 'pointer-events-none opacity-50' : '')
+              }
+            >
+              <span className="text-lg">＋</span>
+              {imgBusy ? 'Lädt …' : 'Bild'}
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickImage} data-testid="image-input" />
+            </label>
+          </div>
+          {imgError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{imgError}</p>}
+        </section>
+      )}
 
       {/* Ingredients */}
       <section className={sec}>

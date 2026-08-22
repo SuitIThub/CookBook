@@ -48,7 +48,8 @@ Nach Rezepten (referenzieren Rezepte + Produkte).
   first (Rezepte-Ansicht-Minimal).
 - ✅ **F1 Produkte** (Register/CRUD/Supermärkte/Barcode→OFF).
 - ✅ **F2 Zutaten-Katalog** (Liste/Nährwerte, Sync).
-- 🔄 **F3 Rezepte**: Ansicht (Live-Nährwerte/Preis/Skalierung), Bearbeiten/Anlegen,
-  Kochmodus (Timer), Varianten, **Import (URL/Text/JSON-LD)** ✅ — offen: Bilder,
-  Notizen, Export/Markdown, KI, erweiterte Zutaten-Controls (Alternativen/Verknüpfung).
+- 🔄 **F3 Rezepte**: Ansicht (Live-Nährwerte/Preis/Skalierung, **Bilder-Galerie**),
+  Bearbeiten/Anlegen (**Bilder-Upload/Löschen**), Kochmodus (Timer), Varianten,
+  **Import (URL/Text/JSON-LD)** ✅, **Export (Markdown/JSON/Clipboard)** ✅ —
+  offen: KI, erweiterte Zutaten-Controls (Alternativen/Verknüpfung).
 - ⏭️ Danach: F4 Einkaufslisten · F5 Tracker.

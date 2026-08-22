@@ -93,6 +93,7 @@ export default function RecipeDetailPage() {
   const [servingsOverride, setServingsOverride] = useState<number | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activeImg, setActiveImg] = useState(0);
   const baseServings = recipe?.metadata.servings ?? 1;
   const servings = servingsOverride ?? baseServings;
 
@@ -146,7 +147,9 @@ export default function RecipeDetailPage() {
   const steps = flattenSteps(recipe.preparationGroups ?? []);
   const scale = baseServings > 0 ? servings / baseServings : 1;
   const nutr = nutritionQuery.data;
-  const image = assetUrl(recipe.imageUrl ?? recipe.images?.[0]?.url);
+  const gallery = (recipe.images?.length ? recipe.images.map((i) => i.url) : recipe.imageUrl ? [recipe.imageUrl] : [])
+    .filter((u): u is string => !!u);
+  const heroUrl = assetUrl(gallery[Math.min(activeImg, gallery.length - 1)] ?? undefined);
 
   return (
     <article className="mx-auto max-w-3xl">
@@ -291,12 +294,34 @@ export default function RecipeDetailPage() {
         )}
       </header>
 
-      {image && (
-        <img
-          src={image}
-          alt={recipe.title}
-          className="mt-4 aspect-video w-full rounded-xl object-cover"
-        />
+      {heroUrl && (
+        <div className="mt-4">
+          <img
+            src={heroUrl}
+            alt={recipe.title}
+            className="aspect-video w-full rounded-xl object-cover"
+          />
+          {gallery.length > 1 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {gallery.map((url, i) => (
+                <button
+                  key={url + i}
+                  type="button"
+                  onClick={() => setActiveImg(i)}
+                  aria-label={`Bild ${i + 1}`}
+                  className={
+                    'h-16 w-16 overflow-hidden rounded-lg border-2 ' +
+                    (i === Math.min(activeImg, gallery.length - 1)
+                      ? 'border-primary-500'
+                      : 'border-transparent opacity-70 hover:opacity-100')
+                  }
+                >
+                  <img src={assetUrl(url)} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {recipe.description && <p className="mt-4 text-secondary-700 dark:text-secondary-300">{recipe.description}</p>}
