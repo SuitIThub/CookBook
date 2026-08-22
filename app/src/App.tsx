@@ -4,13 +4,15 @@ import RecipeDetailPage from './pages/RecipeDetailPage';
 import LocalDbTestPage from './pages/LocalDbTestPage';
 import SyncTestPage from './pages/SyncTestPage';
 import PushTestPage from './pages/PushTestPage';
+import SettingsPage from './pages/SettingsPage';
 
 /** Top-level navigation. Only Rezepte is wired in Phase 1; the rest are stubs. */
 const NAV: { to: string; label: string; enabled: boolean }[] = [
   { to: '/', label: 'Rezepte', enabled: true },
   { to: '/einkaufslisten', label: 'Einkaufslisten', enabled: false },
   { to: '/produkte', label: 'Produkte', enabled: false },
-  { to: '/zutaten', label: 'Zutaten', enabled: false }
+  { to: '/zutaten', label: 'Zutaten', enabled: false },
+  { to: '/einstellungen', label: 'Einstellungen', enabled: true }
 ];
 
 function Nav() {
@@ -63,6 +65,7 @@ export default function App() {
           <Route path="/_localtest" element={<LocalDbTestPage />} />
           <Route path="/_synctest" element={<SyncTestPage />} />
           <Route path="/_pushtest" element={<PushTestPage />} />
+          <Route path="/einstellungen" element={<SettingsPage />} />
           <Route
             path="*"
             element={<p className="text-secondary-500">Seite nicht gefunden.</p>}
