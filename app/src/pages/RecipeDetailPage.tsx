@@ -141,9 +141,14 @@ export default function RecipeDetailPage() {
         <Link to="/" className="text-sm text-primary-600 hover:underline">
           ← Rezepte
         </Link>
-        <Link to={`/rezept/${recipe.id}/bearbeiten`} className="text-sm font-medium text-primary-600 hover:underline">
-          Bearbeiten
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link to={`/rezept/${recipe.id}/kochen`} className="text-sm font-medium text-primary-600 hover:underline">
+            Kochen
+          </Link>
+          <Link to={`/rezept/${recipe.id}/bearbeiten`} className="text-sm font-medium text-primary-600 hover:underline">
+            Bearbeiten
+          </Link>
+        </div>
       </div>
 
       {tabs.length > 0 && (
