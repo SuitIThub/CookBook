@@ -64,6 +64,12 @@ export class CookbookDatabase {
     } catch {
       // column already exists
     }
+    try {
+      // Per-record sync opt-out (OPTOUT-1): private recipes are never pushed.
+      this.db.exec(`ALTER TABLE recipes ADD COLUMN private INTEGER NOT NULL DEFAULT 0`);
+    } catch {
+      // column already exists
+    }
   }
 
   private initTables(): void {
@@ -525,8 +531,8 @@ export class CookbookDatabase {
            id, title, subtitle, description, metadata, category, tags,
            ingredient_groups, preparation_groups, image_url, images, source_url,
            parent_recipe_id, variant_name, product_assignments_json,
-           preferred_supermarket_id, is_draft, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           preferred_supermarket_id, is_draft, created_at, updated_at, private
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            title=excluded.title, subtitle=excluded.subtitle, description=excluded.description,
            metadata=excluded.metadata, category=excluded.category, tags=excluded.tags,
@@ -536,6 +542,8 @@ export class CookbookDatabase {
            product_assignments_json=excluded.product_assignments_json,
            preferred_supermarket_id=excluded.preferred_supermarket_id,
            is_draft=excluded.is_draft, created_at=excluded.created_at, updated_at=excluded.updated_at`
+        // NOTE: `private` is intentionally NOT in DO UPDATE — it's a local-only
+        // flag, so applying a server row must never clobber the local choice.
       )
       .run(
         recipe.id,
@@ -556,7 +564,8 @@ export class CookbookDatabase {
         recipe.preferredSupermarketId || null,
         0,
         toIso(recipe.createdAt),
-        toIso(recipe.updatedAt)
+        toIso(recipe.updatedAt),
+        recipe.isPrivate ? 1 : 0
       );
   }
 
@@ -567,6 +576,13 @@ export class CookbookDatabase {
    */
   deleteRecipeForSync(id: string): void {
     this.db.prepare('DELETE FROM recipes WHERE id = ?').run(id);
+  }
+
+  /** Toggle a recipe's per-record sync opt-out (private = local-only). */
+  setRecipePrivate(id: string, isPrivate: boolean): void {
+    this.db
+      .prepare('UPDATE recipes SET private = ?, updated_at = ? WHERE id = ?')
+      .run(isPrivate ? 1 : 0, new Date().toISOString(), id);
   }
 
   // Recipe CRUD operations
@@ -581,8 +597,8 @@ export class CookbookDatabase {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, parent_recipe_id, variant_name, product_assignments_json, preferred_supermarket_id, is_draft, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO recipes (id, title, subtitle, description, metadata, category, tags, ingredient_groups, preparation_groups, image_url, images, source_url, parent_recipe_id, variant_name, product_assignments_json, preferred_supermarket_id, is_draft, created_at, updated_at, private)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -604,7 +620,8 @@ export class CookbookDatabase {
       newRecipe.preferredSupermarketId || null,
       0, // is_draft = false for regular recipes
       newRecipe.createdAt.toISOString(),
-      newRecipe.updatedAt.toISOString()
+      newRecipe.updatedAt.toISOString(),
+      newRecipe.isPrivate ? 1 : 0
     );
 
     // Side effects must not roll back a successful insert (better-sqlite3 autocommits).
@@ -3072,6 +3089,7 @@ function rowToRecipe(row: any): Recipe {
     variantName: row.variant_name || undefined,
     productAssignments: assignments && typeof assignments === 'object' ? assignments : undefined,
     preferredSupermarketId: row.preferred_supermarket_id || undefined,
+    isPrivate: row.private ? true : undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at)
   };
