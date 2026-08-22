@@ -1,12 +1,27 @@
 /**
  * Typed HTTP client for the Kochbuch server API.
  *
- * Base URL: VITE_API_BASE_URL when set (device/APK build → absolute server URL),
- * otherwise empty → relative /api paths that Vite proxies to the Astro dev
- * server in the browser. Phase 1 is remote-only; a local replica + sync layer
- * will slot in behind this client later (see APP_PLAN.md).
+ * Base URL is resolved at runtime: the user-configured server (Settings) wins,
+ * else the build-time VITE_API_BASE_URL, else '' (relative → Vite proxy in the
+ * browser). Alias + token from Settings are attached as X-Alias / X-Auth-Token
+ * so writes are authorized (no token → server allows reads only).
  */
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+import { getServerUrl, getAlias, getToken } from './settings';
+
+function apiBase(): string {
+  const configured = getServerUrl();
+  if (configured) return configured;
+  return (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+}
+
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const alias = getAlias();
+  const token = getToken();
+  if (alias) headers['X-Alias'] = alias;
+  if (token) headers['X-Auth-Token'] = token;
+  return headers;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -20,8 +35,8 @@ export class ApiError extends Error {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { Accept: 'application/json' }
+  const res = await fetch(`${apiBase()}${path}`, {
+    headers: { Accept: 'application/json', ...authHeaders() }
   });
   if (!res.ok) {
     throw new ApiError(`GET ${path} failed with ${res.status}`, res.status, path);
@@ -30,9 +45,9 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
     body: JSON.stringify(body)
   });
   if (!res.ok) {
@@ -45,5 +60,5 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 export function assetUrl(path?: string | null): string | undefined {
   if (!path) return undefined;
   if (/^https?:\/\//.test(path)) return path;
-  return `${API_BASE}${path}`;
+  return `${apiBase()}${path}`;
 }
