@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { runSync } from './lib/syncRunner';
@@ -16,50 +16,147 @@ import IngredientsPage from './pages/IngredientsPage';
 import ShoppingListsPage from './pages/ShoppingListsPage';
 import ShoppingListDetailPage from './pages/ShoppingListDetailPage';
 
-/** Top-level navigation. Only Rezepte is wired in Phase 1; the rest are stubs. */
-const NAV: { to: string; label: string; enabled: boolean }[] = [
-  { to: '/', label: 'Rezepte', enabled: true },
-  { to: '/einkaufslisten', label: 'Einkaufslisten', enabled: true },
-  { to: '/produkte', label: 'Produkte', enabled: true },
-  { to: '/zutaten', label: 'Zutaten', enabled: true },
-  { to: '/einstellungen', label: 'Einstellungen', enabled: true }
+const NAV: { to: string; label: string; end?: boolean }[] = [
+  { to: '/', label: 'Rezepte', end: true },
+  { to: '/einkaufslisten', label: 'Einkaufslisten' },
+  { to: '/zutaten', label: 'Zutaten' },
+  { to: '/produkte', label: 'Produkte' }
 ];
 
-function Nav() {
+function ThemeToggle() {
+  const [dark, setDark] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  );
+  const toggle = () => {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle('dark', next);
+    try {
+      localStorage.setItem('theme', next ? 'dark' : 'light');
+    } catch {
+      /* ignore */
+    }
+  };
   return (
-    <header className="sticky top-0 z-10 border-b border-secondary-200 bg-white/90 backdrop-blur dark:border-secondary-700 dark:bg-secondary-900/90">
-      <div className="mx-auto flex max-w-5xl items-center gap-1 px-4 py-3">
-        <span className="mr-3 text-lg font-bold text-primary-600 dark:text-primary-400">
-          Kochbuch
-        </span>
-        <nav className="flex gap-1 text-sm">
-          {NAV.map((item) =>
-            item.enabled ? (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  'rounded px-3 py-1.5 font-medium transition-colors ' +
-                  (isActive
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
-                    : 'text-secondary-600 hover:bg-secondary-100 dark:text-secondary-300 dark:hover:bg-secondary-800')
-                }
-                end={item.to === '/'}
-              >
+    <button
+      onClick={toggle}
+      className="btn-icon text-gray-700 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400"
+      aria-label="Farbschema wechseln"
+      title="Farbschema wechseln"
+    >
+      {dark ? (
+        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+          <path
+            fillRule="evenodd"
+            d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"
+            clipRule="evenodd"
+          />
+        </svg>
+      ) : (
+        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M17.293 13.293A8 8 0 0 1 6.707 2.707a8.001 8.001 0 1 0 10.586 10.586z" fillRule="evenodd" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+function SettingsLink({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <NavLink
+      to="/einstellungen"
+      onClick={onNavigate}
+      className="btn-icon text-gray-700 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400"
+      aria-label="Einstellungen"
+      title="Einstellungen"
+    >
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M10.325 4.317a1 1 0 011.35-.936l1.09.497a1 1 0 00.87 0l1.09-.497a1 1 0 011.35.936l.112 1.193a1 1 0 00.637.84l1.126.43a1 1 0 01.56 1.41l-.58 1.05a1 1 0 000 .966l.58 1.05a1 1 0 01-.56 1.41l-1.126.43a1 1 0 00-.637.84l-.112 1.193a1 1 0 01-1.35.936l-1.09-.497a1 1 0 00-.87 0l-1.09.497a1 1 0 01-1.35-.936l-.112-1.193a1 1 0 00-.637-.84l-1.126-.43a1 1 0 01-.56-1.41l.58-1.05a1 1 0 000-.966l-.58-1.05a1 1 0 01.56-1.41l1.126-.43a1 1 0 00.637-.84l.112-1.193z"
+        />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+      </svg>
+    </NavLink>
+  );
+}
+
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  'nav-link' + (isActive ? ' text-orange-600 dark:text-orange-400' : '');
+
+function Nav() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <header className="nav-header">
+      <nav className="container">
+        <div className="flex h-16 justify-between">
+          <div className="flex items-center">
+            <NavLink to="/" className="flex items-center space-x-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-500 text-lg">🍳</span>
+              <span className="text-xl font-semibold text-gray-900 dark:text-white">Kochbuch</span>
+            </NavLink>
+          </div>
+
+          {/* Desktop navigation */}
+          <div className="hidden items-center space-x-4 desktop:flex">
+            {NAV.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
                 {item.label}
               </NavLink>
-            ) : (
-              <span
-                key={item.to}
-                title="Kommt in einer späteren Phase"
-                className="cursor-not-allowed rounded px-3 py-1.5 font-medium text-secondary-400 dark:text-secondary-600"
+            ))}
+            <ThemeToggle />
+            <SettingsLink />
+          </div>
+
+          {/* Mobile / tablet controls */}
+          <div className="flex items-center space-x-2 desktop:hidden">
+            <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              className="btn-icon text-gray-700 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400"
+              aria-label="Menü"
+              aria-expanded={menuOpen}
+            >
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                {menuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile menu */}
+        {menuOpen && (
+          <div className="mt-2 border-t border-gray-200 pb-4 pt-4 desktop:hidden dark:border-gray-700">
+            <div className="flex flex-col space-y-3">
+              {NAV.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) => navLinkClass({ isActive }) + ' text-base'}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+              <NavLink
+                to="/einstellungen"
+                onClick={() => setMenuOpen(false)}
+                className={({ isActive }) => navLinkClass({ isActive }) + ' text-base'}
               >
-                {item.label}
-              </span>
-            )
-          )}
-        </nav>
-      </div>
+                Einstellungen
+              </NavLink>
+            </div>
+          </div>
+        )}
+      </nav>
     </header>
   );
 }
@@ -67,9 +164,6 @@ function Nav() {
 export default function App() {
   const queryClient = useQueryClient();
 
-  // Server-first background sync: refresh the local replica on load and whenever
-  // the app regains focus, then re-render from local. If offline, the app keeps
-  // showing local data (fallback).
   useEffect(() => {
     const sync = () => {
       runSync()
@@ -84,9 +178,9 @@ export default function App() {
   }, [queryClient]);
 
   return (
-    <div className="min-h-screen">
+    <>
       <Nav />
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="container mx-auto px-4 py-8">
         <Routes>
           <Route path="/" element={<RecipesPage />} />
           <Route path="/rezept/neu" element={<RecipeEditPage />} />
@@ -102,12 +196,9 @@ export default function App() {
           <Route path="/einkaufsliste/:id" element={<ShoppingListDetailPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />
           <Route path="/_optouttest" element={<OptoutTestPage />} />
-          <Route
-            path="*"
-            element={<p className="text-secondary-500">Seite nicht gefunden.</p>}
-          />
+          <Route path="*" element={<p className="text-muted">Seite nicht gefunden.</p>} />
         </Routes>
       </main>
-    </div>
+    </>
   );
 }
