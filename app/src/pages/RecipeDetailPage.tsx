@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { apiGet, assetUrl } from '@/lib/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { assetUrl } from '@/lib/api';
+import { localRecipe, localVariants, setLocalRecipePrivate } from '@/lib/localData';
 import type {
-  Recipe,
   Ingredient,
   IngredientGroup,
   PreparationStep,
@@ -59,10 +59,11 @@ function IngredientNode({ item }: { item: Ingredient | IngredientGroup }) {
 
 export default function RecipeDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
 
   const recipeQuery = useQuery({
     queryKey: ['recipe', id],
-    queryFn: () => apiGet<Recipe>(`/api/recipes?id=${encodeURIComponent(id!)}`),
+    queryFn: () => localRecipe(id!),
     enabled: !!id
   });
 
@@ -71,15 +72,21 @@ export default function RecipeDetailPage() {
 
   const originalQuery = useQuery({
     queryKey: ['recipe', rootId],
-    queryFn: () => apiGet<Recipe>(`/api/recipes?id=${encodeURIComponent(rootId!)}`),
+    queryFn: () => localRecipe(rootId!),
     enabled: !!rootId
   });
 
   const variantsQuery = useQuery({
     queryKey: ['variants', rootId],
-    queryFn: () => apiGet<Recipe[]>(`/api/recipes?id=${encodeURIComponent(rootId!)}&action=variants`),
+    queryFn: () => localVariants(rootId!),
     enabled: !!rootId
   });
+
+  const togglePrivate = async () => {
+    if (!recipe) return;
+    await setLocalRecipePrivate(recipe.id, !recipe.isPrivate);
+    queryClient.invalidateQueries({ queryKey: ['recipe', recipe.id] });
+  };
 
   const tabs = useMemo(() => {
     if (!originalQuery.data) return [];
@@ -136,7 +143,26 @@ export default function RecipeDetailPage() {
       )}
 
       <header className="mt-4">
-        <h1 className="text-3xl font-bold">{recipe.title}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-3xl font-bold">{recipe.title}</h1>
+          <button
+            type="button"
+            onClick={togglePrivate}
+            title={
+              recipe.isPrivate
+                ? 'Privat — bleibt nur auf diesem Gerät, wird nicht synchronisiert'
+                : 'Wird mit dem Server synchronisiert'
+            }
+            className={
+              'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ' +
+              (recipe.isPrivate
+                ? 'border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-300'
+                : 'border-secondary-300 text-secondary-500 hover:bg-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-800')
+            }
+          >
+            {recipe.isPrivate ? '🔒 Privat' : 'Synchronisiert'}
+          </button>
+        </div>
         {recipe.subtitle && <p className="mt-1 text-secondary-500">{recipe.subtitle}</p>}
         <div className="mt-3 flex flex-wrap gap-3 text-sm text-secondary-500">
           <span>{recipe.metadata.servings} Portionen</span>

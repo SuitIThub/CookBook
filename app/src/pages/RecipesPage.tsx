@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { apiGet, assetUrl } from '@/lib/api';
-import type { Recipe } from '@/types';
+import { assetUrl } from '@/lib/api';
+import { localRecipes } from '@/lib/localData';
 
 export default function RecipesPage() {
+  // Local-first: read from the sql.js replica; a background sync keeps it fresh.
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['recipes'],
-    queryFn: () => apiGet<Recipe[]>('/api/recipes')
+    queryFn: localRecipes
   });
   const [q, setQ] = useState('');
 
