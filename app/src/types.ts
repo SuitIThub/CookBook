@@ -12,5 +12,8 @@ export type {
   PreparationGroup,
   Quantity,
   TimeEntry,
-  RecipeImage
+  RecipeImage,
+  ShoppingList,
+  ShoppingListItem,
+  ShoppingListRecipe
 } from '@shared/recipe';
