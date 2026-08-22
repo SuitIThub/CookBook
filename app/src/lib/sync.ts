@@ -40,6 +40,11 @@ const REGISTRY: Record<string, EntityHandler> = {
     upsert: (db, d) => db.upsertSupermarketForSync(d),
     del: (db, id) => db.deleteSupermarketForSync(id),
     get: (db, id) => db.getSupermarket(id)
+  },
+  ingredient: {
+    upsert: (db, d) => db.upsertIngredientForSync(d),
+    del: (db, id) => db.deleteIngredientForSync(id),
+    get: (db, id) => db.getCatalogueIngredientById(id)
   }
 };
 const SYNCED_TYPES = Object.keys(REGISTRY);

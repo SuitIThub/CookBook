@@ -640,6 +640,34 @@ export class CookbookDatabase {
     this.db.prepare('DELETE FROM products WHERE id = ?').run(id);
   }
 
+  upsertIngredientForSync(ci: CatalogueIngredient): void {
+    this.db
+      .prepare(
+        `INSERT INTO ingredients (
+           id, name, description, usage_count, nutrition_json,
+           density_g_per_ml, grams_by_unit_json, default_product_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name=excluded.name, description=excluded.description, usage_count=excluded.usage_count,
+           nutrition_json=excluded.nutrition_json, density_g_per_ml=excluded.density_g_per_ml,
+           grams_by_unit_json=excluded.grams_by_unit_json, default_product_id=excluded.default_product_id`
+      )
+      .run(
+        ci.id,
+        ci.name,
+        ci.description ?? null,
+        ci.usageCount ?? 0,
+        ci.nutritionPer100g ? JSON.stringify(ci.nutritionPer100g) : null,
+        ci.densityGPerMl ?? null,
+        ci.gramsByUnit ? JSON.stringify(ci.gramsByUnit) : null,
+        ci.defaultProductId ?? null
+      );
+  }
+
+  deleteIngredientForSync(id: string): void {
+    this.db.prepare('DELETE FROM ingredients WHERE id = ?').run(id);
+  }
+
   // Recipe CRUD operations
   createRecipe(recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>): Recipe {
     const id = uuidv4();
