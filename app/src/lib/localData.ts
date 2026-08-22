@@ -4,7 +4,7 @@
  * shared CookbookDatabase so pages don't touch the DB directly.
  */
 import { getLocalDb } from './localDb';
-import type { Recipe } from '@shared/recipe';
+import type { Recipe, NutritionData } from '@shared/recipe';
 import type { Product, Supermarket } from '@shared/tracker';
 
 export async function localRecipes(): Promise<Recipe[]> {
@@ -36,4 +36,45 @@ export async function localProducts(): Promise<Product[]> {
 export async function localSupermarkets(): Promise<Supermarket[]> {
   const { db } = await getLocalDb();
   return db.getAllSupermarkets();
+}
+
+export interface ProductInput {
+  id?: string;
+  name: string;
+  brand?: string;
+  ean?: string;
+  netGrams?: number;
+  packageLabel?: string;
+  defaultPrice?: number;
+  nutritionPer100g?: NutritionData | null;
+  source?: 'manual' | 'openfoodfacts';
+}
+
+// User-initiated local writes go through the REAL shared-core methods (same
+// logic as the website), fire the sync triggers, and are pushed by background
+// sync when a token is configured.
+export async function saveLocalProduct(input: ProductInput): Promise<Product> {
+  const { db, persist } = await getLocalDb();
+  const p = db.upsertProduct(input);
+  await persist();
+  return p;
+}
+
+export async function deleteLocalProduct(id: string): Promise<void> {
+  const { db, persist } = await getLocalDb();
+  db.deleteProduct(id);
+  await persist();
+}
+
+export async function saveLocalSupermarket(input: { id?: string; name: string }): Promise<Supermarket> {
+  const { db, persist } = await getLocalDb();
+  const s = db.upsertSupermarket(input);
+  await persist();
+  return s;
+}
+
+export async function deleteLocalSupermarket(id: string): Promise<void> {
+  const { db, persist } = await getLocalDb();
+  db.deleteSupermarket(id);
+  await persist();
 }

@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assetUrl } from '@/lib/api';
 import { localProducts } from '@/lib/localData';
+import type { Product } from '@shared/tracker';
+import ProductFormModal from '@/components/ProductFormModal';
+import SupermarketsModal from '@/components/SupermarketsModal';
 
 function euro(v?: number): string | null {
   if (v == null) return null;
@@ -9,11 +12,21 @@ function euro(v?: number): string | null {
 }
 
 export default function ProductsPage() {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['products'],
     queryFn: localProducts
   });
   const [q, setQ] = useState('');
+  const [editing, setEditing] = useState<Product | 'new' | null>(null);
+  const [showMarkets, setShowMarkets] = useState(false);
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['products'] });
+  const closeEditor = () => setEditing(null);
+  const onSaved = () => {
+    refresh();
+    closeEditor();
+  };
 
   const products = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -33,9 +46,22 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Produkte</h1>
-        <span className="text-sm text-secondary-500">{products.length}</span>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Produkte <span className="text-sm font-normal text-secondary-500">{products.length}</span></h1>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowMarkets(true)}
+            className="rounded-lg border border-secondary-300 px-3 py-1.5 text-sm font-medium hover:bg-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-800"
+          >
+            Supermärkte
+          </button>
+          <button
+            onClick={() => setEditing('new')}
+            className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            Neues Produkt
+          </button>
+        </div>
       </div>
 
       <input
@@ -56,7 +82,8 @@ export default function ProductsPage() {
             return (
               <li
                 key={p.id}
-                className="flex gap-3 rounded-xl border border-secondary-200 bg-white p-3 dark:border-secondary-700 dark:bg-secondary-800"
+                onClick={() => setEditing(p)}
+                className="flex cursor-pointer gap-3 rounded-xl border border-secondary-200 bg-white p-3 transition hover:shadow-md dark:border-secondary-700 dark:bg-secondary-800"
               >
                 <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-secondary-100 dark:bg-secondary-700">
                   {assetUrl(p.imageUrl) ? (
@@ -78,6 +105,17 @@ export default function ProductsPage() {
             );
           })}
         </ul>
+      )}
+
+      {editing !== null && (
+        <ProductFormModal
+          product={editing === 'new' ? null : editing}
+          onClose={closeEditor}
+          onSaved={onSaved}
+        />
+      )}
+      {showMarkets && (
+        <SupermarketsModal onClose={() => setShowMarkets(false)} onChanged={refresh} />
       )}
     </div>
   );
