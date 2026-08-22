@@ -120,6 +120,8 @@ export async function pushToServer(): Promise<PushResult> {
       changes.push({ type: 'recipe', id: c.entity_id, op: 'delete' });
     } else {
       const row = db.getRecipe(c.entity_id);
+      // Per-record opt-out: private recipes stay local, never pushed.
+      if (row && row.isPrivate) continue;
       if (row) changes.push({ type: 'recipe', id: c.entity_id, op: 'upsert', data: row });
       else changes.push({ type: 'recipe', id: c.entity_id, op: 'delete' });
     }

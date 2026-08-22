@@ -124,6 +124,8 @@ export interface Recipe {
   productAssignments?: Record<string, string>;
   /** Legacy recipe supermarket; live pick lives in alias settings. */
   preferredSupermarketId?: string;
+  /** Per-record sync opt-out: private recipes stay local and are never pushed. */
+  isPrivate?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
