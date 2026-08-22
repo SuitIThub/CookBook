@@ -5,7 +5,7 @@
  */
 import { getLocalDb } from './localDb';
 import type { Recipe, NutritionData } from '@shared/recipe';
-import type { Product, Supermarket } from '@shared/tracker';
+import type { Product, Supermarket, CatalogueIngredient } from '@shared/tracker';
 
 export async function localRecipes(): Promise<Recipe[]> {
   const { db } = await getLocalDb();
@@ -36,6 +36,18 @@ export async function localProducts(): Promise<Product[]> {
 export async function localSupermarkets(): Promise<Supermarket[]> {
   const { db } = await getLocalDb();
   return db.getAllSupermarkets();
+}
+
+/** Full catalogue (all known ingredients incl. nutrition) — used for editing / live nutrition. */
+export async function localIngredients(): Promise<CatalogueIngredient[]> {
+  const { db } = await getLocalDb();
+  return db.getAllCatalogueIngredients();
+}
+
+/** Ingredients actually used across recipes, with usage counts — matches the website /zutaten list. */
+export async function localRecipeIngredients(): Promise<{ name: string; usageCount: number }[]> {
+  const { db } = await getLocalDb();
+  return db.getAllIngredientsFromRecipes();
 }
 
 export interface ProductInput {
