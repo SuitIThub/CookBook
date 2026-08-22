@@ -634,6 +634,30 @@ export class CookbookDatabase {
         syncIso(p.createdAt),
         syncIso(p.updatedAt)
       );
+
+    // Replace junction rows (supermarket prices + ingredient links) from the
+    // synced product. Per-row try/catch tolerates a supermarket/ingredient that
+    // hasn't been applied yet (FK) — the client applies changes dependency-first.
+    this.db.prepare('DELETE FROM product_supermarkets WHERE product_id = ?').run(p.id);
+    for (const s of p.supermarkets ?? []) {
+      try {
+        this.db
+          .prepare('INSERT OR REPLACE INTO product_supermarkets (product_id, supermarket_id, price) VALUES (?, ?, ?)')
+          .run(p.id, s.supermarketId, s.price);
+      } catch {
+        /* supermarket not present yet */
+      }
+    }
+    this.db.prepare('DELETE FROM ingredient_products WHERE product_id = ?').run(p.id);
+    for (const ingredientId of p.ingredientIds ?? []) {
+      try {
+        this.db
+          .prepare('INSERT OR REPLACE INTO ingredient_products (ingredient_id, product_id, is_default) VALUES (?, ?, 0)')
+          .run(ingredientId, p.id);
+      } catch {
+        /* ingredient not present yet */
+      }
+    }
   }
 
   deleteProductForSync(id: string): void {
