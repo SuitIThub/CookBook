@@ -1,4 +1,7 @@
+import { useEffect } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { runSync } from './lib/syncRunner';
 import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import LocalDbTestPage from './pages/LocalDbTestPage';
@@ -56,6 +59,24 @@ function Nav() {
 }
 
 export default function App() {
+  const queryClient = useQueryClient();
+
+  // Server-first background sync: refresh the local replica on load and whenever
+  // the app regains focus, then re-render from local. If offline, the app keeps
+  // showing local data (fallback).
+  useEffect(() => {
+    const sync = () => {
+      runSync()
+        .then((o) => {
+          if (o.online && (o.applied || o.deleted)) queryClient.invalidateQueries();
+        })
+        .catch(() => {});
+    };
+    sync();
+    window.addEventListener('focus', sync);
+    return () => window.removeEventListener('focus', sync);
+  }, [queryClient]);
+
   return (
     <div className="min-h-screen">
       <Nav />
