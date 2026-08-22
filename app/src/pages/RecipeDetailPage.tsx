@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assetUrl } from '@/lib/api';
-import { localRecipe, localVariants, setLocalRecipePrivate } from '@/lib/localData';
+import { localRecipe, localVariants, setLocalRecipePrivate, createLocalVariant } from '@/lib/localData';
 import { computeLocalRecipeNutrition } from '@/lib/localNutrition';
 import type {
   Ingredient,
@@ -66,6 +66,7 @@ function IngredientNode({ item, scale }: { item: Ingredient | IngredientGroup; s
 export default function RecipeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const recipeQuery = useQuery({
     queryKey: ['recipe', id],
@@ -102,6 +103,15 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
     await setLocalRecipePrivate(recipe.id, !recipe.isPrivate);
     queryClient.invalidateQueries({ queryKey: ['recipe', recipe.id] });
+  };
+
+  const makeVariant = async () => {
+    if (!recipe) return;
+    const name = window.prompt('Name der Variante?', '');
+    if (name == null) return;
+    const variant = await createLocalVariant(recipe, name);
+    queryClient.invalidateQueries();
+    navigate(`/rezept/${variant.id}/bearbeiten`);
   };
 
   const tabs = useMemo(() => {
@@ -145,6 +155,9 @@ export default function RecipeDetailPage() {
           <Link to={`/rezept/${recipe.id}/kochen`} className="text-sm font-medium text-primary-600 hover:underline">
             Kochen
           </Link>
+          <button onClick={makeVariant} className="text-sm font-medium text-primary-600 hover:underline">
+            Variante
+          </button>
           <Link to={`/rezept/${recipe.id}/bearbeiten`} className="text-sm font-medium text-primary-600 hover:underline">
             Bearbeiten
           </Link>

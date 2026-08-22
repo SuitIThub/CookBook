@@ -42,6 +42,26 @@ export async function deleteLocalRecipe(id: string): Promise<void> {
   await persist();
 }
 
+/** Create a variant of a recipe (copy of its content, linked to the root original). */
+export async function createLocalVariant(recipe: Recipe, variantName: string): Promise<Recipe> {
+  const rootId = recipe.parentRecipeId ?? recipe.id;
+  return saveLocalRecipe(null, {
+    title: recipe.title,
+    subtitle: recipe.subtitle,
+    description: recipe.description,
+    category: recipe.category,
+    tags: recipe.tags,
+    ingredientGroups: recipe.ingredientGroups,
+    preparationGroups: recipe.preparationGroups,
+    metadata: recipe.metadata,
+    imageUrl: recipe.imageUrl,
+    images: recipe.images,
+    sourceUrl: recipe.sourceUrl,
+    parentRecipeId: rootId,
+    variantName: variantName.trim()
+  });
+}
+
 export async function localProducts(): Promise<Product[]> {
   const { db } = await getLocalDb();
   return db.getAllProducts();
