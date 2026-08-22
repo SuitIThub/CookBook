@@ -2,6 +2,7 @@
    so the app and site look identical. Imported first so @apply resolves and the
    Tailwind utility layer can still override component classes. */
 @import './styles/components.css';
+@import './styles/recipe-list.css';
 
 @tailwind base;
 @tailwind components;

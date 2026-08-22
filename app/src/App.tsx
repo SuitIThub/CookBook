@@ -94,7 +94,7 @@ function Nav() {
         <div className="flex h-16 justify-between">
           <div className="flex items-center">
             <NavLink to="/" className="flex items-center space-x-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-500 text-lg">🍳</span>
+              <img src="/icons/icon_alpha_32.svg" alt="Kochbuch Logo" className="h-8 w-8" />
               <span className="text-xl font-semibold text-gray-900 dark:text-white">Kochbuch</span>
             </NavLink>
           </div>

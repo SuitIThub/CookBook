@@ -1,0 +1,33 @@
+/* Component-scoped styles from the website's recipe-list components
+   (RecipeCard.astro / RecipeViewControls.astro <style> blocks), which live
+   outside components.css. Kept here so the app matches 1:1. */
+
+/* Tags (RecipeCard) */
+.tag {
+  @apply text-xs py-0.5 px-2 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300;
+}
+.tag-more {
+  @apply text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400;
+}
+
+/* Selected card highlight (RecipeCard) */
+.recipe-card.selected {
+  @apply ring-2 ring-orange-500;
+}
+
+/* View controls segmented buttons (RecipeViewControls) */
+.rvc-group {
+  @apply inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-0.5;
+}
+.rvc-seg {
+  @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 transition-colors;
+}
+.rvc-seg:hover {
+  @apply bg-gray-100 dark:bg-gray-700;
+}
+.rvc-seg.active {
+  @apply bg-orange-500 text-white;
+}
+.rvc-seg.active:hover {
+  @apply bg-orange-600;
+}
