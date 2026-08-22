@@ -50,17 +50,39 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
     body: JSON.stringify(body)
   });
-  if (!res.ok) {
-    // Surface the server's error message (e.g. import/auth failures) when present.
-    let msg = `POST ${path} failed with ${res.status}`;
-    try {
-      const j: any = await res.json();
-      if (j?.userMessage || j?.error) msg = j.userMessage || j.error;
-    } catch {
-      /* non-JSON body */
-    }
-    throw new ApiError(msg, res.status, path);
+  if (!res.ok) throw new ApiError(await errorMessage(res, 'POST', path), res.status, path);
+  return (await res.json()) as T;
+}
+
+/** Extract the server's error message from a failed response, falling back to a generic one. */
+async function errorMessage(res: Response, verb: string, path: string): Promise<string> {
+  let msg = `${verb} ${path} failed with ${res.status}`;
+  try {
+    const j: any = await res.json();
+    if (j?.userMessage || j?.error) msg = j.userMessage || j.error;
+  } catch {
+    /* non-JSON body */
   }
+  return msg;
+}
+
+/** Multipart upload (e.g. recipe images). Content-Type is left unset so the browser adds the boundary. */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${apiBase()}${path}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', ...authHeaders() },
+    body: form
+  });
+  if (!res.ok) throw new ApiError(await errorMessage(res, 'POST', path), res.status, path);
+  return (await res.json()) as T;
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${apiBase()}${path}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json', ...authHeaders() }
+  });
+  if (!res.ok) throw new ApiError(await errorMessage(res, 'DELETE', path), res.status, path);
   return (await res.json()) as T;
 }
 
