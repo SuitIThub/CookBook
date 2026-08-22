@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Recipe, Ingredient, IngredientGroup, PreparationStep, PreparationGroup } from '@/types';
-import { localRecipe, saveLocalRecipe, deleteLocalRecipe } from '@/lib/localData';
+import { localRecipe, saveLocalRecipe, deleteLocalRecipe, localIngredients } from '@/lib/localData';
 import { uploadRecipeImage, deleteRecipeImage } from '@/lib/recipeImages';
 import { runSync } from '@/lib/syncRunner';
 import { assetUrl } from '@/lib/api';
@@ -70,6 +70,7 @@ export default function RecipeEditPage() {
   const [tagInput, setTagInput] = useState('');
   const [imgBusy, setImgBusy] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
+  const [ingredientNames, setIngredientNames] = useState<string[]>([]);
 
   useEffect(() => {
     if (isNew) return;
@@ -79,6 +80,18 @@ export default function RecipeEditPage() {
       setLoading(false);
     });
   }, [id, isNew]);
+
+  // Ingredient-name autocomplete from the local catalogue (offline).
+  useEffect(() => {
+    localIngredients()
+      .then((list) => {
+        const names = Array.from(new Set(list.map((i) => i.name).filter(Boolean))).sort((a, b) =>
+          a.localeCompare(b, 'de')
+        );
+        setIngredientNames(names);
+      })
+      .catch(() => setIngredientNames([]));
+  }, []);
 
   const patch = (p: Partial<ReturnType<typeof toForm>>) => setForm((f) => ({ ...f, ...p }));
 
@@ -285,6 +298,11 @@ export default function RecipeEditPage() {
       {/* Ingredients */}
       <section className={sec}>
         <h2 className={h2}>Zutaten</h2>
+        <datalist id="ingredient-names">
+          {ingredientNames.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
         {form.groups.map((g, gi) => (
           <div key={g.id} className="mb-4 rounded-lg border border-secondary-200 p-3 dark:border-secondary-700">
             <div className="mb-2 flex gap-2">
@@ -295,7 +313,7 @@ export default function RecipeEditPage() {
               <div key={it.id} className="mb-1.5 flex gap-2">
                 <input className={field + ' w-20'} placeholder="Menge" value={it.amount} onChange={(e) => patch({ groups: form.groups.map((x, j) => (j === gi ? { ...x, items: x.items.map((y, k) => (k === ii ? { ...y, amount: e.target.value } : y)) } : x)) })} />
                 <input className={field + ' w-20'} placeholder="Einheit" value={it.unit} onChange={(e) => patch({ groups: form.groups.map((x, j) => (j === gi ? { ...x, items: x.items.map((y, k) => (k === ii ? { ...y, unit: e.target.value } : y)) } : x)) })} />
-                <input className={field + ' flex-1'} placeholder="Zutat" value={it.name} onChange={(e) => patch({ groups: form.groups.map((x, j) => (j === gi ? { ...x, items: x.items.map((y, k) => (k === ii ? { ...y, name: e.target.value } : y)) } : x)) })} />
+                <input list="ingredient-names" className={field + ' flex-1'} placeholder="Zutat" value={it.name} onChange={(e) => patch({ groups: form.groups.map((x, j) => (j === gi ? { ...x, items: x.items.map((y, k) => (k === ii ? { ...y, name: e.target.value } : y)) } : x)) })} />
                 <button className="px-2 text-red-500" onClick={() => patch({ groups: form.groups.map((x, j) => (j === gi ? { ...x, items: x.items.filter((_, k) => k !== ii) } : x)) })}>✕</button>
               </div>
             ))}
