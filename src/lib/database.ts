@@ -1179,6 +1179,38 @@ export class CookbookDatabase {
     return result.changes > 0;
   }
 
+  /** Upsert a whole shopping list by id (sync apply). No permanent guard / no events. */
+  upsertShoppingListForSync(list: ShoppingList): void {
+    const permanent = list.permanentType ?? (list.isPermanent ? 1 : 0);
+    this.db
+      .prepare(
+        `INSERT INTO shopping_lists (id, title, description, items, recipes, is_permanent, has_seen_global_template_prompt, preferred_supermarket_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           title=excluded.title, description=excluded.description, items=excluded.items,
+           recipes=excluded.recipes, is_permanent=excluded.is_permanent,
+           has_seen_global_template_prompt=excluded.has_seen_global_template_prompt,
+           preferred_supermarket_id=excluded.preferred_supermarket_id, updated_at=excluded.updated_at`
+      )
+      .run(
+        list.id,
+        list.title,
+        list.description ?? null,
+        JSON.stringify(list.items ?? []),
+        JSON.stringify(list.recipes ?? []),
+        permanent,
+        list.hasSeenGlobalTemplatePrompt ? 1 : 0,
+        list.preferredSupermarketId ?? null,
+        syncIso(list.createdAt),
+        syncIso(list.updatedAt)
+      );
+  }
+
+  /** Plain delete by id (sync apply) — bypasses the permanent-list guard used by deleteShoppingList. */
+  deleteShoppingListForSync(id: string): void {
+    this.db.prepare('DELETE FROM shopping_lists WHERE id = ?').run(id);
+  }
+
   addItemToShoppingList(listId: string, item: Omit<ShoppingListItem, 'id'>): ShoppingList | null {
     const list = this.getShoppingList(listId);
     if (!list) {

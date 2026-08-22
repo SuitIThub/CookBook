@@ -13,11 +13,13 @@ import SettingsPage from './pages/SettingsPage';
 import OptoutTestPage from './pages/OptoutTestPage';
 import ProductsPage from './pages/ProductsPage';
 import IngredientsPage from './pages/IngredientsPage';
+import ShoppingListsPage from './pages/ShoppingListsPage';
+import ShoppingListDetailPage from './pages/ShoppingListDetailPage';
 
 /** Top-level navigation. Only Rezepte is wired in Phase 1; the rest are stubs. */
 const NAV: { to: string; label: string; enabled: boolean }[] = [
   { to: '/', label: 'Rezepte', enabled: true },
-  { to: '/einkaufslisten', label: 'Einkaufslisten', enabled: false },
+  { to: '/einkaufslisten', label: 'Einkaufslisten', enabled: true },
   { to: '/produkte', label: 'Produkte', enabled: true },
   { to: '/zutaten', label: 'Zutaten', enabled: true },
   { to: '/einstellungen', label: 'Einstellungen', enabled: true }
@@ -96,6 +98,8 @@ export default function App() {
           <Route path="/_pushtest" element={<PushTestPage />} />
           <Route path="/produkte" element={<ProductsPage />} />
           <Route path="/zutaten" element={<IngredientsPage />} />
+          <Route path="/einkaufslisten" element={<ShoppingListsPage />} />
+          <Route path="/einkaufsliste/:id" element={<ShoppingListDetailPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />
           <Route path="/_optouttest" element={<OptoutTestPage />} />
           <Route

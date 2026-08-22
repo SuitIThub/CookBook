@@ -4,7 +4,7 @@
  * shared CookbookDatabase so pages don't touch the DB directly.
  */
 import { getLocalDb } from './localDb';
-import type { Recipe, NutritionData } from '@shared/recipe';
+import type { Recipe, NutritionData, ShoppingList, ShoppingListItem } from '@shared/recipe';
 import type { Product, Supermarket, CatalogueIngredient } from '@shared/tracker';
 
 export async function localRecipes(): Promise<Recipe[]> {
@@ -60,6 +60,67 @@ export async function createLocalVariant(recipe: Recipe, variantName: string): P
     parentRecipeId: rootId,
     variantName: variantName.trim()
   });
+}
+
+// ---- Shopping lists (local-first; the shared core holds the CRUD + logic) ----
+
+export async function localShoppingLists(): Promise<ShoppingList[]> {
+  const { db } = await getLocalDb();
+  return db.getAllShoppingLists();
+}
+
+export async function localShoppingList(id: string): Promise<ShoppingList | null> {
+  const { db } = await getLocalDb();
+  return db.getShoppingList(id);
+}
+
+export async function createLocalShoppingList(title: string, description?: string): Promise<ShoppingList> {
+  const { db, persist } = await getLocalDb();
+  const list = db.createShoppingList(title, description);
+  await persist();
+  return list;
+}
+
+export async function updateLocalShoppingList(id: string, updates: Partial<ShoppingList>): Promise<ShoppingList | null> {
+  const { db, persist } = await getLocalDb();
+  const list = db.updateShoppingList(id, updates);
+  await persist();
+  return list;
+}
+
+export async function deleteLocalShoppingList(id: string): Promise<boolean> {
+  const { db, persist } = await getLocalDb();
+  const ok = db.deleteShoppingList(id);
+  await persist();
+  return ok;
+}
+
+export async function addRecipeToLocalShoppingList(listId: string, recipeId: string): Promise<ShoppingList | null> {
+  const { db, persist } = await getLocalDb();
+  const list = db.addRecipeToShoppingList(listId, recipeId);
+  await persist();
+  return list;
+}
+
+export async function removeRecipeFromLocalShoppingList(listId: string, recipeId: string): Promise<ShoppingList | null> {
+  const { db, persist } = await getLocalDb();
+  const list = db.removeRecipeFromShoppingList(listId, recipeId);
+  await persist();
+  return list;
+}
+
+export async function setLocalRecipeServings(listId: string, recipeId: string, servings: number): Promise<ShoppingList | null> {
+  const { db, persist } = await getLocalDb();
+  const list = db.updateRecipeServingsInShoppingList(listId, recipeId, servings);
+  await persist();
+  return list;
+}
+
+export async function addItemToLocalShoppingList(listId: string, item: Omit<ShoppingListItem, 'id'>): Promise<ShoppingList | null> {
+  const { db, persist } = await getLocalDb();
+  const list = db.addItemToShoppingList(listId, item);
+  await persist();
+  return list;
 }
 
 export async function localProducts(): Promise<Product[]> {

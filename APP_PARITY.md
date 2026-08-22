@@ -54,4 +54,17 @@ Nach Rezepten (referenzieren Rezepte + Produkte).
   **KI-Chat (Streaming, Ollama/OpenRouter, Verlauf)** ✅, **KI-Variante aus Chat
   anwenden** ✅, **KI-Edit (regionsbasiert, Highlights-Bestätigung) aus Chat
   anwenden** ✅ — offen: erweiterte Zutaten-Controls (Alternativen/Verknüpfung).
-- ⏭️ Danach: F4 Einkaufslisten · F5 Tracker.
+- 🔄 **F4 Einkaufslisten**: Übersicht (anlegen/löschen/öffnen), Detail (Rezepte
+  mit Portionen hinzufügen/entfernen, Artikel abhaken, manuelle Artikel), Sync
+  (`shopping_list` in Pull/Push/Registry). Offen: Supermarkt-/Preis-Panel,
+  Dauerlisten/Vorlagen, „Zur Liste hinzufügen" aus Rezept, Alternativen-Auswahl.
+- ⏭️ Danach: F5 Tracker.
+
+## Sync-Korrekturen (F4)
+- **Push-Cursor:** Pull setzte den Push-Cursor auf `maxSeq` und verschluckte damit
+  noch nicht gepushte lokale Schreibvorgänge (da runSync erst pullt, dann pusht).
+  Jetzt absorbiert der Pull nur tatsächlich geleakte Echo-Einträge.
+- **Client-LWW beim Pull:** Gepullte Zeilen (inkl. server-rückgespiegelter eigener
+  Echos) überschrieben neuere lokale Edits. Jetzt wird nur angewandt, wenn kein
+  lokaler Datensatz existiert, kein Timestamp vorliegt oder die eingehende Zeile
+  mindestens so neu ist. Betrifft alle Entitäten (Rezepte/Produkte/… profitieren).

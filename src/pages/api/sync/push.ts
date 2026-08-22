@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database.server';
 import type { Recipe } from '../../../types/recipe';
 import type { Product, Supermarket, CatalogueIngredient } from '../../../types/tracker';
+import type { ShoppingList } from '../../../types/recipe';
 
 /**
  * Push endpoint (client -> server). Applies client changes with last-write-wins
@@ -58,6 +59,14 @@ const HANDLERS: Record<
     applyDelete: (id: string) => db.deleteIngredientForSync(id),
     // ingredients have no updated_at column → no LWW guard, always apply.
     existingUpdatedAt: () => null
+  },
+  shopping_list: {
+    applyUpsert: (data: ShoppingList) => db.upsertShoppingListForSync(data),
+    applyDelete: (id: string) => db.deleteShoppingListForSync(id),
+    existingUpdatedAt: (id: string) => {
+      const l = db.getShoppingList(id);
+      return l ? ms(l.updatedAt) : null;
+    }
   }
 };
 

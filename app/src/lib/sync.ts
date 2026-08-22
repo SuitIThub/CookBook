@@ -12,6 +12,13 @@ import { apiGet, apiPost, ApiError } from './api';
 const CURSOR_KEY = 'kochbuch.sync.cursor';
 const PUSH_CURSOR_KEY = 'kochbuch.sync.pushCursor';
 
+/** Parse a date-ish value to epoch ms; 0 when absent/unparseable (→ no LWW guard). */
+function ms(v: unknown): number {
+  if (v == null) return 0;
+  const t = new Date(v as string).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 /**
  * Per-entity sync handlers on the local replica. Adding an entity to sync is a
  * single registry line here (+ its *ForSync methods in the shared core + the
@@ -45,6 +52,11 @@ const REGISTRY: Record<string, EntityHandler> = {
     upsert: (db, d) => db.upsertIngredientForSync(d),
     del: (db, id) => db.deleteIngredientForSync(id),
     get: (db, id) => db.getCatalogueIngredientById(id)
+  },
+  shopping_list: {
+    upsert: (db, d) => db.upsertShoppingListForSync(d),
+    del: (db, id) => db.deleteShoppingListForSync(id),
+    get: (db, id) => db.getShoppingList(id)
   }
 };
 const SYNCED_TYPES = Object.keys(REGISTRY);
@@ -99,8 +111,12 @@ export async function pullFromServer(): Promise<PullResult> {
   let deleted = 0;
   // Apply dependency-first so a product's junction rows (prices, ingredient
   // links) find their supermarket/ingredient already applied.
-  const RANK: Record<string, number> = { supermarket: 0, ingredient: 1, product: 2, recipe: 3 };
+  const RANK: Record<string, number> = { supermarket: 0, ingredient: 1, product: 2, recipe: 3, shopping_list: 4 };
   const ordered = [...res.changes].sort((a, b) => (RANK[a.type] ?? 9) - (RANK[b.type] ?? 9));
+  // High-water mark of the local outbox BEFORE applying: any pending user writes
+  // sit at or below this. We must not advance the push cursor past it, or those
+  // writes would never be pushed (pull runs before push in runSync).
+  const outboxBefore = db.getMaxSyncSeq();
   // Apply under echo-suppression so these server rows aren't re-pushed later.
   db.applySync(() => {
     for (const ch of ordered) {
@@ -110,17 +126,30 @@ export async function pullFromServer(): Promise<PullResult> {
         handler.del(db, ch.id);
         deleted++;
       } else if (ch.data) {
-        handler.upsert(db, ch.data);
-        applied++;
+        // Client-side last-write-wins: don't let a pulled row (including our own
+        // echo re-broadcast by the server) overwrite a NEWER local edit. Apply
+        // when there's no local row, the entity has no timestamp, or the incoming
+        // row is at least as new as the local one.
+        const local = handler.get(db, ch.id);
+        const incomingTs = ms((ch.data as any).updatedAt);
+        const localTs = local ? ms((local as any).updatedAt) : null;
+        if (localTs === null || incomingTs === 0 || incomingTs >= localTs) {
+          handler.upsert(db, ch.data);
+          applied++;
+        }
       }
     }
   });
 
   setCursor(res.cursor);
-  // Absorb anything the apply wrote to the LOCAL change log into the push
-  // cursor, so pulled rows are never treated as an outbox entry to push back.
-  // This is the definitive echo guard (independent of trigger-level suppression).
-  setPushCursor(db.getMaxSyncSeq());
+  // Echo guard: normally applySync suppresses trigger logging, so the apply adds
+  // nothing to the outbox and we leave the push cursor alone (pending local
+  // writes stay pushable). Only if the apply *leaked* log entries (suppression
+  // failed) do we absorb them so pulled rows aren't pushed back.
+  const outboxAfter = db.getMaxSyncSeq();
+  if (outboxAfter > outboxBefore) {
+    setPushCursor(outboxAfter);
+  }
   await persist();
   return { ok: true, applied, deleted, cursor: res.cursor };
 }
