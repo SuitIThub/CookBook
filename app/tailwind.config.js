@@ -2,10 +2,13 @@
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   darkMode: 'class',
+  // The website defines its own .container (max-w-7xl, centered) in components.css.
+  // Disable Tailwind's core container so ours matches the site exactly.
+  corePlugins: { container: false },
   theme: {
     extend: {
       colors: {
-        // Matches the Astro web app branding (tailwind.config.mjs).
+        // Matches the Astro web app branding (../tailwind.config.mjs).
         primary: {
           50: '#fff7ed',
           100: '#ffedd5',
@@ -33,8 +36,39 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif']
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.5s ease-in-out',
+        'slide-up': 'slideUp 0.3s ease-out'
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' }
+        },
+        slideUp: {
+          '0%': { transform: 'translateY(10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' }
+        }
       }
     }
   },
-  plugins: []
+  plugins: [
+    function ({ addVariant }) {
+      // Layout modes — kept in sync with the website's tailwind.config.mjs.
+      addVariant(
+        'mobile',
+        '@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px)'
+      );
+      addVariant(
+        'not-mobile',
+        '@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px)'
+      );
+      addVariant(
+        'tablet',
+        '@media (aspect-ratio > 0.84) and (width < 1280px), (aspect-ratio > 0.62) and (width >= 700px) and (width < 1280px)'
+      );
+      addVariant('desktop', '@media (width >= 1280px)');
+    }
+  ]
 };

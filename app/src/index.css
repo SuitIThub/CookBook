@@ -1,3 +1,8 @@
+/* Shared design system, copied verbatim from the website (../../src/styles/components.css)
+   so the app and site look identical. Imported first so @apply resolves and the
+   Tailwind utility layer can still override component classes. */
+@import './styles/components.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

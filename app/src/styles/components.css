@@ -1,0 +1,1331 @@
+/* Button Components */
+.btn {
+  @apply px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn-primary {
+  @apply bg-orange-500 hover:bg-orange-600 text-white focus:ring-orange-500;
+}
+
+.btn-secondary {
+  @apply text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 focus:ring-orange-500;
+}
+
+.btn-success {
+  @apply bg-green-500 hover:bg-green-600 text-white focus:ring-green-500;
+}
+
+.btn-blue {
+  @apply bg-blue-500 hover:bg-blue-600 text-white focus:ring-blue-500;
+}
+
+.btn-danger {
+  @apply text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 focus:ring-red-500;
+}
+
+.btn-small {
+  @apply px-3 py-1 text-sm;
+}
+
+.btn-icon {
+  @apply p-2 rounded-md transition-colors;
+}
+
+/* Card Components */
+.card {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors duration-200;
+}
+
+.card-hover {
+  @apply hover:shadow-lg transition-shadow;
+}
+
+.card-header {
+  @apply p-6 border-b border-gray-200 dark:border-gray-700;
+}
+
+.card-content {
+  @apply p-6;
+}
+
+.card-footer {
+  @apply p-6 border-t border-gray-200 dark:border-gray-700;
+}
+
+/* Form Components */
+.form-input {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400;
+}
+
+.form-select {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white;
+}
+
+.form-textarea {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-y;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2;
+}
+
+.form-group {
+  @apply space-y-2;
+}
+
+/* Layout Components */
+.container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.container-narrow {
+  @apply max-w-4xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.grid-responsive {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+}
+
+.grid-two-cols {
+  @apply grid grid-cols-1 not-mobile:grid-cols-2 gap-6;
+}
+
+/* Product-per-ingredient picker: stack by viewport WIDTH, not the fold/aspect
+   `not-mobile` variant. Fold covers and short chrome were matching `not-mobile`
+   and squeezing name + select + button into one truncated row. */
+.live-product-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.live-product-row .live-product-slot,
+.live-product-row .live-product-select,
+.live-product-row .live-link-product {
+  width: 100%;
+}
+@media (min-width: 1024px) {
+  .live-product-row {
+    flex-direction: row;
+    align-items: center;
+  }
+  .live-product-row .live-product-name {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .live-product-row .live-product-slot {
+    width: auto;
+  }
+  .live-product-row .live-product-select {
+    width: auto;
+    max-width: 20rem;
+  }
+  .live-product-row .live-link-product {
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
+.grid-four-cols {
+  @apply grid grid-cols-2 md:grid-cols-4 gap-4;
+}
+
+/* Typography Components */
+.heading-primary {
+  @apply text-3xl font-bold text-gray-900 dark:text-white;
+}
+
+.heading-secondary {
+  @apply text-2xl font-bold text-gray-900 dark:text-white;
+}
+
+.heading-tertiary {
+  @apply text-xl font-semibold text-gray-900 dark:text-white;
+}
+
+.text-muted {
+  @apply text-gray-600 dark:text-gray-400;
+}
+
+.text-body {
+  @apply text-gray-700 dark:text-gray-300;
+}
+
+/* Navigation Components */
+.nav-link {
+  @apply text-gray-700 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 px-3 py-2 rounded-md text-sm font-medium transition-colors;
+}
+
+.nav-header {
+  @apply bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors duration-200;
+}
+
+/* Mobile Navigation */
+#mobile-menu {
+  animation: mobileMenuSlide 0.2s ease-out;
+}
+
+#mobile-menu:not(.hidden) {
+  display: block !important;
+}
+
+@keyframes mobileMenuSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mobileMenuSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* Mobile layout: tall phones and fold covers (~21:9), even if CSS width ≥ 600
+   (Galaxy Z Fold 7 cover). Fold inner (~10:9) stays tablet. */
+@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px) {
+  .nav-header .container {
+    position: relative;
+  }
+  
+  #mobile-menu {
+    background: inherit;
+  }
+  
+  /* Ensure mobile menu is properly hidden in mobile when not active */
+  #mobile-menu.hidden {
+    display: none !important;
+  }
+  
+  /* Add bottom padding to main content when timer footer is visible */
+  body:has(#timer-footer:not(.hidden)) main {
+    padding-bottom: 80px; /* Space for collapsed timer footer */
+  }
+  
+  /* Add more bottom padding when timer footer is expanded */
+  body:has(#timer-footer:not(.hidden) #timer-footer-expanded:not(.hidden)) main {
+    padding-bottom: calc(100vh - 300px); /* Dynamic space for expanded footer */
+  }
+}
+
+/* Recipe header mobile responsive styles */
+@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px) {
+  /* Mobile buttons should be slightly larger and more touch-friendly */
+  #edit-btn-mobile,
+  #add-to-shopping-mobile {
+    min-height: 48px;
+    touch-action: manipulation;
+  }
+  
+  /* Better spacing for mobile recipe titles */
+  .recipe-header-mobile h1 {
+    line-height: 1.2;
+  }
+}
+
+/* Tablet: not-mobile and width < 1280 — hamburger + fixed nav */
+@media (aspect-ratio > 0.84) and (width < 1280px), (aspect-ratio > 0.62) and (width >= 700px) and (width < 1280px) {
+  .nav-header .container {
+    position: relative;
+  }
+
+  #mobile-menu {
+    background: inherit;
+  }
+
+  #mobile-menu.hidden {
+    display: none !important;
+  }
+
+  .nav-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+  }
+
+  main.container {
+    padding-top: 6rem !important;
+  }
+
+  .timer-sidebar {
+    top: 4rem;
+  }
+}
+
+/* Desktop: width >= 1280 — hide mobile menu, fixed navbar */
+@media (width >= 1280px) {
+  #mobile-menu {
+    display: none !important;
+  }
+  
+  /* Fixed navbar in desktop mode */
+  .nav-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+  }
+  
+  /* Add top padding to main content to account for fixed navbar */
+  main.container {
+    padding-top: 6rem !important; /* 96px - 64px for navbar height + extra space */
+  }
+  
+  /* Adjust timer sidebar position to start below fixed navbar */
+  .timer-sidebar {
+    top: 4rem; /* Start below the fixed navbar instead of top-16 */
+  }
+}
+
+/* Utility Components */
+.flex-center {
+  @apply flex items-center justify-center;
+}
+
+.flex-between {
+  @apply flex justify-between items-center;
+}
+
+.space-x-standard {
+  @apply space-x-4;
+}
+
+.space-y-standard {
+  @apply space-y-4;
+}
+
+/* Badge/Tag Components */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge-gray {
+  @apply bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200;
+}
+
+.badge-blue {
+  @apply bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200;
+}
+
+.badge-green {
+  @apply bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200;
+}
+
+.badge-yellow {
+  @apply bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200;
+}
+
+.badge-red {
+  @apply bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200;
+}
+
+/* Recipe-specific Components */
+.recipe-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden border border-gray-200 dark:border-gray-700;
+}
+
+.recipe-image-placeholder {
+  @apply h-48 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-800 dark:to-orange-900 flex items-center justify-center;
+}
+
+.recipe-step-number {
+  @apply flex-shrink-0 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm font-bold;
+}
+
+.ingredient-item {
+  @apply flex justify-between items-center py-2 px-3 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
+}
+
+.quantity-badge {
+  @apply text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded;
+}
+
+/* Shopping list specific */
+.shopping-item-checked {
+  @apply bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md;
+}
+
+.shopping-item-unchecked {
+  @apply hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors;
+}
+
+/* Timer Components */
+.timer-footer {
+  @apply fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg transform transition-transform duration-300 ease-in-out z-[30];
+  z-index: 30 !important;
+}
+
+.timer-button {
+  @apply p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors;
+}
+
+.timer-trigger {
+  @apply text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline font-medium;
+}
+
+/* Multi-Timer Components */
+.timer-sidebar {
+  @apply fixed right-0 top-16 bottom-0 w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-lg transform transition-transform duration-300 ease-in-out overflow-y-auto z-[30];
+  z-index: 30 !important;
+}
+
+/* When collapsed, hide sidebar completely */
+.timer-sidebar:has(.timer-sidebar-content.hidden) {
+  width: 0px;
+  border-left: none;
+}
+
+/* Fallback for browsers that don't support :has() */
+.timer-sidebar.collapsed {
+  width: 0px;
+  border-left: none;
+}
+
+.timer-sidebar-content {
+  @apply h-full flex flex-col;
+}
+
+.timer-sidebar-toggle {
+  @apply fixed top-1/3 bg-orange-500 hover:bg-orange-600 text-white py-3 px-2 cursor-pointer z-[30] items-center justify-center transition-all duration-200 shadow-lg;
+  z-index: 30 !important;
+  transform: translateY(-50%); /* Center within the top third */
+  right: 0px; /* Default position when sidebar is collapsed - perfectly flush */
+  border-radius: 0.5rem 0 0 0.5rem; /* Always rounded left only */
+}
+
+/* Show the toggle button only in tablet/desktop (not-mobile) */
+@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px) {
+  .timer-sidebar-toggle:not(.hidden) {
+    @apply flex flex-col;
+  }
+}
+
+/* When sidebar is expanded, position button left of it */
+.timer-sidebar-toggle.positioned-left {
+  right: 20rem; /* Position left of expanded sidebar */
+  /* Keep same border-radius - always rounded left only */
+}
+
+/* Adjust main content when sidebar is visible and expanded (tablet + desktop) */
+@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px) {
+  body:has(.timer-sidebar:not(.hidden):not(.collapsed)) main {
+    padding-right: 20rem; /* w-80 equivalent */
+  }
+}
+
+/* Fallback for browsers that don't support :has() */
+.timer-sidebar-active main {
+  @apply pr-0;
+}
+
+@media (aspect-ratio > 0.84), (aspect-ratio > 0.62) and (width >= 700px), (width >= 1280px) {
+  .timer-sidebar-active main {
+    padding-right: 20rem; /* w-80 equivalent */
+  }
+}
+
+/* Fallback for timer footer padding in mobile layout */
+@media (aspect-ratio <= 0.62) and (width < 1280px), (aspect-ratio <= 0.84) and (width < 700px) {
+  .timer-footer-active main {
+    padding-bottom: 80px; /* Space for collapsed timer footer */
+  }
+  
+  .timer-footer-expanded-active main {
+    padding-bottom: 40vh; /* Reasonable fallback for expanded footer */
+  }
+
+  /* Keep the AI chat FAB above the mobile timer footer. */
+  .timer-footer-active #recipe-ai-chat-fab {
+    bottom: 5.5rem; /* footer toggle height + gap */
+  }
+
+  .timer-footer-expanded-active #recipe-ai-chat-fab {
+    bottom: 42vh; /* stay above expanded timer sheet */
+  }
+}
+
+.timer-sidebar-header {
+  @apply flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900;
+}
+
+.timer-footer-toggle {
+  @apply p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
+}
+
+.timer-footer-expanded {
+  @apply border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900;
+  max-height: calc(100vh - 120px); /* Reserve space for footer toggle (60px) + navigation (60px) */
+  overflow-y: auto;
+}
+
+.timer-list {
+  @apply space-y-3 p-4;
+}
+
+/* Specific styling for footer timer list to handle scrolling */
+.timer-footer-expanded .timer-list {
+  @apply space-y-3 p-4;
+  /* Remove padding from container since it's handled by expanded container */
+}
+
+.timer-item {
+  @apply bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600 transition-all duration-200;
+}
+
+.timer-item:hover {
+  @apply shadow-md border-orange-200 dark:border-orange-800;
+}
+
+.timer-item.timer-completed {
+  @apply bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800;
+}
+
+.timer-item-header {
+  @apply flex items-center justify-between mb-2;
+}
+
+.timer-item-title {
+  @apply flex items-center space-x-2 flex-1;
+}
+
+.timer-item-label {
+  @apply font-medium text-gray-900 dark:text-white text-sm truncate;
+}
+
+.timer-auto-badge {
+  @apply bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-0.5 rounded-full font-medium;
+}
+
+.timer-global-badge {
+  @apply text-base;
+}
+
+.timer-global-btn {
+  @apply p-1 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 rounded transition-colors;
+}
+
+.timer-context-info {
+  @apply mb-2 space-y-1;
+}
+
+.timer-recipe-name {
+  @apply text-sm font-medium text-orange-600 dark:text-orange-400;
+}
+
+.timer-step-description {
+  @apply text-xs text-gray-600 dark:text-gray-400 line-clamp-2;
+}
+
+.timer-recipe-based {
+  @apply border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/10;
+}
+
+.line-clamp-2 {
+  @apply overflow-hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Timer Complete Notification */
+.timer-complete-notification {
+  animation: timer-notification-appear 0.3s ease-out;
+}
+
+/* Expired Timer Notification */
+.expired-timer-notification {
+  animation: timer-notification-appear 0.3s ease-out;
+}
+
+.expired-timer-overlay {
+  animation: overlay-appear 0.3s ease-out;
+}
+
+@keyframes timer-notification-appear {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Add Timer Modal */
+.add-timer-modal {
+  animation: modal-appear 0.3s ease-out;
+}
+
+.add-timer-overlay {
+  animation: overlay-appear 0.3s ease-out;
+}
+
+@keyframes modal-appear {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes overlay-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Time preset buttons hover effect */
+.time-preset-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Number input styling */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.timer-remove-btn {
+  @apply p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors;
+}
+
+.timer-item-display {
+  @apply text-2xl font-mono font-bold mb-3 text-center;
+}
+
+.timer-controls {
+  @apply flex items-center justify-center space-x-2;
+}
+
+.timer-control-btn {
+  @apply px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors min-w-[2.5rem] flex items-center justify-center;
+}
+
+.timer-control-btn.primary {
+  @apply bg-orange-500 hover:bg-orange-600 text-white border-orange-500 text-base;
+}
+
+.timer-control-btn.disabled {
+  @apply opacity-50 cursor-not-allowed bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 border-gray-300 dark:border-gray-500;
+}
+
+.timer-control-btn.disabled:hover {
+  @apply bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500;
+}
+
+.timer-count-indicator {
+  @apply bg-white text-orange-500 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center mt-1 min-w-[1.25rem];
+}
+
+/* Responsive adjustments — short tablet/desktop viewports (e.g. Fold split-screen) */
+@media (aspect-ratio > 0.84) and (max-height: 600px), (aspect-ratio > 0.62) and (width >= 700px) and (max-height: 600px), (width >= 1280px) and (max-height: 600px) {
+  .timer-sidebar {
+    @apply w-64;
+  }
+  
+  .timer-item {
+    @apply p-3;
+  }
+  
+  .timer-list {
+    @apply p-3 space-y-2;
+  }
+}
+
+@media (max-width: 768px) {
+  .timer-sidebar {
+    @apply w-full right-0 left-0;
+  }
+  
+  /* Adjust max height for smaller screens */
+  .timer-footer-expanded {
+    max-height: calc(100vh - 140px); /* More space needed on mobile for UI elements */
+  }
+}
+
+@media (max-height: 600px) {
+  /* For very short screens (landscape phones), be more aggressive with space */
+  .timer-footer-expanded {
+    max-height: calc(100vh - 100px);
+  }
+}
+
+/* AI edit change markers */
+.ai-edit-changed {
+  position: relative;
+  outline: 2px solid rgb(129 140 248);
+  outline-offset: 2px;
+  background-color: rgba(99, 102, 241, 0.08);
+  border-radius: 0.5rem;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08);
+}
+
+.dark .ai-edit-changed {
+  outline-color: rgb(129 140 248);
+  background-color: rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+}
+
+.ai-edit-changed-field {
+  border-color: rgb(129 140 248) !important;
+}
+
+.ai-edit-changed-badge {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(67 56 202);
+  background: rgb(224 231 255);
+  border: 1px solid rgb(165 180 252);
+  pointer-events: none;
+}
+
+.dark .ai-edit-changed-badge {
+  color: rgb(199 210 254);
+  background: rgba(49, 46, 129, 0.85);
+  border-color: rgb(99 102 241);
+}
+
+/* Step highlighting animation */
+.step-highlight {
+  animation: stepHighlight 2s ease-in-out;
+  border-radius: 8px;
+}
+
+@keyframes stepHighlight {
+  0% {
+    background-color: rgba(249, 115, 22, 0.3);
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.3);
+  }
+  25% {
+    background-color: rgba(249, 115, 22, 0.2);
+    box-shadow: 0 0 0 8px rgba(249, 115, 22, 0.2);
+  }
+  50% {
+    background-color: rgba(249, 115, 22, 0.1);
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
+  }
+  75% {
+    background-color: rgba(249, 115, 22, 0.05);
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.05);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* Timer context clickable styles */
+.timer-context-clickable {
+  @apply cursor-pointer transition-colors duration-200;
+}
+
+.timer-context-clickable:hover {
+  @apply bg-gray-100 dark:bg-gray-600;
+}
+
+.timer-context-hint {
+  @apply text-xs text-gray-500 dark:text-gray-400 mt-1 opacity-75;
+}
+
+/* Modal Components */
+.modal {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-all duration-200;
+  isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Apply the same compositing stabilization to custom modal roots. */
+div[id$="-modal"].fixed {
+  isolation: isolate;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overscroll-behavior: contain;
+}
+
+.modal.hidden {
+  @apply opacity-0 pointer-events-none;
+}
+
+.modal:not(.hidden) {
+  @apply opacity-100;
+}
+
+.modal-overlay {
+  @apply absolute inset-0 bg-black bg-opacity-50 cursor-pointer;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.modal-content {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 transition-all duration-200 relative z-10;
+  animation: modal-scale-in 0.2s ease-out;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* Stabilize custom modal panels that do not use .modal-content. */
+div[id$="-modal"].fixed > div {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.modal-header {
+  @apply flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700;
+}
+
+.modal-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white;
+}
+
+.modal-header .modal-close {
+  @apply text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-2xl font-bold w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+.modal-footer .modal-close.btn {
+  /* Ensure modal-close doesn't override btn styles in footer */
+  @apply w-auto h-auto;
+}
+
+.modal-body {
+  @apply p-6;
+}
+
+.modal-footer {
+  @apply flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700;
+}
+
+.modal-footer .btn {
+  @apply min-w-[100px] whitespace-nowrap;
+}
+
+@keyframes modal-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Mobile: avoid expensive backdrop effects that can cause flicker */
+@media (max-width: 768px), (pointer: coarse) {
+  .modal {
+    transition: opacity 0.2s ease;
+  }
+
+  .modal-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  div[id$="-modal"].fixed {
+    transition: opacity 0.2s ease;
+  }
+
+  div[id$="-modal"].fixed [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* Modal size variants */
+.modal-content.modal-sm {
+  @apply max-w-sm;
+}
+
+.modal-content.modal-lg {
+  @apply max-w-lg;
+}
+
+.modal-content.modal-xl {
+  @apply max-w-2xl;
+}
+
+/* 80% viewport width for notes/gallery modals */
+.modal-content.modal-wide {
+  width: 80vw;
+  max-width: 80vw;
+}
+
+/* Additional modal sizes and components */
+.modal-lg .modal-content {
+  @apply max-w-4xl;
+}
+
+/* Recipe card styles */
+.recipe-card {
+  @apply transition-all duration-200;
+}
+
+.recipe-card:hover {
+  @apply border-orange-500 shadow-md;
+}
+
+.recipe-item {
+  @apply transition-all duration-200;
+}
+
+.recipe-item:hover {
+  @apply shadow-sm;
+}
+
+/* Button color variants */
+.btn-blue {
+  @apply bg-blue-500 text-white border-blue-500 hover:bg-blue-600 hover:border-blue-600;
+}
+
+.dark .btn-blue {
+  @apply bg-blue-600 hover:bg-blue-700 border-blue-600 hover:border-blue-700;
+}
+
+/* Line clamp utility for recipe descriptions */
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Recipe ingredient highlighting */
+.shopping-item.highlighted,
+.shopping-item-group.highlighted {
+  @apply bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600 border-2 rounded-lg;
+  animation: highlight-pulse 0.5s ease-in-out;
+}
+
+.detail-item-highlighted {
+  @apply bg-blue-100 dark:bg-blue-800/50 border-l-4 border-blue-500 dark:border-blue-400 pl-2 rounded-r;
+  animation: highlight-pulse 0.5s ease-in-out;
+}
+
+.recipe-item.active {
+  @apply bg-blue-50 dark:bg-blue-900/30 border-blue-500 dark:border-blue-400;
+}
+
+@keyframes highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+/* Temperature marks in preparation steps */
+.temperature-mark {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  border-bottom: 1px dashed currentColor;
+  padding-bottom: 1px;
+  color: inherit;
+  font: inherit;
+}
+
+.temperature-mark:hover,
+.temperature-mark:focus {
+  border-bottom-style: solid;
+  outline: none;
+}
+
+.dark .temperature-mark {
+  border-bottom-color: rgba(255, 255, 255, 0.4);
+}
+
+.dark .temperature-mark:hover,
+.dark .temperature-mark:focus {
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Custom tooltip */
+#tooltip {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tooltip-arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border: inherit;
+  border-right: 0;
+  border-bottom: 0;
+  bottom: -5px;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(225deg);
+}
+
+.tooltip-below .tooltip-arrow {
+  bottom: auto;
+  top: -5px;
+  transform: translate(-50%, 50%) rotate(45deg);
+}
+
+@media (max-width: 640px) {
+  #tooltip {
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+.timer-toggle-btn {
+  @apply fixed right-4 top-20 p-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg transition-colors z-[30];
+  z-index: 30 !important;
+}
+
+/* Low-bandwidth / data-saver: collapse media-heavy regions (class set on <html>) */
+html.low-bandwidth .recipe-image-carousel,
+html.low-bandwidth .recipe-image-placeholder {
+  display: none !important;
+}
+
+html.low-bandwidth .recipe-header-hero {
+  display: none !important;
+}
+
+html.low-bandwidth .recipe-header-overlap {
+  margin-top: 0 !important;
+}
+
+html.low-bandwidth .recipe-page-image-gallery {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Recipe overview: view modes (grid / list) and category grouping
+   ========================================================================== */
+
+/* Card container layout (used on #recipe-collection and on each group panel) */
+.recipe-cards-container.view-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+@media (min-width: 768px) {
+  .recipe-cards-container.view-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .recipe-cards-container.view-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .recipe-cards-container.view-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.recipe-cards-container.view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Elements that only appear in one of the two views */
+.rc-list-only {
+  display: none;
+}
+.view-list .rc-grid-only {
+  display: none;
+}
+.view-list .rc-list-only {
+  display: block;
+}
+
+/* List row: image on the left, content (two rows) on the right */
+.view-list .recipe-card {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+/* Keep filtering (.hidden) working in list view despite the flex rule above */
+.view-list .recipe-card.hidden {
+  display: none;
+}
+.view-list .rc-image {
+  flex: 0 0 auto;
+  width: 7rem;
+}
+.view-list .rc-image .recipe-image-carousel,
+.view-list .rc-image .recipe-image-placeholder {
+  height: 100%;
+}
+.view-list .rc-image .h-48 {
+  height: 100% !important;
+}
+.view-list .rc-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Compact thumbnail: hide carousel controls in the list view */
+.view-list .rc-image .carousel-prev,
+.view-list .rc-image .carousel-next,
+.view-list .rc-image .carousel-dot {
+  display: none;
+}
+
+.view-list .card-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title variant"
+    "tags arrow";
+  align-items: center;
+  column-gap: 0.75rem;
+  row-gap: 0.25rem;
+}
+.view-list .rc-title-block {
+  grid-area: title;
+  margin-bottom: 0;
+  min-width: 0;
+}
+.view-list .rc-title-block .heading-tertiary {
+  @apply text-base truncate;
+}
+.view-list .rc-title-block .text-muted {
+  @apply truncate;
+}
+.view-list .rc-variant-label {
+  grid-area: variant;
+  justify-self: end;
+  @apply text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 whitespace-nowrap;
+}
+.view-list .rc-tags {
+  grid-area: tags;
+  margin-bottom: 0;
+}
+.view-list .rc-open-arrow {
+  grid-area: arrow;
+  justify-self: end;
+  @apply text-gray-400 dark:text-gray-500;
+}
+
+/* Variant rows only expand in selection mode in the list view */
+.view-list .rc-variants {
+  display: none;
+}
+.view-list .recipe-card.selection-mode .rc-variants {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+/* Selection checkbox overlays the thumbnail's top-left corner in the list view */
+.view-list .selection-indicator {
+  top: 0.5rem;
+  left: 0.5rem;
+  transform: none;
+}
+
+/* Category grouping (collapsible + tabs) */
+.recipe-category-group {
+  @apply mb-6;
+}
+.recipe-category-header {
+  @apply flex items-center justify-between w-full px-3 py-2 mb-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold cursor-pointer select-none;
+}
+.recipe-category-header .rc-group-chevron {
+  @apply transition-transform duration-200;
+}
+.recipe-category-group.collapsed .rc-group-chevron {
+  transform: rotate(-90deg);
+}
+.recipe-category-group.collapsed .recipe-cards-container {
+  display: none;
+}
+.recipe-category-group.rc-empty-hidden {
+  display: none;
+}
+
+.recipe-tabs-bar {
+  @apply flex flex-wrap gap-2 mb-6 border-b border-gray-200 dark:border-gray-700 pb-2;
+}
+.recipe-tab-btn {
+  @apply px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+}
+.recipe-tab-btn.active {
+  @apply bg-orange-500 text-white hover:bg-orange-600;
+}
+.recipe-tab-panel[hidden] {
+  display: none;
+}
+
+/* Native date/time inputs are kept for ISO value + picker; visible field is German. */
+.de-date-wrap {
+  position: relative;
+}
+.de-date-native {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.de-datetime-popup {
+  position: fixed;
+  z-index: 80;
+  width: 17.5rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+}
+.de-datetime-popup-dark {
+  border-color: #4b5563;
+  background: #1f2937;
+  color: #f9fafb;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+.de-datetime-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.de-datetime-month {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.de-datetime-nav {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+.de-datetime-nav:hover {
+  background: #f3f4f6;
+}
+.de-datetime-popup-dark .de-datetime-nav:hover {
+  background: #374151;
+}
+.de-datetime-weekdays,
+.de-datetime-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+  text-align: center;
+}
+.de-datetime-weekdays {
+  margin-bottom: 0.25rem;
+  font-size: 0.65rem;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+.de-datetime-popup-dark .de-datetime-weekdays {
+  color: #9ca3af;
+}
+.de-datetime-day {
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+}
+.de-datetime-day:hover {
+  background: #ffedd5;
+}
+.de-datetime-popup-dark .de-datetime-day:hover {
+  background: #7c2d12;
+}
+.de-datetime-day.is-today {
+  box-shadow: inset 0 0 0 1px #f97316;
+}
+.de-datetime-day.is-selected {
+  background: #f97316;
+  color: #ffffff;
+}
+.de-datetime-day.is-disabled,
+.de-datetime-day:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: transparent;
+}
+.de-datetime-time {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.8rem;
+}
+.de-datetime-popup-dark .de-datetime-time {
+  border-top-color: #4b5563;
+}
+.de-datetime-colon {
+  font-weight: 700;
+}
+.de-datetime-select {
+  font-variant-numeric: tabular-nums;
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.375rem;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: inherit;
+}
+.de-datetime-popup-dark .de-datetime-select {
+  border-color: #4b5563;
+  background: #111827;
+}
+
+#tracker-free-entry[open] > summary span {
+  transform: rotate(180deg);
+}
