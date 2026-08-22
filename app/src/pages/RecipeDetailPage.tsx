@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assetUrl } from '@/lib/api';
 import { localRecipe, localVariants, setLocalRecipePrivate, createLocalVariant } from '@/lib/localData';
 import { computeLocalRecipeNutrition } from '@/lib/localNutrition';
+import { exportRecipeMarkdown, exportRecipeJson, copyRecipeMarkdown } from '@/lib/recipeExport';
 import type {
   Ingredient,
   IngredientGroup,
@@ -90,6 +91,8 @@ export default function RecipeDetailPage() {
   });
 
   const [servingsOverride, setServingsOverride] = useState<number | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const baseServings = recipe?.metadata.servings ?? 1;
   const servings = servingsOverride ?? baseServings;
 
@@ -161,8 +164,67 @@ export default function RecipeDetailPage() {
           <Link to={`/rezept/${recipe.id}/bearbeiten`} className="text-sm font-medium text-primary-600 hover:underline">
             Bearbeiten
           </Link>
+          <div className="relative">
+            <button
+              onClick={() => setExportOpen((o) => !o)}
+              className="text-sm font-medium text-primary-600 hover:underline"
+              aria-haspopup="menu"
+              aria-expanded={exportOpen}
+            >
+              Export ▾
+            </button>
+            {exportOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
+                <div
+                  role="menu"
+                  className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-lg border border-secondary-200 bg-white shadow-lg dark:border-secondary-700 dark:bg-secondary-800"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      exportRecipeMarkdown(recipe);
+                      setExportOpen(false);
+                    }}
+                    className="block w-full px-4 py-2 text-left text-sm hover:bg-secondary-100 dark:hover:bg-secondary-700"
+                  >
+                    Als Markdown (.md)
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      exportRecipeJson(recipe);
+                      setExportOpen(false);
+                    }}
+                    className="block w-full px-4 py-2 text-left text-sm hover:bg-secondary-100 dark:hover:bg-secondary-700"
+                  >
+                    Als JSON (.json)
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={async () => {
+                      const ok = await copyRecipeMarkdown(recipe);
+                      setExportOpen(false);
+                      if (ok) {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }
+                    }}
+                    className="block w-full px-4 py-2 text-left text-sm hover:bg-secondary-100 dark:hover:bg-secondary-700"
+                  >
+                    Markdown kopieren
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
+      {copied && (
+        <p className="mt-2 text-right text-xs text-green-600 dark:text-green-400">
+          Markdown in die Zwischenablage kopiert.
+        </p>
+      )}
 
       {tabs.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1 border-b border-secondary-200 dark:border-secondary-700">
