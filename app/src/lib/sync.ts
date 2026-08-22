@@ -97,9 +97,13 @@ export async function pullFromServer(): Promise<PullResult> {
 
   let applied = 0;
   let deleted = 0;
+  // Apply dependency-first so a product's junction rows (prices, ingredient
+  // links) find their supermarket/ingredient already applied.
+  const RANK: Record<string, number> = { supermarket: 0, ingredient: 1, product: 2, recipe: 3 };
+  const ordered = [...res.changes].sort((a, b) => (RANK[a.type] ?? 9) - (RANK[b.type] ?? 9));
   // Apply under echo-suppression so these server rows aren't re-pushed later.
   db.applySync(() => {
-    for (const ch of res.changes) {
+    for (const ch of ordered) {
       const handler = REGISTRY[ch.type];
       if (!handler) continue;
       if (ch.op === 'delete') {

@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assetUrl } from '@/lib/api';
 import { localRecipe, localVariants, setLocalRecipePrivate } from '@/lib/localData';
+import { computeLocalRecipeNutrition } from '@/lib/localNutrition';
 import type {
   Ingredient,
   IngredientGroup,
@@ -29,7 +30,12 @@ function flattenSteps(nodes: (PreparationStep | PreparationGroup)[]): Preparatio
   return out;
 }
 
-function IngredientNode({ item }: { item: Ingredient | IngredientGroup }) {
+function formatAmount(n: number): string {
+  const r = Math.round(n * 100) / 100;
+  return (Number.isInteger(r) ? String(r) : r.toFixed(2).replace(/\.?0+$/, '')).replace('.', ',');
+}
+
+function IngredientNode({ item, scale }: { item: Ingredient | IngredientGroup; scale: number }) {
   if (isIngredientGroup(item)) {
     return (
       <div className="mt-3">
@@ -38,7 +44,7 @@ function IngredientNode({ item }: { item: Ingredient | IngredientGroup }) {
         )}
         <ul className="space-y-1">
           {item.ingredients.map((child, i) => (
-            <IngredientNode key={('id' in child && child.id) || i} item={child} />
+            <IngredientNode key={('id' in child && child.id) || i} item={child} scale={scale} />
           ))}
         </ul>
       </div>
@@ -49,7 +55,7 @@ function IngredientNode({ item }: { item: Ingredient | IngredientGroup }) {
     <li className="flex gap-2">
       {qty && (
         <span className="min-w-[4.5rem] shrink-0 tabular-nums text-secondary-500">
-          {qty.amount} {qty.unit}
+          {formatAmount(qty.amount * scale)} {qty.unit}
         </span>
       )}
       <span>{item.name}</span>
@@ -80,6 +86,16 @@ export default function RecipeDetailPage() {
     queryKey: ['variants', rootId],
     queryFn: () => localVariants(rootId!),
     enabled: !!rootId
+  });
+
+  const [servingsOverride, setServingsOverride] = useState<number | null>(null);
+  const baseServings = recipe?.metadata.servings ?? 1;
+  const servings = servingsOverride ?? baseServings;
+
+  const nutritionQuery = useQuery({
+    queryKey: ['nutrition', id, servings],
+    queryFn: () => computeLocalRecipeNutrition(recipe!, { servings }),
+    enabled: !!recipe
   });
 
   const togglePrivate = async () => {
@@ -115,6 +131,8 @@ export default function RecipeDetailPage() {
 
   const totalTime = getTotalTime(recipe.metadata.timeEntries ?? []);
   const steps = flattenSteps(recipe.preparationGroups ?? []);
+  const scale = baseServings > 0 ? servings / baseServings : 1;
+  const nutr = nutritionQuery.data;
   const image = assetUrl(recipe.imageUrl ?? recipe.images?.[0]?.url);
 
   return (
@@ -164,12 +182,28 @@ export default function RecipeDetailPage() {
           </button>
         </div>
         {recipe.subtitle && <p className="mt-1 text-secondary-500">{recipe.subtitle}</p>}
-        <div className="mt-3 flex flex-wrap gap-3 text-sm text-secondary-500">
-          <span>{recipe.metadata.servings} Portionen</span>
-          {totalTime > 0 && <span>· {formatTime(totalTime)}</span>}
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary-500">
+          {(recipe.metadata.timeEntries ?? []).map((t, i) => (
+            <span key={i}>
+              {t.label}: {formatTime(t.minutes)}
+            </span>
+          ))}
+          {totalTime > 0 && <span className="font-medium">· gesamt {formatTime(totalTime)}</span>}
           {recipe.metadata.difficulty && <span>· {recipe.metadata.difficulty}</span>}
           {recipe.category && <span>· {recipe.category}</span>}
         </div>
+        {recipe.tags && recipe.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {recipe.tags.map((t) => (
+              <span
+                key={t}
+                className="rounded-full bg-secondary-100 px-2 py-0.5 text-xs text-secondary-600 dark:bg-secondary-700 dark:text-secondary-300"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
       </header>
 
       {image && (
@@ -182,11 +216,66 @@ export default function RecipeDetailPage() {
 
       {recipe.description && <p className="mt-4 text-secondary-700 dark:text-secondary-300">{recipe.description}</p>}
 
+      {nutr && (nutr.nutrition.hasAnyData || nutr.price.hasAnyData) && (
+        <section className="mt-6 rounded-xl border border-secondary-200 p-4 dark:border-secondary-700">
+          <h2 className="mb-2 text-sm font-semibold text-secondary-500">
+            Nährwerte pro Portion{nutr.nutrition.isEstimated ? ' (geschätzt)' : ''}
+          </h2>
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+            {nutr.nutrition.perServing.calories != null && (
+              <span>
+                <strong>{Math.round(nutr.nutrition.perServing.calories)}</strong> kcal
+              </span>
+            )}
+            {nutr.nutrition.perServing.carbohydrates != null && (
+              <span>{Math.round(nutr.nutrition.perServing.carbohydrates)} g KH</span>
+            )}
+            {nutr.nutrition.perServing.protein != null && (
+              <span>{Math.round(nutr.nutrition.perServing.protein)} g Eiweiß</span>
+            )}
+            {nutr.nutrition.perServing.fat != null && (
+              <span>{Math.round(nutr.nutrition.perServing.fat)} g Fett</span>
+            )}
+            {nutr.price.hasAnyData && (
+              <span className="ml-auto text-secondary-600 dark:text-secondary-300">
+                ≈ {nutr.price.perServing.toFixed(2).replace('.', ',')} €/Portion
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+
       <section className="mt-8">
-        <h2 className="mb-3 text-xl font-semibold">Zutaten</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">Zutaten</h2>
+          <div className="flex items-center gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() => setServingsOverride(Math.max(1, servings - 1))}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-secondary-300 dark:border-secondary-600"
+              aria-label="weniger Portionen"
+            >
+              −
+            </button>
+            <span className="min-w-[5.5rem] text-center tabular-nums">{servings} Portionen</span>
+            <button
+              type="button"
+              onClick={() => setServingsOverride(servings + 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-secondary-300 dark:border-secondary-600"
+              aria-label="mehr Portionen"
+            >
+              +
+            </button>
+            {servingsOverride != null && servingsOverride !== baseServings && (
+              <button type="button" onClick={() => setServingsOverride(null)} className="text-xs text-primary-600 hover:underline">
+                zurücksetzen
+              </button>
+            )}
+          </div>
+        </div>
         <ul className="space-y-1">
           {(recipe.ingredientGroups ?? []).map((g, i) => (
-            <IngredientNode key={g.id || i} item={g} />
+            <IngredientNode key={g.id || i} item={g} scale={scale} />
           ))}
         </ul>
       </section>
