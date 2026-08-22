@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database.server';
 import type { Recipe } from '../../../types/recipe';
+import type { Product, Supermarket } from '../../../types/tracker';
 
 /**
  * Push endpoint (client -> server). Applies client changes with last-write-wins
@@ -34,6 +35,22 @@ const HANDLERS: Record<
     existingUpdatedAt: (id: string) => {
       const r = db.getRecipe(id);
       return r ? ms(r.updatedAt) : null;
+    }
+  },
+  product: {
+    applyUpsert: (data: Product) => db.upsertProductForSync(data),
+    applyDelete: (id: string) => db.deleteProductForSync(id),
+    existingUpdatedAt: (id: string) => {
+      const p = db.getProduct(id);
+      return p ? ms(p.updatedAt) : null;
+    }
+  },
+  supermarket: {
+    applyUpsert: (data: Supermarket) => db.upsertSupermarketForSync(data),
+    applyDelete: (id: string) => db.deleteSupermarketForSync(id),
+    existingUpdatedAt: (id: string) => {
+      const s = db.getSupermarket(id);
+      return s ? ms(s.updatedAt) : null;
     }
   }
 };

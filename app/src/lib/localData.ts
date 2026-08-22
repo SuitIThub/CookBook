@@ -5,6 +5,7 @@
  */
 import { getLocalDb } from './localDb';
 import type { Recipe } from '@shared/recipe';
+import type { Product, Supermarket } from '@shared/tracker';
 
 export async function localRecipes(): Promise<Recipe[]> {
   const { db } = await getLocalDb();
@@ -25,4 +26,14 @@ export async function setLocalRecipePrivate(id: string, isPrivate: boolean): Pro
   const { db, persist } = await getLocalDb();
   db.setRecipePrivate(id, isPrivate);
   await persist();
+}
+
+export async function localProducts(): Promise<Product[]> {
+  const { db } = await getLocalDb();
+  return db.getAllProducts();
+}
+
+export async function localSupermarkets(): Promise<Supermarket[]> {
+  const { db } = await getLocalDb();
+  return db.getAllSupermarkets();
 }

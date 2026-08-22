@@ -29,7 +29,20 @@ export default function SyncTestPage() {
         const serverCount = (await apiGet<any[]>('/api/recipes')).length;
         out.push(`local recipes=${localCount}  server recipes=${serverCount}`);
 
-        const pass = pull.ok && localCount === serverCount && localCount > 0;
+        const localProd = db.getAllProducts().length;
+        const serverProd = (await apiGet<any[]>('/api/products')).length;
+        out.push(`local products=${localProd}  server products=${serverProd}`);
+
+        const localMkt = db.getAllSupermarkets().length;
+        const serverMkt = (await apiGet<any[]>('/api/supermarkets')).length;
+        out.push(`local supermarkets=${localMkt}  server supermarkets=${serverMkt}`);
+
+        const pass =
+          pull.ok &&
+          localCount === serverCount &&
+          localCount > 0 &&
+          localProd === serverProd &&
+          localMkt === serverMkt;
         out.push(pass ? 'MATCH ✓' : 'MISMATCH ✗');
         if (!cancelled) {
           setLog(out);

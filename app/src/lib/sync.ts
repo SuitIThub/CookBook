@@ -11,7 +11,38 @@ import { apiGet, apiPost, ApiError } from './api';
 
 const CURSOR_KEY = 'kochbuch.sync.cursor';
 const PUSH_CURSOR_KEY = 'kochbuch.sync.pushCursor';
-const SYNCED_TYPES = ['recipe'] as const;
+
+/**
+ * Per-entity sync handlers on the local replica. Adding an entity to sync is a
+ * single registry line here (+ its *ForSync methods in the shared core + the
+ * server pull/push registries).
+ */
+interface EntityHandler {
+  upsert(db: any, data: any): void;
+  del(db: any, id: string): void;
+  get(db: any, id: string): any;
+  /** Return true to keep a local row out of the push (per-record opt-out). */
+  skipPush?(row: any): boolean;
+}
+const REGISTRY: Record<string, EntityHandler> = {
+  recipe: {
+    upsert: (db, d) => db.upsertRecipe(d),
+    del: (db, id) => db.deleteRecipeForSync(id),
+    get: (db, id) => db.getRecipe(id),
+    skipPush: (row) => !!row?.isPrivate
+  },
+  product: {
+    upsert: (db, d) => db.upsertProductForSync(d),
+    del: (db, id) => db.deleteProductForSync(id),
+    get: (db, id) => db.getProduct(id)
+  },
+  supermarket: {
+    upsert: (db, d) => db.upsertSupermarketForSync(d),
+    del: (db, id) => db.deleteSupermarketForSync(id),
+    get: (db, id) => db.getSupermarket(id)
+  }
+};
+const SYNCED_TYPES = Object.keys(REGISTRY);
 
 interface PullChange {
   type: string;
@@ -64,12 +95,13 @@ export async function pullFromServer(): Promise<PullResult> {
   // Apply under echo-suppression so these server rows aren't re-pushed later.
   db.applySync(() => {
     for (const ch of res.changes) {
-      if (ch.type !== 'recipe') continue;
+      const handler = REGISTRY[ch.type];
+      if (!handler) continue;
       if (ch.op === 'delete') {
-        db.deleteRecipeForSync(ch.id);
+        handler.del(db, ch.id);
         deleted++;
       } else if (ch.data) {
-        db.upsertRecipe(ch.data);
+        handler.upsert(db, ch.data);
         applied++;
       }
     }
@@ -109,21 +141,21 @@ export async function pushToServer(): Promise<PushResult> {
   const upTo = db.getMaxSyncSeq();
   if (upTo <= since) return { ok: true, pushed: 0 };
 
-  const log = db.getSyncChangesSince(since, [...SYNCED_TYPES]);
+  const log = db.getSyncChangesSince(since, SYNCED_TYPES);
   const latest = new Map<string, { entity_type: string; entity_id: string; op: string }>();
   for (const c of log) latest.set(`${c.entity_type} ${c.entity_id}`, c);
 
   const changes: { type: string; id: string; op: string; data?: unknown }[] = [];
   for (const c of latest.values()) {
-    if (c.entity_type !== 'recipe') continue;
+    const handler = REGISTRY[c.entity_type];
+    if (!handler) continue;
     if (c.op === 'delete') {
-      changes.push({ type: 'recipe', id: c.entity_id, op: 'delete' });
+      changes.push({ type: c.entity_type, id: c.entity_id, op: 'delete' });
     } else {
-      const row = db.getRecipe(c.entity_id);
-      // Per-record opt-out: private recipes stay local, never pushed.
-      if (row && row.isPrivate) continue;
-      if (row) changes.push({ type: 'recipe', id: c.entity_id, op: 'upsert', data: row });
-      else changes.push({ type: 'recipe', id: c.entity_id, op: 'delete' });
+      const row = handler.get(db, c.entity_id);
+      if (row && handler.skipPush?.(row)) continue; // per-record opt-out
+      if (row) changes.push({ type: c.entity_type, id: c.entity_id, op: 'upsert', data: row });
+      else changes.push({ type: c.entity_type, id: c.entity_id, op: 'delete' });
     }
   }
 

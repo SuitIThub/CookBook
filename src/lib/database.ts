@@ -585,6 +585,61 @@ export class CookbookDatabase {
       .run(isPrivate ? 1 : 0, new Date().toISOString(), id);
   }
 
+  // Dumb, id-preserving upsert/delete for applying synced rows (no side-effects,
+  // no id regeneration, no event emits — the server already did the real work).
+  // Junction data (prices, ingredient links) is not synced yet, so only the main
+  // row columns are written.
+
+  upsertSupermarketForSync(s: Supermarket): void {
+    this.db
+      .prepare(
+        `INSERT INTO supermarkets (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`
+      )
+      .run(s.id, s.name, syncIso(s.createdAt), syncIso(s.updatedAt));
+  }
+
+  deleteSupermarketForSync(id: string): void {
+    this.db.prepare('DELETE FROM supermarkets WHERE id = ?').run(id);
+  }
+
+  upsertProductForSync(p: Product): void {
+    this.db
+      .prepare(
+        `INSERT INTO products (
+           id, ean, name, brand, net_grams, package_label, nutrition_json,
+           default_price, image_url, source, off_code, grams_by_unit_json,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           ean=excluded.ean, name=excluded.name, brand=excluded.brand,
+           net_grams=excluded.net_grams, package_label=excluded.package_label,
+           nutrition_json=excluded.nutrition_json, default_price=excluded.default_price,
+           image_url=excluded.image_url, source=excluded.source, off_code=excluded.off_code,
+           grams_by_unit_json=excluded.grams_by_unit_json, updated_at=excluded.updated_at`
+      )
+      .run(
+        p.id,
+        p.ean ?? null,
+        p.name,
+        p.brand ?? null,
+        p.netGrams ?? null,
+        p.packageLabel ?? null,
+        p.nutritionPer100g ? JSON.stringify(p.nutritionPer100g) : null,
+        p.defaultPrice ?? null,
+        p.imageUrl ?? null,
+        p.source ?? 'manual',
+        p.offCode ?? null,
+        p.gramsByUnit ? JSON.stringify(p.gramsByUnit) : null,
+        syncIso(p.createdAt),
+        syncIso(p.updatedAt)
+      );
+  }
+
+  deleteProductForSync(id: string): void {
+    this.db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  }
+
   // Recipe CRUD operations
   createRecipe(recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>): Recipe {
     const id = uuidv4();
@@ -3066,6 +3121,13 @@ function safeParseJson<T>(value: string | null): T | undefined {
   } catch (error) {
     return undefined;
   }
+}
+
+/** Coerce a Date|string (as it arrives over the sync wire) to an ISO string. */
+function syncIso(v: unknown): string {
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'string') return v;
+  return new Date().toISOString();
 }
 
 function rowToRecipe(row: any): Recipe {
