@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { runSync } from './lib/syncRunner';
+import { runSync, ensureSyncSchemaVersion } from './lib/syncRunner';
 import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import RecipeEditPage from './pages/RecipeEditPage';
@@ -166,6 +166,9 @@ export default function App() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    // On an app update that changed the sync schema, force a one-time full
+    // re-pull so nothing stays stranded behind the old cursor.
+    ensureSyncSchemaVersion();
     const sync = () => {
       runSync()
         .then((o) => {

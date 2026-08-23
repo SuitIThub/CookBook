@@ -43,7 +43,7 @@ export interface ProductSearchResult {
  * back to Open Food Facts. GET → works without a token (read).
  */
 export async function lookupProductByEan(ean: string): Promise<LookupResult> {
-  return apiGet<LookupResult>(`/api/products/lookup?ean=${encodeURIComponent(ean.trim())}`);
+  return apiGet<LookupResult>(`/api/products/lookup?ean=${encodeURIComponent(ean.trim())}`, { timeoutMs: 20000 });
 }
 
 /**
@@ -57,6 +57,7 @@ export async function searchProducts(
   pageSize = 20
 ): Promise<ProductSearchResult> {
   return apiGet<ProductSearchResult>(
-    `/api/products/lookup?q=${encodeURIComponent(query.trim())}&page=${page}&pageSize=${pageSize}`
+    `/api/products/lookup?q=${encodeURIComponent(query.trim())}&page=${page}&pageSize=${pageSize}`,
+    { timeoutMs: 20000 }
   );
 }
