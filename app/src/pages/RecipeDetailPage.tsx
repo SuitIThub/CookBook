@@ -15,6 +15,7 @@ import { computeLocalRecipeNutrition } from '@/lib/localNutrition';
 import { exportRecipeMarkdown, exportRecipeJson, copyRecipeMarkdown } from '@/lib/recipeExport';
 import AIChatModal from '@/components/AIChatModal';
 import AddToShoppingListModal from '@/components/AddToShoppingListModal';
+import CatalogueModal from '@/components/CatalogueModal';
 import type { Ingredient, IngredientGroup, PreparationStep, PreparationGroup, NutritionData } from '@/types';
 import { formatTime, getTotalTime } from '@shared/recipe';
 import { hasNutritionValues } from '@core/nutrition';
@@ -134,7 +135,15 @@ function formatAmount(n: number): string {
 }
 
 /** Ingredient row / nested group, matching the website's IngredientNode markup. */
-function IngredientNode({ item, scale }: { item: Ingredient | IngredientGroup; scale: number }) {
+function IngredientNode({
+  item,
+  scale,
+  onCatalogue
+}: {
+  item: Ingredient | IngredientGroup;
+  scale: number;
+  onCatalogue: (name: string) => void;
+}) {
   if (isIngredientGroup(item)) {
     return (
       <li className="py-2">
@@ -143,7 +152,7 @@ function IngredientNode({ item, scale }: { item: Ingredient | IngredientGroup; s
         )}
         <ul className="ml-4 space-y-2">
           {item.ingredients.map((child, i) => (
-            <IngredientNode key={('id' in child && child.id) || i} item={child} scale={scale} />
+            <IngredientNode key={('id' in child && child.id) || i} item={child} scale={scale} onCatalogue={onCatalogue} />
           ))}
         </ul>
       </li>
@@ -153,7 +162,18 @@ function IngredientNode({ item, scale }: { item: Ingredient | IngredientGroup; s
   return (
     <li className="flex items-center justify-between rounded-md px-3 py-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700">
       <div className="flex-1">
-        <span className="font-medium text-gray-900 dark:text-white">{item.name}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium text-gray-900 dark:text-white">{item.name}</span>
+          <button
+            type="button"
+            onClick={() => onCatalogue(item.name)}
+            className="rounded p-1 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+            title="Zutat im Register öffnen (Nährwerte & Produkte)"
+            aria-label={`Registerdaten für ${item.name}`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 12h10M4 17h7" /></svg>
+          </button>
+        </div>
         {item.description && (
           <div className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">{item.description}</div>
         )}
@@ -184,6 +204,7 @@ export default function RecipeDetailPage() {
   const [copied, setCopied] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showAddToList, setShowAddToList] = useState(false);
+  const [catalogueFor, setCatalogueFor] = useState<string | null>(null);
 
   const baseServings = recipe?.metadata.servings ?? 1;
   const servings = servingsOverride ?? baseServings;
@@ -513,7 +534,7 @@ export default function RecipeDetailPage() {
             </h2>
             <ul className="space-y-2">
               {(recipe.ingredientGroups ?? []).map((g, i) => (
-                <IngredientNode key={g.id || i} item={g} scale={scale} />
+                <IngredientNode key={g.id || i} item={g} scale={scale} onCatalogue={setCatalogueFor} />
               ))}
             </ul>
           </div>
@@ -556,6 +577,13 @@ export default function RecipeDetailPage() {
           loadLists={localShoppingLists}
           createList={createLocalShoppingList}
           addRecipe={addRecipeToLocalShoppingList}
+        />
+      )}
+      {catalogueFor && (
+        <CatalogueModal
+          name={catalogueFor}
+          onClose={() => setCatalogueFor(null)}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['nutrition', id] })}
         />
       )}
     </article>
