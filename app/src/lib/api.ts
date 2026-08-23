@@ -34,14 +34,26 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, {
-    headers: { Accept: 'application/json', ...authHeaders() }
-  });
-  if (!res.ok) {
-    throw new ApiError(`GET ${path} failed with ${res.status}`, res.status, path);
+export async function apiGet<T>(path: string, opts?: { timeoutMs?: number }): Promise<T> {
+  // Optional timeout so slow/stalled upstreams (e.g. the server's Open Food
+  // Facts lookup) fail with an error instead of spinning forever.
+  const ctrl = opts?.timeoutMs ? new AbortController() : undefined;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), opts!.timeoutMs) : undefined;
+  try {
+    const res = await fetch(`${apiBase()}${path}`, {
+      headers: { Accept: 'application/json', ...authHeaders() },
+      signal: ctrl?.signal
+    });
+    if (!res.ok) {
+      throw new ApiError(`GET ${path} failed with ${res.status}`, res.status, path);
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    if (ctrl?.signal.aborted) throw new ApiError(`Zeitüberschreitung bei ${path}`, 0, path);
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  return (await res.json()) as T;
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {

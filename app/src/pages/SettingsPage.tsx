@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getSettings, saveSettings, type AiProvider } from '@/lib/settings';
 import { apiGet } from '@/lib/api';
+import { fullResync } from '@/lib/syncRunner';
 
 export default function SettingsPage() {
   const initial = getSettings();
@@ -12,8 +14,26 @@ export default function SettingsPage() {
   const [openRouterApiKey, setOpenRouterApiKey] = useState(initial.openRouterApiKey);
   const [saved, setSaved] = useState(false);
   const [test, setTest] = useState<string | null>(null);
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncMsg, setResyncMsg] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const persist = () => saveSettings({ serverUrl, alias, token, aiProvider, aiModel, openRouterApiKey });
+
+  const onResync = async () => {
+    persist();
+    setResyncing(true);
+    setResyncMsg('Lade alle Daten neu vom Server …');
+    try {
+      const o = await fullResync();
+      queryClient.invalidateQueries();
+      setResyncMsg(o.online ? `✓ Neu synchronisiert (${o.applied} aktualisiert, ${o.deleted} entfernt).` : '✗ Server nicht erreichbar.');
+    } catch (e) {
+      setResyncMsg(`✗ ${(e as Error).message}`);
+    } finally {
+      setResyncing(false);
+    }
+  };
 
   const onSave = () => {
     persist();
@@ -58,6 +78,13 @@ export default function SettingsPage() {
             <label className="form-label" htmlFor="token">Zugangs-Token</label>
             <input id="token" className="form-input" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Vom Admin erhalten (leer = nur Lesen)" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
             <p className={hint}>Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token: Schreiben &amp; Synchronisieren.</p>
+          </div>
+          <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+            <button onClick={onResync} disabled={resyncing} className="btn btn-secondary disabled:opacity-50">
+              {resyncing ? 'Synchronisiere …' : 'Neu synchronisieren'}
+            </button>
+            <p className={hint}>Lädt alle Daten (inkl. Einkaufslisten &amp; Sammelliste) vollständig neu vom Server. Hilft, wenn nach einem App-Update Daten fehlen.</p>
+            {resyncMsg && <p className="mt-1 font-mono text-sm text-gray-600 dark:text-gray-300">{resyncMsg}</p>}
           </div>
         </div>
       </div>

@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ShoppingListItem } from '@/types';
 import {
   localShoppingList,
-  localRecipes,
   updateLocalShoppingList,
   addRecipeToLocalShoppingList,
   removeRecipeFromLocalShoppingList,
@@ -13,6 +12,7 @@ import {
 } from '@/lib/localData';
 import { runSync } from '@/lib/syncRunner';
 import ShoppingListMarketPanel from '@/components/ShoppingListMarketPanel';
+import RecipePickerModal from '@/components/RecipePickerModal';
 
 function formatAmount(n: number): string {
   const r = Math.round(n * 100) / 100;
@@ -28,9 +28,8 @@ export default function ShoppingListDetailPage() {
     queryFn: () => localShoppingList(id!),
     enabled: !!id
   });
-  const { data: recipes } = useQuery({ queryKey: ['recipes'], queryFn: localRecipes });
-
-  const [addRecipeId, setAddRecipeId] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [hideChecked, setHideChecked] = useState(false);
   const [groupMode, setGroupMode] = useState(false);
@@ -47,11 +46,6 @@ export default function ShoppingListDetailPage() {
     runSync().catch(() => {});
   };
 
-  const addable = useMemo(() => {
-    const inList = new Set((list?.recipes ?? []).map((r) => r.id));
-    return (recipes ?? []).filter((r) => !r.parentRecipeId && !inList.has(r.id));
-  }, [recipes, list]);
-
   if (isLoading) return <p className="text-secondary-500">Lade Liste …</p>;
   if (isError || !list) {
     return (
@@ -63,13 +57,19 @@ export default function ShoppingListDetailPage() {
   }
 
 
-  const addRecipe = async () => {
-    if (!addRecipeId || busy) return;
+  const addRecipes = async (picked: { id: string; title: string }[]) => {
     setBusy(true);
+    setAddError(null);
     try {
-      await addRecipeToLocalShoppingList(list.id, addRecipeId);
-      setAddRecipeId('');
+      const failed: string[] = [];
+      for (const r of picked) {
+        // Surface silent failures (e.g. recipe not yet synced locally) instead
+        // of the "nothing happened, try again" the user hit before.
+        const res = await addRecipeToLocalShoppingList(list.id, r.id);
+        if (!res) failed.push(r.title);
+      }
       refresh();
+      if (failed.length) setAddError(`Konnte nicht hinzufügen: ${failed.join(', ')}. Ggf. „Neu synchronisieren“ in den Einstellungen.`);
     } finally {
       setBusy(false);
     }
@@ -244,10 +244,16 @@ export default function ShoppingListDetailPage() {
       <ShoppingListMarketPanel list={list} onChanged={refresh} />
 
       {/* Recipes */}
-      {(list.recipes.length > 0 || addable.length > 0) && (
+      {(
         <div className="card">
           <div className="card-content">
-            <h2 className="heading-secondary mb-4">Rezepte</h2>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h2 className="heading-secondary">Rezepte</h2>
+              <button onClick={() => setPickerOpen(true)} className="btn btn-primary btn-sm flex items-center gap-2">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                <span>Rezept hinzufügen</span>
+              </button>
+            </div>
             {list.recipes.length === 0 ? (
               <p className="text-muted text-sm">Keine Rezepte hinzugefügt.</p>
             ) : (
@@ -271,17 +277,7 @@ export default function ShoppingListDetailPage() {
                 ))}
               </div>
             )}
-            {addable.length > 0 && (
-              <div className="mt-4 flex gap-2">
-                <select value={addRecipeId} onChange={(e) => setAddRecipeId(e.target.value)} className="form-select flex-1">
-                  <option value="">Rezept hinzufügen …</option>
-                  {addable.map((r) => (
-                    <option key={r.id} value={r.id}>{r.title}</option>
-                  ))}
-                </select>
-                <button onClick={addRecipe} disabled={!addRecipeId || busy} className="btn btn-primary disabled:opacity-50">Hinzufügen</button>
-              </div>
-            )}
+            {addError && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{addError}</p>}
           </div>
         </div>
       )}
@@ -361,6 +357,13 @@ export default function ShoppingListDetailPage() {
       </div>
 
       {showSuggest && <SuggestGroupingModal items={list.items} onClose={() => setShowSuggest(false)} onApply={applySuggestions} />}
+      {pickerOpen && (
+        <RecipePickerModal
+          excludeIds={list.recipes.map((r) => r.id)}
+          onClose={() => setPickerOpen(false)}
+          onPick={(picked) => addRecipes(picked)}
+        />
+      )}
     </div>
   );
 }

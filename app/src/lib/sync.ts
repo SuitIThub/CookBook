@@ -89,6 +89,18 @@ function setCursor(seq: number): void {
 }
 
 /**
+ * Reset the pull cursor so the next pull is a full server snapshot (since=0).
+ * Used by "Neu synchronisieren" and by the schema-version guard on app update:
+ * the cursor is a single global high-water mark, so a client that advanced it
+ * before an entity type was added (or before the server created rows) would
+ * otherwise never see those rows again. LWW still protects newer local edits.
+ * The push cursor is left intact so pending local writes stay pushable.
+ */
+export function resetPullCursor(): void {
+  localStorage.setItem(CURSOR_KEY, '0');
+}
+
+/**
  * Pull once. On network failure returns { ok:false, offline:true } and leaves
  * the local replica untouched — the app keeps working from local (fallback).
  */

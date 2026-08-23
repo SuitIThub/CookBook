@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ShoppingList } from '@/types';
+import { runSync } from '@/lib/syncRunner';
 
 /**
  * "Zur Einkaufsliste" — pick an existing shopping list (or create one) and add
@@ -36,6 +37,7 @@ export default function AddToShoppingListModal({
     setError(null);
     try {
       await addRecipe(listId, recipeId);
+      runSync().catch(() => {});
       setDone(title);
     } catch (e) {
       setError((e as Error).message);
@@ -52,6 +54,7 @@ export default function AddToShoppingListModal({
     try {
       const list = await createList(t);
       await addRecipe(list.id, recipeId);
+      runSync().catch(() => {});
       setDone(t);
     } catch (e) {
       setError((e as Error).message);
