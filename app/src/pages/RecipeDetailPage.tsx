@@ -2,12 +2,117 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assetUrl } from '@/lib/api';
-import { localRecipe, localVariants, setLocalRecipePrivate, createLocalVariant } from '@/lib/localData';
+import {
+  localRecipe,
+  localVariants,
+  setLocalRecipePrivate,
+  createLocalVariant,
+  localShoppingLists,
+  createLocalShoppingList,
+  addRecipeToLocalShoppingList
+} from '@/lib/localData';
 import { computeLocalRecipeNutrition } from '@/lib/localNutrition';
 import { exportRecipeMarkdown, exportRecipeJson, copyRecipeMarkdown } from '@/lib/recipeExport';
 import AIChatModal from '@/components/AIChatModal';
-import type { Ingredient, IngredientGroup, PreparationStep, PreparationGroup } from '@/types';
+import AddToShoppingListModal from '@/components/AddToShoppingListModal';
+import type { Ingredient, IngredientGroup, PreparationStep, PreparationGroup, NutritionData } from '@/types';
 import { formatTime, getTotalTime } from '@shared/recipe';
+import { hasNutritionValues } from '@core/nutrition';
+
+/** Traffic-light assessment for a primary nutrient (mirrors the website's NutritionInfo). */
+function assessNutrient(key: string, v: number): { symbol: string; color: string; title: string } | null {
+  const t: Record<string, [number, number, number]> = {
+    calories: [200, 500, 700],
+    carbohydrates: [20, 60, 80],
+    protein: [10, 35, 50],
+    fat: [5, 25, 35]
+  };
+  const b = t[key];
+  if (!b) return null;
+  if (v < b[0]) return { symbol: '⬇️', color: 'text-blue-500', title: 'Niedrig' };
+  if (v <= b[1]) return { symbol: '✅', color: 'text-green-500', title: 'Optimal' };
+  if (v <= b[2]) return { symbol: '⚠️', color: 'text-yellow-500', title: 'Hoch' };
+  return { symbol: '⬆️', color: 'text-red-500', title: 'Sehr hoch' };
+}
+
+/** Green nutrition-assessment card (mirrors the website's NutritionInfo). */
+function NutritionCard({ nutrition, isEstimated = false, sourceLabel }: { nutrition: NutritionData; isEstimated?: boolean; sourceLabel?: string }) {
+  if (!hasNutritionValues(nutrition)) return null;
+  const primary = [
+    { key: 'calories', label: 'kcal', unit: '', cls: 'text-orange-600 dark:text-orange-400' },
+    { key: 'carbohydrates', label: 'Kohlenhydrate', unit: 'g', cls: 'text-blue-600 dark:text-blue-400' },
+    { key: 'protein', label: 'Eiweiß', unit: 'g', cls: 'text-purple-600 dark:text-purple-400' },
+    { key: 'fat', label: 'Fett', unit: 'g', cls: 'text-yellow-600 dark:text-yellow-400' }
+  ] as const;
+  const detail = [
+    { key: 'saturatedFat', label: 'gesätt. Fett', cls: 'text-amber-700 dark:text-amber-400' },
+    { key: 'sugar', label: 'Zucker', cls: 'text-pink-600 dark:text-pink-400' },
+    { key: 'fiber', label: 'Ballaststoffe', cls: 'text-lime-600 dark:text-lime-400' },
+    { key: 'salt', label: 'Salz', cls: 'text-slate-600 dark:text-slate-300' }
+  ] as const;
+  const hasPrimary = primary.some((f) => nutrition[f.key] != null);
+  return (
+    <div className="mb-4 rounded-lg border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-4 dark:border-green-700 dark:from-green-900/20 dark:to-emerald-900/20">
+      <h3 className="mb-3 flex flex-wrap items-center justify-between gap-2 text-lg font-semibold text-green-800 dark:text-green-200">
+        <span className="flex items-center">
+          <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Nährwerte pro Portion
+          {isEstimated && <span className="ml-2 text-xs font-normal text-yellow-700 dark:text-yellow-300" title="mind. eine Zutat geschätzt">~ geschätzt</span>}
+        </span>
+        {sourceLabel && <span className="text-xs font-normal text-gray-600 dark:text-gray-300">{sourceLabel}</span>}
+      </h3>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {primary.map((f) => {
+          const val = nutrition[f.key];
+          if (val == null) return null;
+          const a = assessNutrient(f.key, val);
+          return (
+            <div key={f.key} className="text-center">
+              <div className="mb-1 flex items-center justify-center">
+                <div className={'mr-2 text-2xl font-bold ' + f.cls}>
+                  {isEstimated ? '~' : ''}
+                  {f.key === 'calories' ? Math.round(val) : Math.round(val * 10) / 10}
+                  {f.unit}
+                </div>
+                {a && <span className={'text-lg ' + a.color} title={a.title}>{a.symbol}</span>}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">{f.label}</div>
+            </div>
+          );
+        })}
+      </div>
+      {detail.some((d) => nutrition[d.key] != null) && (
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-green-200 pt-3 sm:grid-cols-4 dark:border-green-700">
+          {detail.map((d) => {
+            const val = nutrition[d.key];
+            if (val == null) return null;
+            return (
+              <div key={d.key} className="text-center">
+                <div className={'text-lg font-semibold ' + d.cls}>
+                  {isEstimated ? '~' : ''}
+                  {Math.round(val * 100) / 100}g
+                </div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">{d.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {hasPrimary && (
+        <div className="mt-4 border-t border-green-200 pt-3 dark:border-green-700">
+          <div className="flex flex-wrap justify-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <span className="flex items-center"><span className="mr-1 text-blue-500">⬇️</span> Niedrig</span>
+            <span className="flex items-center"><span className="mr-1 text-green-500">✅</span> Optimal</span>
+            <span className="flex items-center"><span className="mr-1 text-yellow-500">⚠️</span> Hoch</span>
+            <span className="flex items-center"><span className="mr-1 text-red-500">⬆️</span> Sehr hoch</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function isIngredientGroup(x: Ingredient | IngredientGroup): x is IngredientGroup {
   return Array.isArray((x as IngredientGroup).ingredients);
@@ -78,6 +183,7 @@ export default function RecipeDetailPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showAddToList, setShowAddToList] = useState(false);
 
   const baseServings = recipe?.metadata.servings ?? 1;
   const servings = servingsOverride ?? baseServings;
@@ -202,6 +308,14 @@ export default function RecipeDetailPage() {
               {recipe.description && (
                 <p className="whitespace-pre-wrap leading-relaxed text-gray-600 dark:text-gray-400">{recipe.description}</p>
               )}
+              {recipe.sourceUrl && (
+                <p className={'mt-2 text-sm' + (heroUrl ? ' drop-shadow-sm' : '')}>
+                  <a href={recipe.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                    Quelle
+                  </a>
+                </p>
+              )}
 
               {/* Meta */}
               <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-600 dark:text-gray-400">
@@ -241,6 +355,12 @@ export default function RecipeDetailPage() {
 
             {/* Actions */}
             <div className="flex flex-shrink-0 flex-col space-y-2">
+              <button onClick={() => setShowAddToList(true)} className={actionBtn + ' bg-green-500 hover:bg-green-600'}>
+                <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>Zur Einkaufsliste</span>
+              </button>
               <Link to={`/rezept/${recipe.id}/kochen`} className={actionBtn + ' bg-orange-500 hover:bg-orange-600'}>
                 <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -351,37 +471,19 @@ export default function RecipeDetailPage() {
         </div>
       )}
 
-      {/* Live nutrition & price */}
-      {nutr && (nutr.nutrition.hasAnyData || nutr.price.hasAnyData) && (
+      {/* Nutrition — recipe's stated values (assessment card), then live-computed */}
+      {recipe.metadata.nutrition && <NutritionCard nutrition={recipe.metadata.nutrition} />}
+      {nutr && nutr.nutrition.hasAnyData && (
+        <NutritionCard nutrition={nutr.nutrition.perServing} isEstimated={nutr.nutrition.isEstimated} sourceLabel="live berechnet" />
+      )}
+
+      {/* Price */}
+      {nutr && nutr.price.hasAnyData && (
         <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-          <h3 className="mb-3 text-base font-semibold text-gray-900 dark:text-white">
-            Nährwerte &amp; Preis{nutr.nutrition.isEstimated ? ' (geschätzt)' : ''}
-          </h3>
-          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            {[
-              { label: 'kcal', val: nutr.nutrition.perServing.calories, unit: '', cls: 'text-orange-600 dark:text-orange-400' },
-              { label: 'Kohlenhydrate', val: nutr.nutrition.perServing.carbohydrates, unit: 'g', cls: 'text-blue-600 dark:text-blue-400' },
-              { label: 'Eiweiß', val: nutr.nutrition.perServing.protein, unit: 'g', cls: 'text-purple-600 dark:text-purple-400' },
-              { label: 'Fett', val: nutr.nutrition.perServing.fat, unit: 'g', cls: 'text-yellow-600 dark:text-yellow-400' }
-            ].map((f) => (
-              <div key={f.label} className="text-center">
-                <div className={'text-lg font-bold ' + f.cls}>
-                  {f.val != null ? `${nutr.nutrition.isEstimated ? '~' : ''}${Math.round(f.val)}${f.unit}` : '–'}
-                </div>
-                <div className="text-xs text-gray-600 dark:text-gray-400">{f.label}</div>
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-4 text-sm text-gray-700 dark:text-gray-200">
+            <div>Preis pro Rezept: <span className="font-semibold">{nutr.price.perRecipe.toFixed(2).replace('.', ',')} €</span></div>
+            <div>Preis pro Portion: <span className="font-semibold">{nutr.price.perServing.toFixed(2).replace('.', ',')} €</span></div>
           </div>
-          {nutr.price.hasAnyData && (
-            <div className="mt-3 flex flex-wrap gap-4 text-sm text-gray-700 dark:text-gray-200">
-              <div>
-                Preis pro Rezept: <span className="font-semibold">{nutr.price.perRecipe.toFixed(2).replace('.', ',')} €</span>
-              </div>
-              <div>
-                Preis pro Portion: <span className="font-semibold">{nutr.price.perServing.toFixed(2).replace('.', ',')} €</span>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -446,6 +548,16 @@ export default function RecipeDetailPage() {
       </div>
 
       {showChat && <AIChatModal recipeId={recipe.id} recipeTitle={recipe.title} onClose={() => setShowChat(false)} />}
+      {showAddToList && (
+        <AddToShoppingListModal
+          recipeId={recipe.id}
+          recipeTitle={recipe.title}
+          onClose={() => setShowAddToList(false)}
+          loadLists={localShoppingLists}
+          createList={createLocalShoppingList}
+          addRecipe={addRecipeToLocalShoppingList}
+        />
+      )}
     </article>
   );
 }
