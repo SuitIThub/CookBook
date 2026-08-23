@@ -46,6 +46,15 @@ a.tag {
   @apply ring-2 ring-orange-500;
 }
 
+/* Cooking-mode timer surface must sit above the fullscreen cooking overlay
+   (z-50). components.css pins .timer-footer/.timer-sidebar to z-30 with
+   !important, so raise them here (loaded after components.css, higher
+   specificity) only while inside cooking mode. */
+.cook-timer-layer.timer-footer,
+.cook-timer-layer.timer-sidebar {
+  z-index: 60 !important;
+}
+
 /* View controls segmented buttons (RecipeViewControls) */
 .rvc-group {
   @apply inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-0.5;
