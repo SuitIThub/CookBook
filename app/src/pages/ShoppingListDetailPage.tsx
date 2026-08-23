@@ -35,6 +35,7 @@ export default function ShoppingListDetailPage() {
   const [hideChecked, setHideChecked] = useState(false);
   const [groupMode, setGroupMode] = useState(false);
   const [groupSel, setGroupSel] = useState<Set<string>>(new Set());
+  const [showSuggest, setShowSuggest] = useState(false);
   const [itemName, setItemName] = useState('');
   const [itemAmount, setItemAmount] = useState('');
   const [itemUnit, setItemUnit] = useState('');
@@ -61,18 +62,6 @@ export default function ShoppingListDetailPage() {
     );
   }
 
-  const toggleItem = async (itemId: string) => {
-    if (list.isPermanent) return; // permanent lists can't be crossed off
-    const items = list.items.map((it) => (it.id === itemId ? { ...it, isChecked: !it.isChecked } : it));
-    await updateLocalShoppingList(list.id, { items });
-    refresh();
-  };
-
-  const removeItem = async (itemId: string) => {
-    const items = list.items.filter((it) => it.id !== itemId);
-    await updateLocalShoppingList(list.id, { items });
-    refresh();
-  };
 
   const addRecipe = async () => {
     if (!addRecipeId || busy) return;
@@ -118,18 +107,16 @@ export default function ShoppingListDetailPage() {
     }
   };
 
-  /* ---- grouping (combine items sharing a manualGroupId into one line) ---- */
+  /* ---- grouping ------------------------------------------------------------
+     Two layers, matching the website:
+     - Auto grouping: ungrouped items with the same (case-insensitive) name are
+       merged into one display line with summed quantities.
+     - Manual grouping: items sharing a manualGroupId are merged (names joined).
+     "Gruppierung vorschlagen" suggests manual groups by name similarity. */
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
   const anyGrouped = list.items.some((i) => i.manualGroupId);
 
   const setItems = (items: ShoppingListItem[]) => updateLocalShoppingList(list.id, { items }).then(refresh);
-  const confirmGroup = async () => {
-    if (groupSel.size < 2) return;
-    const gid = uid();
-    await setItems(list.items.map((i) => (groupSel.has(i.id) ? { ...i, manualGroupId: gid } : i)));
-    setGroupMode(false);
-    setGroupSel(new Set());
-  };
   const ungroupAll = () => setItems(list.items.map(({ manualGroupId, ...rest }) => rest));
   const toggleGroupChecked = (ids: string[], next: boolean) => {
     const set = new Set(ids);
@@ -139,40 +126,64 @@ export default function ShoppingListDetailPage() {
     const set = new Set(ids);
     return setItems(list.items.filter((i) => !set.has(i.id)));
   };
-  const toggleGroupSel = (id: string) =>
+  const toggleGroupSel = (key: string) =>
     setGroupSel((s) => {
       const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
       return n;
     });
 
-  type Unit = { kind: 'item'; item: ShoppingListItem } | { kind: 'group'; id: string; items: ShoppingListItem[] };
+  interface Unit {
+    key: string;
+    items: ShoppingListItem[];
+    isManual: boolean;
+  }
   const buildUnits = (items: ShoppingListItem[]): Unit[] => {
-    const byGroup = new Map<string, ShoppingListItem[]>();
-    for (const it of items) if (it.manualGroupId) (byGroup.get(it.manualGroupId) ?? byGroup.set(it.manualGroupId, []).get(it.manualGroupId)!).push(it);
-    const seen = new Set<string>();
-    const units: Unit[] = [];
+    const map = new Map<string, Unit>();
+    const order: string[] = [];
     for (const it of items) {
-      if (it.manualGroupId) {
-        if (seen.has(it.manualGroupId)) continue;
-        seen.add(it.manualGroupId);
-        units.push({ kind: 'group', id: it.manualGroupId, items: byGroup.get(it.manualGroupId)! });
-      } else units.push({ kind: 'item', item: it });
+      const key = it.manualGroupId ? 'm:' + it.manualGroupId : 'n:' + it.name.toLowerCase().trim();
+      if (!map.has(key)) {
+        map.set(key, { key, items: [], isManual: !!it.manualGroupId });
+        order.push(key);
+      }
+      map.get(key)!.items.push(it);
     }
-    return units;
+    return order.map((k) => map.get(k)!);
   };
   const groupQty = (items: ShoppingListItem[]): string => {
     const byUnit = new Map<string, number>();
     for (const it of items) if (it.quantity) byUnit.set(it.quantity.unit || '', (byUnit.get(it.quantity.unit || '') ?? 0) + it.quantity.amount);
     return Array.from(byUnit.entries()).map(([u, a]) => `${formatAmount(a)} ${u}`.trim()).join(', ');
   };
-  const unitChecked = (u: Unit) => (u.kind === 'item' ? !!u.item.isChecked : u.items.every((i) => i.isChecked));
+  const unitChecked = (u: Unit) => u.items.every((i) => i.isChecked);
+  const unitName = (u: Unit) => (u.isManual ? u.items.map((i) => i.name).join(', ') : u.items[0].name);
   const unitMatches = (u: Unit) => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return true;
-    const names = u.kind === 'item' ? [u.item.name] : u.items.map((i) => i.name);
-    return names.some((n) => n.toLowerCase().includes(needle));
+    return !needle || u.items.some((i) => i.name.toLowerCase().includes(needle));
+  };
+
+  const confirmGroup = async () => {
+    // Selected units (by key) → assign one shared manualGroupId to all their items.
+    const units = buildUnits(list.items).filter((u) => groupSel.has(u.key));
+    const ids = new Set(units.flatMap((u) => u.items.map((i) => i.id)));
+    if (units.length < 2 || ids.size < 2) return;
+    const gid = uid();
+    await setItems(list.items.map((i) => (ids.has(i.id) ? { ...i, manualGroupId: gid } : i)));
+    setGroupMode(false);
+    setGroupSel(new Set());
+  };
+
+  /** Apply accepted suggestion groups: each becomes a new manualGroupId. */
+  const applySuggestions = async (groups: ShoppingListItem[][]) => {
+    const assign = new Map<string, string>(); // itemId -> gid
+    for (const g of groups) {
+      const gid = uid();
+      for (const it of g) assign.set(it.id, gid);
+    }
+    await setItems(list.items.map((i) => (assign.has(i.id) ? { ...i, manualGroupId: assign.get(i.id)! } : i)));
+    setShowSuggest(false);
   };
 
   const allUnits = buildUnits(list.items).filter(unitMatches);
@@ -188,27 +199,24 @@ export default function ShoppingListDetailPage() {
   );
 
   const UnitRow = ({ unit }: { unit: Unit }) => {
-    const isGroup = unit.kind === 'group';
     const ischk = unitChecked(unit);
-    const name = isGroup ? unit.items.map((i) => i.name).join(', ') : unit.item.name;
-    const ids = isGroup ? unit.items.map((i) => i.id) : [unit.item.id];
-    const qty = isGroup ? groupQty(unit.items) : unit.item.quantity ? `${formatAmount(unit.item.quantity.amount)} ${unit.item.quantity.unit}` : '';
-    const recipeId = isGroup ? undefined : unit.item.recipeId;
-    const selectable = groupMode && unit.kind === 'item';
+    const ids = unit.items.map((i) => i.id);
+    const qty = groupQty(unit.items);
+    const recipeId = unit.items.length === 1 ? unit.items[0].recipeId : undefined;
     return (
-      <div className={'flex items-center gap-3 rounded-lg border px-3 py-2.5 ' + (isGroup ? 'border-orange-200 bg-orange-50/40 dark:border-orange-900/50 dark:bg-orange-900/10' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800')}>
-        {selectable ? (
-          <input type="checkbox" checked={groupSel.has(unit.item.id)} onChange={() => toggleGroupSel(unit.item.id)} className="h-5 w-5 shrink-0 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500" />
+      <div className={'flex items-center gap-3 rounded-lg border px-3 py-2.5 ' + (unit.isManual ? 'border-orange-200 bg-orange-50/40 dark:border-orange-900/50 dark:bg-orange-900/10' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800')}>
+        {groupMode ? (
+          <input type="checkbox" checked={groupSel.has(unit.key)} onChange={() => toggleGroupSel(unit.key)} className="h-5 w-5 shrink-0 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500" />
         ) : (
-          <input type="checkbox" checked={ischk} disabled={list.isPermanent} onChange={() => (isGroup ? toggleGroupChecked(ids, !ischk) : toggleItem(unit.item.id))} className="h-5 w-5 shrink-0 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500 disabled:opacity-50" />
+          <input type="checkbox" checked={ischk} disabled={list.isPermanent} onChange={() => toggleGroupChecked(ids, !ischk)} className="h-5 w-5 shrink-0 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500 disabled:opacity-50" />
         )}
         <span className={'min-w-0 flex-1 truncate ' + (ischk ? 'text-gray-400 line-through dark:text-gray-500' : 'text-gray-900 dark:text-gray-100')}>
-          {isGroup && <span className="mr-1.5 rounded bg-orange-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-orange-800 dark:bg-orange-800 dark:text-orange-100">Gruppe</span>}
-          {name}
+          {unit.isManual && <span className="mr-1.5 rounded bg-orange-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-orange-800 dark:bg-orange-800 dark:text-orange-100">Gruppe</span>}
+          {unitName(unit)}
         </span>
         {recipeId && recipeIcon(recipeId)}
         {qty && <span className="shrink-0 rounded bg-gray-100 px-2 py-1 text-sm font-medium tabular-nums text-gray-700 dark:bg-gray-700 dark:text-gray-200">{qty}</span>}
-        <button onClick={() => (isGroup ? removeGroup(ids) : removeItem(unit.item.id))} aria-label="Entfernen" className="btn-icon shrink-0 text-gray-400 hover:text-red-500">
+        <button onClick={() => removeGroup(ids)} aria-label="Entfernen" className="btn-icon shrink-0 text-gray-400 hover:text-red-500">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
@@ -295,6 +303,10 @@ export default function ShoppingListDetailPage() {
                 </>
               ) : (
                 <>
+                  <button onClick={() => setShowSuggest(true)} className="btn btn-secondary btn-sm flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                    <span>Gruppierung vorschlagen</span>
+                  </button>
                   <button onClick={() => setGroupMode(true)} className="btn btn-secondary btn-sm flex items-center gap-2">
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                     <span>Gruppieren</span>
@@ -333,7 +345,7 @@ export default function ShoppingListDetailPage() {
           {groupMode && <p className="mb-2 text-sm text-orange-600 dark:text-orange-400">Wähle mindestens zwei Artikel und bestätige die Gruppierung.</p>}
 
           <div className="space-y-2">
-            {uncheckedUnits.map((u) => <UnitRow key={u.kind === 'group' ? u.id : u.item.id} unit={u} />)}
+            {uncheckedUnits.map((u) => <UnitRow key={u.key} unit={u} />)}
           </div>
           {unchecked.length === 0 && <p className="text-muted text-sm">Alles erledigt 🎉</p>}
 
@@ -341,10 +353,145 @@ export default function ShoppingListDetailPage() {
             <details className="mt-4" open>
               <summary className="text-muted mb-2 cursor-pointer text-sm">Erledigt ({checked.length})</summary>
               <div className="space-y-2">
-                {checkedUnits.map((u) => <UnitRow key={u.kind === 'group' ? u.id : u.item.id} unit={u} />)}
+                {checkedUnits.map((u) => <UnitRow key={u.key} unit={u} />)}
               </div>
             </details>
           )}
+        </div>
+      </div>
+
+      {showSuggest && <SuggestGroupingModal items={list.items} onClose={() => setShowSuggest(false)} onApply={applySuggestions} />}
+    </div>
+  );
+}
+
+/* --------------------------------- Gruppierungsvorschläge (suggest modal) */
+
+function similarity(a: string, b: string): number {
+  const s1 = a.toLowerCase().trim();
+  const s2 = b.toLowerCase().trim();
+  if (s1 === s2) return 1;
+  if (!s1.length || !s2.length) return 0;
+  const m: number[][] = [];
+  for (let i = 0; i <= s2.length; i++) m[i] = [i];
+  for (let j = 0; j <= s1.length; j++) m[0][j] = j;
+  for (let i = 1; i <= s2.length; i++)
+    for (let j = 1; j <= s1.length; j++)
+      m[i][j] = s2[i - 1] === s1[j - 1] ? m[i - 1][j - 1] : Math.min(m[i - 1][j - 1] + 1, m[i][j - 1] + 1, m[i - 1][j] + 1);
+  return 1 - m[s2.length][s1.length] / Math.max(s1.length, s2.length);
+}
+
+interface Suggestion {
+  id: string;
+  items: ShoppingListItem[];
+  similarity: number;
+}
+
+/** Suggest manual groups by name similarity (mirrors GroupingSuggestionModal). */
+function suggestGroups(items: ShoppingListItem[]): Suggestion[] {
+  const THRESHOLD = 0.6;
+  const out: Suggestion[] = [];
+  const processed = new Set<string>();
+  const sameGroup = (a: ShoppingListItem, b: ShoppingListItem) => {
+    if (a.manualGroupId && b.manualGroupId) return a.manualGroupId === b.manualGroupId;
+    if (!a.manualGroupId && !b.manualGroupId) return a.name.toLowerCase().trim() === b.name.toLowerCase().trim();
+    return false;
+  };
+  for (let i = 0; i < items.length; i++) {
+    if (processed.has(items[i].id)) continue;
+    const group = [items[i]];
+    processed.add(items[i].id);
+    for (let j = i + 1; j < items.length; j++) {
+      if (processed.has(items[j].id) || sameGroup(items[i], items[j])) continue;
+      if (similarity(items[i].name, items[j].name) >= THRESHOLD) {
+        group.push(items[j]);
+        processed.add(items[j].id);
+      }
+    }
+    if (group.length >= 2) {
+      let tot = 0;
+      let cnt = 0;
+      for (let k = 0; k < group.length; k++)
+        for (let l = k + 1; l < group.length; l++) {
+          tot += similarity(group[k].name, group[l].name);
+          cnt++;
+        }
+      out.push({ id: uidStatic(), items: group, similarity: cnt ? tot / cnt : 0 });
+    }
+  }
+  return out;
+}
+const uidStatic = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+
+function SuggestGroupingModal({
+  items,
+  onClose,
+  onApply
+}: {
+  items: ShoppingListItem[];
+  onClose: () => void;
+  onApply: (groups: ShoppingListItem[][]) => void;
+}) {
+  const suggestions = useMemo(() => suggestGroups(items), [items]);
+  const [accepted, setAccepted] = useState<Set<string>>(() => new Set(suggestions.map((s) => s.id)));
+
+  const toggle = (id: string) =>
+    setAccepted((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const acceptAll = () => onApply(suggestions.filter((s) => accepted.has(s.id)).map((s) => s.items));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-2xl dark:bg-gray-800" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Gruppierungsvorschläge</h2>
+          <button onClick={onClose} className="text-2xl leading-none text-gray-500 hover:text-gray-800 dark:text-gray-300">&times;</button>
+        </div>
+
+        {suggestions.length === 0 ? (
+          <div className="py-8 text-center text-muted">Keine Gruppierungsvorschläge gefunden.</div>
+        ) : (
+          <>
+            <p className="text-muted mb-4 text-sm">Vorschläge nach Namensähnlichkeit. Einzelne Vorschläge akzeptieren oder ablehnen.</p>
+            <div className="max-h-96 space-y-3 overflow-y-auto">
+              {suggestions.map((s) => {
+                const on = accepted.has(s.id);
+                return (
+                  <div key={s.id} className={'rounded-lg border p-4 ' + (on ? 'border-gray-300 dark:border-gray-600' : 'border-gray-200 opacity-50 dark:border-gray-700')}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <label className="mb-2 flex items-center gap-2">
+                          <input type="checkbox" checked={on} onChange={() => toggle(s.id)} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-2 focus:ring-green-500" />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{s.items.length} Artikel</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">({Math.round(s.similarity * 100)}% Ähnlichkeit)</span>
+                        </label>
+                        <div className="ml-7 space-y-1">
+                          {s.items.map((it) => (
+                            <div key={it.id} className="text-sm text-gray-600 dark:text-gray-400">
+                              <span className="font-medium">{it.name}</span>
+                              {it.quantity && it.quantity.amount !== 0 && <span className="ml-1 text-gray-500">{it.quantity.amount} {it.quantity.unit}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <button onClick={() => toggle(s.id)} title="Vorschlag ablehnen" className="text-red-600 hover:text-red-700">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={acceptAll} disabled={accepted.size === 0 || suggestions.length === 0} className="btn btn-success disabled:opacity-50">Alle akzeptieren</button>
+          <button onClick={onClose} className="btn btn-secondary">Abbrechen</button>
         </div>
       </div>
     </div>
