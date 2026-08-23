@@ -32,136 +32,69 @@ export default function SettingsPage() {
     }
   };
 
-  const field =
-    'w-full rounded-lg border border-secondary-300 bg-white px-3 py-2 text-secondary-900 outline-none focus:ring-2 focus:ring-primary-500 dark:border-secondary-600 dark:bg-secondary-800 dark:text-white';
-  const label = 'mb-1 block text-sm font-medium';
-  const hint = 'mt-1 text-xs text-secondary-500';
+  const hint = 'mt-1 text-xs text-gray-500 dark:text-gray-400';
 
   return (
-    <div className="mx-auto max-w-lg">
-      <h1 className="mb-6 text-2xl font-bold">Einstellungen</h1>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div>
+        <h1 className="heading-primary mb-2">Einstellungen</h1>
+        <p className="text-muted">Server-Synchronisation und KI — nur auf diesem Gerät gespeichert.</p>
+      </div>
 
-      <div className="space-y-5">
-        <div>
-          <label className={label} htmlFor="server">Server-Adresse</label>
-          <input
-            id="server"
-            className={field}
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
-            placeholder="http://192.168.1.20:4399"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <p className={hint}>Leer lassen, um denselben Ursprung / den Standard zu verwenden.</p>
-        </div>
-
-        <div>
-          <label className={label} htmlFor="alias">Alias</label>
-          <input
-            id="alias"
-            className={field}
-            value={alias}
-            onChange={(e) => setAlias(e.target.value)}
-            placeholder="z. B. familie-mueller"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </div>
-
-        <div>
-          <label className={label} htmlFor="token">Zugangs-Token</label>
-          <input
-            id="token"
-            className={field}
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Vom Admin erhalten (leer = nur Lesen)"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <p className={hint}>
-            Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token: Schreiben &amp;
-            Synchronisieren. Nur auf diesem Gerät gespeichert.
-          </p>
-        </div>
-
-        <div className="border-t border-secondary-200 pt-5 dark:border-secondary-700">
-          <h2 className="mb-3 text-lg font-semibold">KI</h2>
-          <div className="space-y-4">
-            <div>
-              <label className={label} htmlFor="ai-provider">Anbieter</label>
-              <select
-                id="ai-provider"
-                className={field}
-                value={aiProvider}
-                onChange={(e) => setAiProvider(e.target.value as AiProvider)}
-              >
-                <option value="ollama">Ollama (Server)</option>
-                <option value="openrouter">OpenRouter</option>
-              </select>
-              <p className={hint}>
-                Ollama läuft über den Server (URL/Standardmodell serverseitig konfiguriert). OpenRouter nutzt deinen
-                eigenen Schlüssel.
-              </p>
-            </div>
-            <div>
-              <label className={label} htmlFor="ai-model">Modell (optional)</label>
-              <input
-                id="ai-model"
-                className={field}
-                value={aiModel}
-                onChange={(e) => setAiModel(e.target.value)}
-                placeholder={aiProvider === 'openrouter' ? 'z. B. deepseek/deepseek-chat:free' : 'leer = Serverstandard'}
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-            </div>
-            {aiProvider === 'openrouter' && (
-              <div>
-                <label className={label} htmlFor="ai-key">OpenRouter API-Key</label>
-                <input
-                  id="ai-key"
-                  className={field}
-                  type="password"
-                  value={openRouterApiKey}
-                  onChange={(e) => setOpenRouterApiKey(e.target.value)}
-                  placeholder="sk-or-…"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
-                <p className={hint}>Nur auf diesem Gerät gespeichert. Leer = Serverschlüssel (falls konfiguriert).</p>
-              </div>
-            )}
+      {/* Server & Synchronisation */}
+      <div className="card">
+        <div className="card-content space-y-4">
+          <h2 className="heading-secondary">Server &amp; Synchronisation</h2>
+          <div>
+            <label className="form-label" htmlFor="server">Server-Adresse</label>
+            <input id="server" className="form-input" value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="http://192.168.1.20:4399" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+            <p className={hint}>Leer lassen, um denselben Ursprung / den Standard zu verwenden.</p>
+          </div>
+          <div>
+            <label className="form-label" htmlFor="alias">Alias</label>
+            <input id="alias" className="form-input" value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="z. B. familie-mueller" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          </div>
+          <div>
+            <label className="form-label" htmlFor="token">Zugangs-Token</label>
+            <input id="token" className="form-input" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Vom Admin erhalten (leer = nur Lesen)" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+            <p className={hint}>Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token: Schreiben &amp; Synchronisieren.</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onSave}
-            className="rounded-lg bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700"
-          >
-            Speichern
-          </button>
-          <button
-            onClick={onTest}
-            className="rounded-lg border border-secondary-300 px-4 py-2 font-medium hover:bg-secondary-100 dark:border-secondary-600 dark:hover:bg-secondary-800"
-          >
-            Verbindung testen
-          </button>
-          {saved && <span className="text-sm text-green-600 dark:text-green-400">Gespeichert</span>}
-        </div>
-
-        {test && (
-          <p className="font-mono text-sm text-secondary-600 dark:text-secondary-300">{test}</p>
-        )}
       </div>
+
+      {/* KI */}
+      <div className="card">
+        <div className="card-content space-y-4">
+          <h2 className="heading-secondary">KI</h2>
+          <div>
+            <label className="form-label" htmlFor="ai-provider">Anbieter</label>
+            <select id="ai-provider" className="form-select" value={aiProvider} onChange={(e) => setAiProvider(e.target.value as AiProvider)}>
+              <option value="ollama">Ollama (Server)</option>
+              <option value="openrouter">OpenRouter</option>
+            </select>
+            <p className={hint}>Ollama läuft über den Server (URL/Standardmodell serverseitig konfiguriert). OpenRouter nutzt deinen eigenen Schlüssel.</p>
+          </div>
+          <div>
+            <label className="form-label" htmlFor="ai-model">Modell (optional)</label>
+            <input id="ai-model" className="form-input" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder={aiProvider === 'openrouter' ? 'z. B. deepseek/deepseek-chat:free' : 'leer = Serverstandard'} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          </div>
+          {aiProvider === 'openrouter' && (
+            <div>
+              <label className="form-label" htmlFor="ai-key">OpenRouter API-Key</label>
+              <input id="ai-key" className="form-input" type="password" value={openRouterApiKey} onChange={(e) => setOpenRouterApiKey(e.target.value)} placeholder="sk-or-…" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+              <p className={hint}>Nur auf diesem Gerät gespeichert. Leer = Serverschlüssel (falls konfiguriert).</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button onClick={onSave} className="btn btn-primary">Speichern</button>
+        <button onClick={onTest} className="btn btn-secondary">Verbindung testen</button>
+        {saved && <span className="text-sm text-green-600 dark:text-green-400">Gespeichert</span>}
+      </div>
+
+      {test && <p className="font-mono text-sm text-gray-600 dark:text-gray-300">{test}</p>}
     </div>
   );
 }
