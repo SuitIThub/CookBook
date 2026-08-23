@@ -12,6 +12,7 @@ import {
   addItemToLocalShoppingList
 } from '@/lib/localData';
 import { runSync } from '@/lib/syncRunner';
+import ShoppingListMarketPanel from '@/components/ShoppingListMarketPanel';
 
 function formatAmount(n: number): string {
   const r = Math.round(n * 100) / 100;
@@ -168,6 +169,9 @@ export default function ShoppingListDetailPage() {
         {list.description && <p className="text-muted mt-1">{list.description}</p>}
         <p className="text-muted mt-1 text-sm">{unchecked.length} von {list.items.length} Artikeln offen</p>
       </div>
+
+      {/* Supermarket price estimation */}
+      <ShoppingListMarketPanel list={list} onChanged={refresh} />
 
       {/* Recipes */}
       {(list.recipes.length > 0 || addable.length > 0) && (
