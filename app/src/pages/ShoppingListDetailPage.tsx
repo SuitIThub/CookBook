@@ -33,6 +33,8 @@ export default function ShoppingListDetailPage() {
   const [addRecipeId, setAddRecipeId] = useState('');
   const [search, setSearch] = useState('');
   const [hideChecked, setHideChecked] = useState(false);
+  const [groupMode, setGroupMode] = useState(false);
+  const [groupSel, setGroupSel] = useState<Set<string>>(new Set());
   const [itemName, setItemName] = useState('');
   const [itemAmount, setItemAmount] = useState('');
   const [itemUnit, setItemUnit] = useState('');
@@ -116,42 +118,102 @@ export default function ShoppingListDetailPage() {
     }
   };
 
+  /* ---- grouping (combine items sharing a manualGroupId into one line) ---- */
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+  const anyGrouped = list.items.some((i) => i.manualGroupId);
+
+  const setItems = (items: ShoppingListItem[]) => updateLocalShoppingList(list.id, { items }).then(refresh);
+  const confirmGroup = async () => {
+    if (groupSel.size < 2) return;
+    const gid = uid();
+    await setItems(list.items.map((i) => (groupSel.has(i.id) ? { ...i, manualGroupId: gid } : i)));
+    setGroupMode(false);
+    setGroupSel(new Set());
+  };
+  const ungroupAll = () => setItems(list.items.map(({ manualGroupId, ...rest }) => rest));
+  const toggleGroupChecked = (ids: string[], next: boolean) => {
+    const set = new Set(ids);
+    return setItems(list.items.map((i) => (set.has(i.id) ? { ...i, isChecked: next } : i)));
+  };
+  const removeGroup = (ids: string[]) => {
+    const set = new Set(ids);
+    return setItems(list.items.filter((i) => !set.has(i.id)));
+  };
+  const toggleGroupSel = (id: string) =>
+    setGroupSel((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  type Unit = { kind: 'item'; item: ShoppingListItem } | { kind: 'group'; id: string; items: ShoppingListItem[] };
+  const buildUnits = (items: ShoppingListItem[]): Unit[] => {
+    const byGroup = new Map<string, ShoppingListItem[]>();
+    for (const it of items) if (it.manualGroupId) (byGroup.get(it.manualGroupId) ?? byGroup.set(it.manualGroupId, []).get(it.manualGroupId)!).push(it);
+    const seen = new Set<string>();
+    const units: Unit[] = [];
+    for (const it of items) {
+      if (it.manualGroupId) {
+        if (seen.has(it.manualGroupId)) continue;
+        seen.add(it.manualGroupId);
+        units.push({ kind: 'group', id: it.manualGroupId, items: byGroup.get(it.manualGroupId)! });
+      } else units.push({ kind: 'item', item: it });
+    }
+    return units;
+  };
+  const groupQty = (items: ShoppingListItem[]): string => {
+    const byUnit = new Map<string, number>();
+    for (const it of items) if (it.quantity) byUnit.set(it.quantity.unit || '', (byUnit.get(it.quantity.unit || '') ?? 0) + it.quantity.amount);
+    return Array.from(byUnit.entries()).map(([u, a]) => `${formatAmount(a)} ${u}`.trim()).join(', ');
+  };
+  const unitChecked = (u: Unit) => (u.kind === 'item' ? !!u.item.isChecked : u.items.every((i) => i.isChecked));
+  const unitMatches = (u: Unit) => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return true;
+    const names = u.kind === 'item' ? [u.item.name] : u.items.map((i) => i.name);
+    return names.some((n) => n.toLowerCase().includes(needle));
+  };
+
+  const allUnits = buildUnits(list.items).filter(unitMatches);
+  const uncheckedUnits = allUnits.filter((u) => !unitChecked(u));
+  const checkedUnits = allUnits.filter((u) => unitChecked(u));
   const unchecked = list.items.filter((i) => !i.isChecked);
   const checked = list.items.filter((i) => i.isChecked);
-  const visibleUnchecked = search.trim()
-    ? unchecked.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
-    : unchecked;
-  const visibleChecked = search.trim()
-    ? checked.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
-    : checked;
 
-  const ItemRow = ({ item }: { item: ShoppingListItem }) => (
-    <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800">
-      <input
-        type="checkbox"
-        checked={!!item.isChecked}
-        disabled={list.isPermanent}
-        onChange={() => toggleItem(item.id)}
-        className="h-5 w-5 shrink-0 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-      />
-      <span className={'min-w-0 flex-1 truncate ' + (item.isChecked ? 'text-gray-400 line-through dark:text-gray-500' : 'text-gray-900 dark:text-gray-100')}>
-        {item.name}
-      </span>
-      {item.recipeId && (
-        <Link to={`/rezept/${item.recipeId}`} title="Aus Rezept" className="shrink-0 text-blue-500 hover:text-blue-700 dark:text-blue-400">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-        </Link>
-      )}
-      {item.quantity && (
-        <span className="shrink-0 rounded bg-gray-100 px-2 py-1 text-sm font-medium tabular-nums text-gray-700 dark:bg-gray-700 dark:text-gray-200">
-          {formatAmount(item.quantity.amount)} {item.quantity.unit}
-        </span>
-      )}
-      <button onClick={() => removeItem(item.id)} aria-label="Artikel entfernen" className="btn-icon shrink-0 text-gray-400 hover:text-red-500">
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-      </button>
-    </div>
+  const recipeIcon = (recipeId: string) => (
+    <Link to={`/rezept/${recipeId}`} title="Aus Rezept" className="shrink-0 text-blue-500 hover:text-blue-700 dark:text-blue-400">
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+    </Link>
   );
+
+  const UnitRow = ({ unit }: { unit: Unit }) => {
+    const isGroup = unit.kind === 'group';
+    const ischk = unitChecked(unit);
+    const name = isGroup ? unit.items.map((i) => i.name).join(', ') : unit.item.name;
+    const ids = isGroup ? unit.items.map((i) => i.id) : [unit.item.id];
+    const qty = isGroup ? groupQty(unit.items) : unit.item.quantity ? `${formatAmount(unit.item.quantity.amount)} ${unit.item.quantity.unit}` : '';
+    const recipeId = isGroup ? undefined : unit.item.recipeId;
+    const selectable = groupMode && unit.kind === 'item';
+    return (
+      <div className={'flex items-center gap-3 rounded-lg border px-3 py-2.5 ' + (isGroup ? 'border-orange-200 bg-orange-50/40 dark:border-orange-900/50 dark:bg-orange-900/10' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800')}>
+        {selectable ? (
+          <input type="checkbox" checked={groupSel.has(unit.item.id)} onChange={() => toggleGroupSel(unit.item.id)} className="h-5 w-5 shrink-0 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500" />
+        ) : (
+          <input type="checkbox" checked={ischk} disabled={list.isPermanent} onChange={() => (isGroup ? toggleGroupChecked(ids, !ischk) : toggleItem(unit.item.id))} className="h-5 w-5 shrink-0 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500 disabled:opacity-50" />
+        )}
+        <span className={'min-w-0 flex-1 truncate ' + (ischk ? 'text-gray-400 line-through dark:text-gray-500' : 'text-gray-900 dark:text-gray-100')}>
+          {isGroup && <span className="mr-1.5 rounded bg-orange-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-orange-800 dark:bg-orange-800 dark:text-orange-100">Gruppe</span>}
+          {name}
+        </span>
+        {recipeId && recipeIcon(recipeId)}
+        {qty && <span className="shrink-0 rounded bg-gray-100 px-2 py-1 text-sm font-medium tabular-nums text-gray-700 dark:bg-gray-700 dark:text-gray-200">{qty}</span>}
+        <button onClick={() => (isGroup ? removeGroup(ids) : removeItem(unit.item.id))} aria-label="Entfernen" className="btn-icon shrink-0 text-gray-400 hover:text-red-500">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -219,11 +281,28 @@ export default function ShoppingListDetailPage() {
       {/* Controls */}
       {!list.isPermanent && (
         <div className="card">
-          <div className="card-content">
+          <div className="card-content flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <label className="flex cursor-pointer items-center space-x-3">
               <input type="checkbox" checked={hideChecked} onChange={(e) => setHideChecked(e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-orange-500 focus:ring-2 focus:ring-orange-500" />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Erledigte Artikel ausblenden</span>
             </label>
+            <div className="flex flex-wrap items-center gap-2">
+              {groupMode ? (
+                <>
+                  <button onClick={confirmGroup} disabled={groupSel.size < 2} className="btn btn-success btn-sm disabled:opacity-50">Gruppierung bestätigen</button>
+                  <button onClick={() => { setGroupMode(false); setGroupSel(new Set()); }} className="btn btn-secondary btn-sm">Abbrechen</button>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">{groupSel.size} ausgewählt</span>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setGroupMode(true)} className="btn btn-secondary btn-sm flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                    <span>Gruppieren</span>
+                  </button>
+                  {anyGrouped && <button onClick={ungroupAll} className="btn btn-secondary btn-sm">Gruppierung aufheben</button>}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -251,16 +330,18 @@ export default function ShoppingListDetailPage() {
             <button onClick={addManualItem} disabled={!itemName.trim() || busy} className="btn btn-success disabled:opacity-50">+ Hinzufügen</button>
           </div>
 
+          {groupMode && <p className="mb-2 text-sm text-orange-600 dark:text-orange-400">Wähle mindestens zwei Artikel und bestätige die Gruppierung.</p>}
+
           <div className="space-y-2">
-            {visibleUnchecked.map((it) => <ItemRow key={it.id} item={it} />)}
+            {uncheckedUnits.map((u) => <UnitRow key={u.kind === 'group' ? u.id : u.item.id} unit={u} />)}
           </div>
           {unchecked.length === 0 && <p className="text-muted text-sm">Alles erledigt 🎉</p>}
 
-          {!hideChecked && visibleChecked.length > 0 && (
+          {!hideChecked && checkedUnits.length > 0 && (
             <details className="mt-4" open>
               <summary className="text-muted mb-2 cursor-pointer text-sm">Erledigt ({checked.length})</summary>
               <div className="space-y-2">
-                {visibleChecked.map((it) => <ItemRow key={it.id} item={it} />)}
+                {checkedUnits.map((u) => <UnitRow key={u.kind === 'group' ? u.id : u.item.id} unit={u} />)}
               </div>
             </details>
           )}
