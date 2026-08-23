@@ -15,6 +15,7 @@ import ProductsPage from './pages/ProductsPage';
 import IngredientsPage from './pages/IngredientsPage';
 import ShoppingListsPage from './pages/ShoppingListsPage';
 import ShoppingListDetailPage from './pages/ShoppingListDetailPage';
+import { CookingTimersProvider } from './components/recipe/CookingTimers';
 
 const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Rezepte', end: true },
@@ -178,7 +179,7 @@ export default function App() {
   }, [queryClient]);
 
   return (
-    <>
+    <CookingTimersProvider>
       <Nav />
       <main className="container mx-auto px-4 py-8">
         <Routes>
@@ -199,6 +200,6 @@ export default function App() {
           <Route path="*" element={<p className="text-muted">Seite nicht gefunden.</p>} />
         </Routes>
       </main>
-    </>
+    </CookingTimersProvider>
   );
 }
