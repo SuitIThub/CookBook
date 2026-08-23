@@ -11,7 +11,7 @@ import type {
   PreparationStep,
   PreparationGroup
 } from '@/types';
-import { CookingTimersProvider, useCookTimers } from '@/components/recipe/CookingTimers';
+import { useCookTimers } from '@/components/recipe/CookingTimers';
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -555,9 +555,5 @@ export default function CookingModePage() {
     );
   }
 
-  return (
-    <CookingTimersProvider>
-      <CookingContent recipe={recipe} />
-    </CookingTimersProvider>
-  );
+  return <CookingContent recipe={recipe} />;
 }

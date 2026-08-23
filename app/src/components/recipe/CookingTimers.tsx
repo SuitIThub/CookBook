@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import { getLayoutMode } from '@core/layoutMode';
 
 /**
@@ -89,8 +90,11 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
     typeof window === 'undefined' ? [] : loadTimers()
   );
   const [mobileLayout, setMobileLayout] = useState(() => getLayoutMode() === 'mobile');
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const location = useLocation();
+  const isCooking = location.pathname.endsWith('/kochen');
   const alarmed = useRef<Set<string>>(new Set());
 
   // Persist on every change.
@@ -174,6 +178,7 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
         }
       ]);
       setExpanded(true);
+      setSidebarOpen(true);
       try {
         if ('Notification' in window && Notification.permission === 'default') {
           Notification.requestPermission().catch(() => {});
@@ -281,12 +286,14 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
     </button>
   );
 
-  // In cooking mode the timer surface only appears once at least one timer
-  // exists (idle cooking then stays pixel-identical to the website). When it
-  // does appear it must sit *above* the fullscreen cooking overlay (z-50), so
-  // it is raised via the `.cook-timer-layer` override in recipe-list.css —
-  // unlike the website, where the global footer stays hidden behind cooking.
-  const showSurface = timers.length > 0;
+  // The timer surface is global (like the website's MultiTimerManager): a footer
+  // on mobile layout, a collapsible right-edge sidebar on tablet/desktop. In
+  // cooking mode it stays hidden behind the fullscreen overlay (z-30) until a
+  // timer is actually running, then it is raised above the overlay (z-60 via
+  // `.cook-timer-layer`) so tapped durations remain usable — an app improvement
+  // over the website, where cooking-mode timers hide behind the overlay.
+  const showSurface = !isCooking || timers.length > 0;
+  const raise = isCooking && timers.length > 0 ? 'cook-timer-layer ' : '';
 
   return (
     <TimerContext.Provider value={api}>
@@ -294,7 +301,7 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
 
       {!showSurface ? null : mobileLayout ? (
         /* Mobile layout → footer */
-        <div className="cook-timer-layer timer-footer">
+        <div id="timer-footer" className={raise + 'timer-footer'}>
           <div className="timer-footer-toggle" onClick={() => setExpanded((e) => !e)}>
             <div className="flex w-full items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -334,33 +341,51 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
           )}
         </div>
       ) : (
-        /* Tablet / desktop → sidebar */
-        <div className="cook-timer-layer timer-sidebar">
-          <div className="timer-sidebar-content">
-            <div className="timer-sidebar-header">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Timer</h3>
-              <button className="btn-icon bg-orange-500 text-white hover:bg-orange-600" title="Neuer Timer" onClick={() => setShowAdd(true)}>
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
-            </div>
-            <div className="timer-list">
-              {timers.length === 0 ? (
-                <div className="py-8 text-center text-gray-500 dark:text-gray-400">
-                  <p className="text-sm">Keine Timer aktiv</p>
+        /* Tablet / desktop → collapsible sidebar (toggle tab on the right edge) */
+        <>
+          <button
+            className={raise + 'timer-sidebar-toggle flex flex-col ' + (sidebarOpen ? 'positioned-left' : '')}
+            title={sidebarOpen ? 'Timer einklappen' : 'Timer anzeigen'}
+            onClick={() => setSidebarOpen((o) => !o)}
+          >
+            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d={sidebarOpen ? 'M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z' : 'M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z'}
+                clipRule="evenodd"
+              />
+            </svg>
+            <span className="timer-count-indicator">{activeCount}</span>
+          </button>
+          {sidebarOpen && (
+            <div id="timer-sidebar" className={raise + 'timer-sidebar'}>
+              <div className="timer-sidebar-content">
+                <div className="timer-sidebar-header">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Timer</h3>
+                  <button className="btn-icon bg-orange-500 text-white hover:bg-orange-600" title="Neuer Timer" onClick={() => setShowAdd(true)}>
+                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
                 </div>
-              ) : (
-                timers.map(timerItem)
-              )}
-              {addButton}
+                <div className="timer-list">
+                  {timers.length === 0 ? (
+                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+                      <p className="text-sm">Keine Timer aktiv</p>
+                    </div>
+                  ) : (
+                    timers.map(timerItem)
+                  )}
+                  {addButton}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
 
       {showAdd && <AddTimerModal onClose={() => setShowAdd(false)} onAdd={(label, secs) => addTimer(label, secs, undefined, undefined, true)} />}
