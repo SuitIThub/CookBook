@@ -10,6 +10,8 @@ export type {
   IngredientGroup,
   PreparationStep,
   PreparationGroup,
+  LinkedIngredient,
+  IntermediateIngredient,
   Quantity,
   TimeEntry,
   RecipeImage,
