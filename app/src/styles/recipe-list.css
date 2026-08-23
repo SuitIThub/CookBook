@@ -9,6 +9,37 @@
 .tag-more {
   @apply text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400;
 }
+/* Detail-page tags are slightly larger and clickable; category gets a distinct fill. */
+a.tag {
+  @apply px-3 py-1 text-sm;
+}
+.category-tag {
+  @apply bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200;
+}
+
+/* Recipe detail hero: content panel overlaps the image and fades from
+   transparent (image shows through behind the title) to the solid card bg,
+   matching the website's RecipeHeader. */
+.recipe-hero-overlap {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 12%,
+    rgba(255, 255, 255, 0.9) 24%,
+    #fff 38%,
+    #fff 100%
+  );
+}
+.dark .recipe-hero-overlap {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(31, 41, 55, 0.55) 12%,
+    rgba(31, 41, 55, 0.9) 24%,
+    #1f2937 38%,
+    #1f2937 100%
+  );
+}
 
 /* Selected card highlight (RecipeCard) */
 .recipe-card.selected {
