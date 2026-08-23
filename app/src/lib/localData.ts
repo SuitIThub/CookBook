@@ -154,6 +154,11 @@ export interface ProductInput {
   packageLabel?: string;
   defaultPrice?: number;
   nutritionPer100g?: NutritionData | null;
+  gramsByUnit?: Record<string, number> | null;
+  imageUrl?: string | null;
+  offCode?: string | null;
+  supermarkets?: { supermarketId: string; price: number }[];
+  ingredientIds?: string[];
   source?: 'manual' | 'openfoodfacts';
 }
 
@@ -184,4 +189,12 @@ export async function deleteLocalSupermarket(id: string): Promise<void> {
   const { db, persist } = await getLocalDb();
   db.deleteSupermarket(id);
   await persist();
+}
+
+/** Ensure a catalogue ingredient exists by name (create if missing) and return it. */
+export async function ensureLocalCatalogueIngredient(name: string): Promise<CatalogueIngredient> {
+  const { db, persist } = await getLocalDb();
+  const ing = db.upsertCatalogueIngredient({ name: name.trim() });
+  await persist();
+  return ing;
 }
