@@ -198,3 +198,47 @@ export async function ensureLocalCatalogueIngredient(name: string): Promise<Cata
   await persist();
   return ing;
 }
+
+/** Full catalogue upsert (nutrition, density, grams-per-unit) used by the Nährwerte editor. */
+export async function saveLocalCatalogueIngredient(input: {
+  name: string;
+  nutritionPer100g?: NutritionData | null;
+  densityGPerMl?: number | null;
+  gramsByUnit?: Record<string, number> | null;
+}): Promise<CatalogueIngredient> {
+  const { db, persist } = await getLocalDb();
+  const ing = db.upsertCatalogueIngredient(input);
+  await persist();
+  return ing;
+}
+
+export async function localCatalogueIngredient(name: string): Promise<CatalogueIngredient | null> {
+  const { db } = await getLocalDb();
+  return db.getCatalogueIngredientByName(name);
+}
+
+/** Recipes that use an ingredient (by name) — for the "Rezepte" list. */
+export async function localRecipesByIngredient(name: string): Promise<Array<{ id: string; title: string }>> {
+  const { db } = await getLocalDb();
+  return db.getRecipesByIngredient(name);
+}
+
+/** Rename or merge an ingredient across all recipes + shopping lists (last-write-wins sync). */
+export async function unifyLocalIngredients(oldName: string, newName: string): Promise<{ updated: number; shoppingListsUpdated: number }> {
+  const { db, persist } = await getLocalDb();
+  const res = db.unifyIngredients(oldName, newName);
+  await persist();
+  return res;
+}
+
+/** Link/unlink a local product to a catalogue ingredient by toggling the product's ingredientIds. */
+export async function setProductIngredientLink(productId: string, ingredientId: string, linked: boolean): Promise<void> {
+  const { db, persist } = await getLocalDb();
+  const p = db.getProduct(productId);
+  if (!p) return;
+  const ids = new Set(p.ingredientIds ?? []);
+  if (linked) ids.add(ingredientId);
+  else ids.delete(ingredientId);
+  db.setProductIngredients(productId, Array.from(ids));
+  await persist();
+}
