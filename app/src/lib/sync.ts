@@ -104,66 +104,77 @@ export function resetPullCursor(): void {
  * Pull once. On network failure returns { ok:false, offline:true } and leaves
  * the local replica untouched — the app keeps working from local (fallback).
  */
+// Pull each entity type in its own request (dependency-first). One combined
+// response can be huge — e.g. a shopping-list item with a base64 image pasted
+// into its note pushed the bundled snapshot to ~13 MB — which the native HTTP
+// bridge / a short timeout can't deliver, silently dropping whatever comes last
+// (shopping lists). Per-type requests keep each response bounded and isolate a
+// heavy type so it can't block the others.
+const PULL_TIMEOUT_MS = 60000; // background sync, non-interactive → generous.
+const TYPE_ORDER = ['supermarket', 'ingredient', 'product', 'recipe', 'shopping_list'];
+
 export async function pullFromServer(): Promise<PullResult> {
   const { db, persist } = await getLocalDb();
   const since = getCursor();
-
-  let res: PullResponse;
-  try {
-    res = await apiGet<PullResponse>(
-      `/api/sync/pull?since=${since}&types=${SYNCED_TYPES.join(',')}`
-    );
-  } catch (err) {
-    // Server unreachable (or non-2xx) → stay on local data.
-    const offline = !(err instanceof ApiError);
-    return { ok: false, applied: 0, deleted: 0, cursor: since, offline, error: String(err) };
-  }
+  const types = TYPE_ORDER.filter((t) => SYNCED_TYPES.includes(t));
 
   let applied = 0;
   let deleted = 0;
-  // Apply dependency-first so a product's junction rows (prices, ingredient
-  // links) find their supermarket/ingredient already applied.
-  const RANK: Record<string, number> = { supermarket: 0, ingredient: 1, product: 2, recipe: 3, shopping_list: 4 };
-  const ordered = [...res.changes].sort((a, b) => (RANK[a.type] ?? 9) - (RANK[b.type] ?? 9));
-  // High-water mark of the local outbox BEFORE applying: any pending user writes
-  // sit at or below this. We must not advance the push cursor past it, or those
-  // writes would never be pushed (pull runs before push in runSync).
+  let maxCursor = since;
+  let allOk = true;
+  let anyOk = false;
+  let firstError: string | undefined;
+  let offlineAll = true;
   const outboxBefore = db.getMaxSyncSeq();
-  // Apply under echo-suppression so these server rows aren't re-pushed later.
-  db.applySync(() => {
-    for (const ch of ordered) {
-      const handler = REGISTRY[ch.type];
-      if (!handler) continue;
-      if (ch.op === 'delete') {
-        handler.del(db, ch.id);
-        deleted++;
-      } else if (ch.data) {
-        // Client-side last-write-wins: don't let a pulled row (including our own
-        // echo re-broadcast by the server) overwrite a NEWER local edit. Apply
-        // when there's no local row, the entity has no timestamp, or the incoming
-        // row is at least as new as the local one.
-        const local = handler.get(db, ch.id);
-        const incomingTs = ms((ch.data as any).updatedAt);
-        const localTs = local ? ms((local as any).updatedAt) : null;
-        if (localTs === null || incomingTs === 0 || incomingTs >= localTs) {
-          handler.upsert(db, ch.data);
-          applied++;
+
+  for (const type of types) {
+    let res: PullResponse;
+    try {
+      res = await apiGet<PullResponse>(`/api/sync/pull?since=${since}&types=${type}`, { timeoutMs: PULL_TIMEOUT_MS });
+    } catch (err) {
+      // This type failed; keep the others and retry this one next sync (the
+      // cursor is only advanced when every type succeeded).
+      allOk = false;
+      if (!firstError) firstError = String(err);
+      if (err instanceof ApiError && err.status >= 400) offlineAll = false; // reached the server
+      continue;
+    }
+    anyOk = true;
+    offlineAll = false;
+    maxCursor = Math.max(maxCursor, res.cursor);
+    db.applySync(() => {
+      for (const ch of res.changes) {
+        const handler = REGISTRY[ch.type];
+        if (!handler) continue;
+        if (ch.op === 'delete') {
+          handler.del(db, ch.id);
+          deleted++;
+        } else if (ch.data) {
+          // Client-side last-write-wins: don't let a pulled row (incl. our own
+          // echo) overwrite a NEWER local edit.
+          const local = handler.get(db, ch.id);
+          const incomingTs = ms((ch.data as any).updatedAt);
+          const localTs = local ? ms((local as any).updatedAt) : null;
+          if (localTs === null || incomingTs === 0 || incomingTs >= localTs) {
+            handler.upsert(db, ch.data);
+            applied++;
+          }
         }
       }
-    }
-  });
-
-  setCursor(res.cursor);
-  // Echo guard: normally applySync suppresses trigger logging, so the apply adds
-  // nothing to the outbox and we leave the push cursor alone (pending local
-  // writes stay pushable). Only if the apply *leaked* log entries (suppression
-  // failed) do we absorb them so pulled rows aren't pushed back.
-  const outboxAfter = db.getMaxSyncSeq();
-  if (outboxAfter > outboxBefore) {
-    setPushCursor(outboxAfter);
+    });
   }
+
+  // Advance the pull cursor only if every type succeeded — otherwise a failing
+  // type would be skipped forever. Re-pulling succeeded types is idempotent (LWW).
+  if (allOk) setCursor(maxCursor);
+  const outboxAfter = db.getMaxSyncSeq();
+  if (outboxAfter > outboxBefore) setPushCursor(outboxAfter);
   await persist();
-  return { ok: true, applied, deleted, cursor: res.cursor };
+
+  if (!anyOk) {
+    return { ok: false, applied, deleted, cursor: since, offline: offlineAll, error: firstError };
+  }
+  return { ok: allOk, applied, deleted, cursor: allOk ? maxCursor : since, error: firstError };
 }
 
 export interface PushResult {
