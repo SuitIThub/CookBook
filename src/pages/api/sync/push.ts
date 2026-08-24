@@ -61,7 +61,19 @@ const HANDLERS: Record<
     existingUpdatedAt: () => null
   },
   shopping_list: {
-    applyUpsert: (data: ShoppingList) => db.upsertShoppingListForSync(data),
+    applyUpsert: (data: ShoppingList) => {
+      // The pull strips item notes (they can be huge base64 blobs the app never
+      // renders); re-attach them from the stored list by item id so an app push
+      // — which carries no notes — doesn't wipe notes authored on the website.
+      const existing = db.getShoppingList(data.id);
+      if (existing) {
+        const notes = new Map(existing.items.filter((i) => i.note != null).map((i) => [i.id, i.note]));
+        if (notes.size && Array.isArray(data.items)) {
+          for (const it of data.items) if (it.note == null && notes.has(it.id)) it.note = notes.get(it.id);
+        }
+      }
+      db.upsertShoppingListForSync(data);
+    },
     applyDelete: (id: string) => db.deleteShoppingListForSync(id),
     existingUpdatedAt: (id: string) => {
       const l = db.getShoppingList(id);
