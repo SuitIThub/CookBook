@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../../lib/database.server';
+import { eventBus, EVENTS } from '../../../lib/events';
 import type { Recipe } from '../../../types/recipe';
 import type { Product, Supermarket, CatalogueIngredient } from '../../../types/tracker';
 import type { ShoppingList } from '../../../types/recipe';
@@ -73,8 +74,15 @@ const HANDLERS: Record<
         }
       }
       db.upsertShoppingListForSync(data);
+      // Notify live (SSE) clients — e.g. the website's open list view — so an
+      // app edit shows up without a manual page reload. (upsertShoppingListForSync
+      // is the silent sync-apply path and doesn't emit this itself.)
+      eventBus.emit(EVENTS.SHOPPING_LIST_UPDATED, { listId: data.id, list: db.getShoppingList(data.id) });
     },
-    applyDelete: (id: string) => db.deleteShoppingListForSync(id),
+    applyDelete: (id: string) => {
+      db.deleteShoppingListForSync(id);
+      eventBus.emit(EVENTS.SHOPPING_LIST_DELETED, { listId: id });
+    },
     existingUpdatedAt: (id: string) => {
       const l = db.getShoppingList(id);
       return l ? ms(l.updatedAt) : null;
