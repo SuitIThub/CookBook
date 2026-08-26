@@ -15,13 +15,15 @@ import ProductsPage from './pages/ProductsPage';
 import IngredientsPage from './pages/IngredientsPage';
 import ShoppingListsPage from './pages/ShoppingListsPage';
 import ShoppingListDetailPage from './pages/ShoppingListDetailPage';
+import TrackerPage from './pages/TrackerPage';
 import { CookingTimersProvider } from './components/recipe/CookingTimers';
 
 const NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Rezepte', end: true },
   { to: '/einkaufslisten', label: 'Einkaufslisten' },
   { to: '/zutaten', label: 'Zutaten' },
-  { to: '/produkte', label: 'Produkte' }
+  { to: '/produkte', label: 'Produkte' },
+  { to: '/tracker', label: 'Tracker' }
 ];
 
 function ThemeToggle() {
@@ -198,6 +200,7 @@ export default function App() {
           <Route path="/zutaten" element={<IngredientsPage />} />
           <Route path="/einkaufslisten" element={<ShoppingListsPage />} />
           <Route path="/einkaufsliste/:id" element={<ShoppingListDetailPage />} />
+          <Route path="/tracker" element={<TrackerPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />
           <Route path="/_optouttest" element={<OptoutTestPage />} />
           <Route path="*" element={<p className="text-muted">Seite nicht gefunden.</p>} />
