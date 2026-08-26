@@ -154,6 +154,12 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return r.body as T;
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const r = await raw('PUT', path, { json: body });
+  if (r.status < 200 || r.status >= 300) throw new ApiError(extractError(r.body, `PUT ${path} failed with ${r.status}`), r.status, path);
+  return r.body as T;
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const r = await raw('DELETE', path);
   if (r.status < 200 || r.status >= 300) throw new ApiError(extractError(r.body, `DELETE ${path} failed with ${r.status}`), r.status, path);
