@@ -5,6 +5,8 @@ import type { Recipe } from '@/types';
 import { localRecipes, deleteLocalRecipe, addRecipesToLocalShoppingList } from '@/lib/localData';
 import { runSync } from '@/lib/syncRunner';
 import { exportRecipesJson, exportRecipesRcb } from '@/lib/recipeExport';
+import { getAlias } from '@/lib/settings';
+import { getFavoriteIds } from '@core/favorites';
 import RecipeCard from '@/components/recipe_list/RecipeCard';
 import ImportModal from '@/components/ImportModal';
 import AddToShoppingListModal from '@/components/AddToShoppingListModal';
@@ -35,20 +37,52 @@ function writeLayout(patch: Partial<{ view: View; categoryMode: CatMode }>) {
 
 const UNCATEGORIZED = 'Ohne Kategorie';
 
+/** Website SearchBar syntax: words, "quoted phrases" and "tag:xyz" (tag-only). */
+function parseSearchTerms(input: string): { regular: string[]; tagOnly: string[] } {
+  const terms = { regular: [] as string[], tagOnly: [] as string[] };
+  let current = '';
+  let inQuotes = false;
+  const add = (term: string) => {
+    const t = term.trim().toLowerCase();
+    if (!t) return;
+    if (inQuotes && t.startsWith('tag:')) terms.tagOnly.push(t.slice(4));
+    else terms.regular.push(t);
+  };
+  for (const ch of input) {
+    if (ch === '"') {
+      if (inQuotes) {
+        add(current);
+        current = '';
+      }
+      inQuotes = !inQuotes;
+    } else if (ch === ' ' && !inQuotes) {
+      add(current);
+      current = '';
+    } else current += ch;
+  }
+  add(current);
+  return terms;
+}
+const matchesAll = (text: string, terms: string[]) => {
+  const t = text.toLowerCase();
+  return terms.every((term) => t.includes(term));
+};
+
 export default function RecipesPage() {
   const { data, isLoading, isError, error } = useQuery({ queryKey: ['recipes'], queryFn: localRecipes });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const initial = readLayout();
-  const [q, setQ] = useState('');
-  const [category, setCategory] = useState('');
+  const [searchParams] = useSearchParams();
+  // ?search= / ?category= (tag and category links on the recipe page), like the website.
+  const [q, setQ] = useState(() => searchParams.get('search') || '');
+  const [category, setCategory] = useState(() => searchParams.get('category') || '');
   const [view, setView] = useState<View>(initial.view);
   const [catMode, setCatMode] = useState<CatMode>(initial.categoryMode);
   const [showImport, setShowImport] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [searchParams] = useSearchParams();
   // "Rezept hinzufügen" on a shopping list opens this page in selection mode.
   const addToListId = searchParams.get('addToList');
   const [selectionMode, setSelectionMode] = useState(!!addToListId);
@@ -58,6 +92,23 @@ export default function RecipesPage() {
   const [addToListFor, setAddToListFor] = useState<Recipe | null>(null);
 
   const originals = useMemo(() => (data ?? []).filter((r) => !r.parentRecipeId), [data]);
+  // Re-sort on favorite changes; adopt layout changes from other devices (alias sync).
+  const [favTick, setFavTick] = useState(0);
+  useEffect(() => {
+    const onFav = () => setFavTick((n) => n + 1);
+    const onLayout = () => {
+      const l = readLayout();
+      setView(l.view);
+      setCatMode(l.categoryMode);
+    };
+    document.addEventListener('cookbook:favorites-changed', onFav);
+    document.addEventListener('cookbook:recipe-layout-changed', onLayout);
+    return () => {
+      document.removeEventListener('cookbook:favorites-changed', onFav);
+      document.removeEventListener('cookbook:recipe-layout-changed', onLayout);
+    };
+  }, []);
+  const familyOf = (id: string) => [id, ...(data ?? []).filter((r) => r.parentRecipeId === id).map((r) => r.id)];
 
   const categories = useMemo(
     () => Array.from(new Set(originals.map((r) => r.category).filter((c): c is string => !!c))).sort((a, b) => a.localeCompare(b, 'de')),
@@ -65,17 +116,25 @@ export default function RecipesPage() {
   );
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return originals.filter((r) => {
-      if (category && (r.category ?? '') !== category) return false;
-      if (!needle) return true;
-      return (
-        r.title.toLowerCase().includes(needle) ||
-        (r.description ?? '').toLowerCase().includes(needle) ||
-        (r.tags ?? []).some((t) => t.toLowerCase().includes(needle))
-      );
+    const terms = parseSearchTerms(q);
+    const cat = category.toLowerCase();
+    const list = originals.filter((r) => {
+      if (cat && (r.category ?? '').toLowerCase() !== cat) return false;
+      const tags = (r.tags ?? []).map((t) => t.toLowerCase());
+      const matchesTags = terms.tagOnly.every((tt) => tags.some((t) => t.includes(tt)));
+      const matchesRegular =
+        terms.regular.length === 0 ||
+        matchesAll(r.title, terms.regular) ||
+        matchesAll(r.description ?? '', terms.regular) ||
+        tags.some((t) => matchesAll(t, terms.regular));
+      return matchesTags && matchesRegular;
     });
-  }, [originals, q, category]);
+    // Favorites first (only with an alias), original order within each group — like the website.
+    if (!getAlias()) return list;
+    const favs = getFavoriteIds();
+    const isFav = (r: Recipe) => familyOf(r.id).some((id) => favs.has(id));
+    return [...list.filter(isFav), ...list.filter((r) => !isFav(r))];
+  }, [originals, q, category, favTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const grouped = useMemo(() => {
     const map = new Map<string, Recipe[]>();
@@ -172,7 +231,7 @@ export default function RecipesPage() {
   const renderGrid = (recipes: Recipe[]) => (
     <div className={'recipe-cards-container ' + (view === 'list' ? 'view-list' : 'view-grid')}>
       {recipes.map((r) => (
-        <RecipeCard key={r.id} recipe={r} selected={selectedIds.has(r.id)} {...cardProps} />
+        <RecipeCard key={r.id} recipe={r} familyIds={familyOf(r.id)} selected={selectedIds.has(r.id)} {...cardProps} />
       ))}
     </div>
   );
