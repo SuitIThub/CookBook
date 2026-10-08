@@ -4,6 +4,11 @@
  * arrives as a notification that opens the shopping list. Only active in an
  * Android build that includes google-services.json (__FCM_ENABLED__) and once
  * an alias with token is set (registering is a write).
+ *
+ * The registration is re-sent on every start and every return to the
+ * foreground (the server upserts it), so a server that was updated/redeployed
+ * later or dropped the device still gets it — and its state is visible in the
+ * settings (getPushStatus) instead of failing silently.
  */
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications, type PushNotificationSchema } from '@capacitor/push-notifications';
@@ -11,33 +16,73 @@ import { apiDelete, apiGet, apiPost } from './api';
 import { getAlias, getToken } from './settings';
 import { onAliasSettingsChanged } from './aliasSync';
 
-const REGISTERED_KEY = 'kochbuch.push.registered'; // `${alias}\n${fcmToken}`
 export const PING_RECEIVED_EVENT = 'kochbuch:ping-received';
 
 export const pushAvailable = Capacitor.getPlatform() === 'android' && __FCM_ENABLED__;
 
+export type PushState = 'unavailable' | 'starting' | 'no-permission' | 'no-alias' | 'registered' | 'error';
+export interface PushStatus {
+  state: PushState;
+  /** Alias the device is registered for (state 'registered'). */
+  alias?: string;
+  error?: string;
+}
+
+let status: PushStatus = { state: pushAvailable ? 'starting' : 'unavailable' };
+const statusListeners = new Set<(s: PushStatus) => void>();
+function setStatus(s: PushStatus) {
+  status = s;
+  statusListeners.forEach((l) => l(s));
+}
+export function getPushStatus(): PushStatus {
+  return status;
+}
+export function subscribePushStatus(fn: (s: PushStatus) => void): () => void {
+  statusListeners.add(fn);
+  return () => statusListeners.delete(fn);
+}
+
 let fcmToken: string | null = null;
+/** Alias this device was last registered for (to unregister on logout). */
+let registeredAlias: string | null = null;
 
 async function syncRegistration(): Promise<void> {
   if (!fcmToken) return;
   const alias = getAlias();
-  const prev = localStorage.getItem(REGISTERED_KEY);
   if (!alias || !getToken()) {
     // Logged out: this device should no longer receive the old alias' pings.
-    if (prev) {
-      await apiDelete(`/api/push/register?token=${encodeURIComponent(fcmToken)}`).catch(() => {});
-      localStorage.removeItem(REGISTERED_KEY);
-    }
+    if (registeredAlias) await apiDelete(`/api/push/register?token=${encodeURIComponent(fcmToken)}`).catch(() => {});
+    registeredAlias = null;
+    setStatus({ state: 'no-alias' });
     return;
   }
-  const key = `${alias}\n${fcmToken}`;
-  if (prev === key) return;
   try {
     await apiPost('/api/push/register', { token: fcmToken, platform: 'android' });
-    localStorage.setItem(REGISTERED_KEY, key);
-  } catch {
-    /* offline — retried on the next start / alias change */
+    registeredAlias = alias;
+    setStatus({ state: 'registered', alias });
+  } catch (e) {
+    setStatus({ state: 'error', error: `Registrierung beim Server fehlgeschlagen: ${(e as Error).message}` });
   }
+}
+
+async function requestAndRegister(): Promise<void> {
+  try {
+    const perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== 'granted') {
+      setStatus({ state: 'no-permission' });
+      return;
+    }
+    await PushNotifications.register(); // → 'registration' / 'registrationError'
+  } catch (e) {
+    setStatus({ state: 'error', error: (e as Error).message || String(e) });
+  }
+}
+
+/** Settings: "Neu registrieren" — asks for permission again if needed and re-sends the token. */
+export async function reregisterPush(): Promise<void> {
+  if (!pushAvailable) return;
+  if (fcmToken) await syncRegistration();
+  else await requestAndRegister();
 }
 
 /** Set up push once at startup. `navigate` opens the route of a tapped notification. */
@@ -49,6 +94,11 @@ export function installPush(navigate: (to: string) => void): () => void {
     PushNotifications.addListener('registration', (t) => {
       fcmToken = t.value;
       void syncRegistration();
+    })
+  );
+  subs.push(
+    PushNotifications.addListener('registrationError', (e) => {
+      setStatus({ state: 'error', error: `Firebase-Registrierung fehlgeschlagen: ${e.error}` });
     })
   );
   subs.push(
@@ -74,16 +124,21 @@ export function installPush(navigate: (to: string) => void): () => void {
         visibility: 1,
         vibration: true
       });
-      const perm = await PushNotifications.requestPermissions();
-      if (perm.receive === 'granted') await PushNotifications.register();
     } catch {
-      /* push unavailable on this device */
+      /* channel exists / unsupported */
     }
+    await requestAndRegister();
   })();
 
+  // Back in the foreground: re-send (server may have been redeployed or offline before).
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') void syncRegistration();
+  };
+  document.addEventListener('visibilitychange', onVisible);
   const offAlias = onAliasSettingsChanged(() => void syncRegistration());
   return () => {
     offAlias();
+    document.removeEventListener('visibilitychange', onVisible);
     subs.forEach((s) => void s.then((h) => h.remove()).catch(() => {}));
   };
 }

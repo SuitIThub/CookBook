@@ -11,6 +11,7 @@ import { fullResync, getSyncStatus, subscribeSyncStatus, runSync, type SyncStatu
 import { onAliasSettingsChanged } from '@/lib/aliasSync';
 import { openAliasSettings, openAiSettings } from '@/components/settings/headerActions';
 import { APP_VERSION, checkForUpdate, showUpdate } from '@/lib/appUpdate';
+import { getPushStatus, pushAvailable, reregisterPush, subscribePushStatus, type PushStatus } from '@/lib/push';
 
 export default function SettingsPage() {
   const [serverUrl, setServerUrl] = useState(getServerUrl());
@@ -61,6 +62,26 @@ export default function SettingsPage() {
     } finally {
       setResyncing(false);
     }
+  };
+
+  const [push, setPush] = useState<PushStatus>(getPushStatus());
+  useEffect(() => subscribePushStatus(setPush), []);
+  const [reregistering, setReregistering] = useState(false);
+  const onReregister = async () => {
+    setReregistering(true);
+    try {
+      await reregisterPush();
+    } finally {
+      setReregistering(false);
+    }
+  };
+  const pushText: Record<PushStatus['state'], string> = {
+    unavailable: 'In dieser Version nicht verfügbar.',
+    starting: 'Wird eingerichtet …',
+    'no-permission': 'Benachrichtigungen sind nicht erlaubt — bitte in den Android-Einstellungen der App erlauben und dann neu registrieren.',
+    'no-alias': 'Kein Alias mit Token gesetzt — Pings brauchen einen angemeldeten Alias.',
+    registered: `Aktiv — dieses Gerät empfängt Pings für „${push.alias ?? ''}“.`,
+    error: push.error ?? 'Fehler'
   };
 
   const [checking, setChecking] = useState(false);
@@ -128,6 +149,18 @@ export default function SettingsPage() {
             <p className={hint}>Lädt alle Daten (inkl. Einkaufslisten &amp; Sammelliste) vollständig neu vom Server. Hilft, wenn nach einem App-Update Daten fehlen.</p>
             {resyncMsg && <p className="mt-1 font-mono text-sm text-gray-600 dark:text-gray-300">{resyncMsg}</p>}
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-content space-y-3 text-sm text-gray-700 dark:text-gray-300">
+          <h2 className="heading-secondary">Benachrichtigungen (Pings)</h2>
+          <p className={push.state === 'error' || push.state === 'no-permission' ? 'text-red-600 dark:text-red-400' : push.state === 'registered' ? 'text-green-700 dark:text-green-400' : ''}>{pushText[push.state]}</p>
+          {pushAvailable && (
+            <button onClick={() => void onReregister()} disabled={reregistering} className="btn btn-secondary disabled:opacity-50">
+              {reregistering ? 'Registriere …' : 'Neu registrieren'}
+            </button>
+          )}
         </div>
       </div>
 
