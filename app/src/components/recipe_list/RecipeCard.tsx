@@ -19,8 +19,11 @@ export default function RecipeCard({
   onToggleSelect,
   onAddToList,
   onDeleted,
-  familyIds: familyIdsProp
+  familyIds: familyIdsProp,
+  search
 }: {
+  /** Active search terms (website SearchBar): regular words + tag-only terms → highlighted. */
+  search?: { regular: string[]; tagOnly: string[] };
   recipe: Recipe;
   /** Original + variants — favorites apply to the whole family (website semantics). */
   familyIds?: string[];
@@ -31,8 +34,15 @@ export default function RecipeCard({
   onDeleted?: (recipe: Recipe) => void;
 }) {
   const tags = recipe.tags ?? [];
-  const displayTags = tags.slice(0, 3);
-  const remaining = Math.max(0, tags.length - 3);
+  const searching = !!search && (search.regular.length > 0 || search.tagOnly.length > 0);
+  const tagMatches = (t: string) =>
+    !!search && (search.regular.some((term) => t.toLowerCase().includes(term)) || search.tagOnly.some((tt) => t.toLowerCase().includes(tt)));
+  const hidden = tags.slice(3);
+  // While searching, matching tags beyond the first three are shown too (like the website).
+  const displayTags = searching ? [...tags.slice(0, 3), ...hidden.filter(tagMatches)] : tags.slice(0, 3);
+  const hiddenRest = searching ? hidden.filter((t) => !tagMatches(t)) : hidden;
+  const remaining = hiddenRest.length;
+  const hl = (text: string, terms: string[]) => highlight(text, searching ? terms : []);
   const totalTime = (recipe.metadata.timeEntries ?? []).reduce((t, e) => t + (e.minutes || 0), 0);
   const familyIds = familyIdsProp && familyIdsProp.length ? familyIdsProp : [recipe.id];
 
@@ -119,19 +129,19 @@ export default function RecipeCard({
       <div className="card-content p-4">
         <div className="rc-title-block mb-3">
           <h3 className="heading-tertiary mb-1 transition-colors group-hover:text-orange-600 dark:group-hover:text-orange-400">
-            {recipe.title}
+            {hl(recipe.title, search?.regular ?? [])}
           </h3>
           {recipe.subtitle && <p className="text-sm text-muted">{recipe.subtitle}</p>}
         </div>
 
-        {recipe.description && <p className="rc-grid-only mb-3 line-clamp-2 text-sm text-body">{recipe.description}</p>}
+        {recipe.description && <p className="rc-grid-only mb-3 line-clamp-2 text-sm text-body">{hl(recipe.description, search?.regular ?? [])}</p>}
 
         <div className="rc-tags mb-4 flex flex-wrap gap-1.5">
           {displayTags.map((tag) => (
-            <span key={tag} className="tag">{tag}</span>
+            <span key={tag} className="tag">{hl(tag, [...(search?.regular ?? []), ...(search?.tagOnly ?? [])])}</span>
           ))}
           {remaining > 0 && (
-            <span className="tag-more" title={tags.slice(3).join(', ')}>+{remaining} weitere</span>
+            <span className="tag-more" title={hiddenRest.join(', ')}>+{remaining} weitere</span>
           )}
         </div>
 
@@ -198,5 +208,21 @@ function MenuItem({ onClick, label, iconD, danger }: { onClick: (e: React.MouseE
       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={iconD} /></svg>
       <span>{label}</span>
     </button>
+  );
+}
+
+/** Website highlightText: wrap every occurrence of the terms in <mark>. */
+function highlight(text: string, terms: string[]): React.ReactNode {
+  const ts = terms.map((t) => t.replace(/^"|"$/g, '')).filter(Boolean);
+  if (!text || ts.length === 0) return text;
+  const re = new RegExp(`(${ts.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+  return text.split(re).map((part, i) =>
+    i % 2 === 1 ? (
+      <mark key={i} className="bg-yellow-200 dark:bg-yellow-700">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
   );
 }

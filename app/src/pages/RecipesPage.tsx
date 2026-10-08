@@ -117,6 +117,7 @@ export default function RecipesPage() {
     [originals]
   );
 
+  const searchTerms = useMemo(() => parseSearchTerms(q), [q]);
   const filtered = useMemo(() => {
     const terms = parseSearchTerms(q);
     const cat = category.toLowerCase();
@@ -233,7 +234,7 @@ export default function RecipesPage() {
   const renderGrid = (recipes: Recipe[]) => (
     <div className={'recipe-cards-container ' + (view === 'list' ? 'view-list' : 'view-grid')}>
       {recipes.map((r) => (
-        <RecipeCard key={r.id} recipe={r} familyIds={familyOf(r.id)} selected={selectedIds.has(r.id)} {...cardProps} />
+        <RecipeCard key={r.id} recipe={r} familyIds={familyOf(r.id)} search={searchTerms} selected={selectedIds.has(r.id)} {...cardProps} />
       ))}
     </div>
   );
