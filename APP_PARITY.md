@@ -77,4 +77,4 @@ synchronisieren wie auf der Website.
 - Offline-first mit lokaler Replica + Outbox, Live-Sync, Sync-Indikator, Barcode-Scan nativ.
 - Tracker offline nutzbar (Website braucht Verbindung).
 - Offen/Ideen: Android-Share-Intent (Website: Web-Share-Target) für Rezept-Import.
-- Gerätetest offen: Kamera/Barcode, Teilen-Sheet, Live-Sync im LAN auf echtem Android-Gerät.
+- Auf echtem Android-Gerät getestet (2026-10-08): Barcode-Scan, OFF-Suche (auch ohne Server), Live-Sync zwischen zwei Geräten.
