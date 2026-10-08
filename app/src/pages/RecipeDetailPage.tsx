@@ -250,7 +250,9 @@ export default function RecipeDetailPage() {
         </button>
       )}
 
-      {showChat && <AIChatModal recipeId={recipe.id} recipeTitle={recipe.title} onClose={() => setShowChat(false)} />}
+      {showChat && (
+        <AIChatModal referencedRecipes={[{ id: recipe.id, title: recipe.title, imageUrl: recipe.images?.[0]?.url ?? recipe.imageUrl ?? undefined }]} onClose={() => setShowChat(false)} />
+      )}
       {showAddToList && <AddToShoppingListModal recipeIds={[recipe.id]} recipeServingsById={servings ? { [recipe.id]: current } : undefined} onClose={() => setShowAddToList(false)} />}
       {catalogueFor && (
         <CatalogueModal

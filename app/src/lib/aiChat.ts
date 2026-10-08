@@ -278,3 +278,177 @@ export async function discardDraft(recipeId: string): Promise<void> {
     headers: { Accept: 'application/json', ...authHeaders() }
   }).catch(() => {});
 }
+
+/* ------------------------------------------------------------------------ */
+/* Website RecipeAIChatModal protocol (tabs, references, explicit model). */
+
+export interface ChatUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  cachedTokens?: number;
+  costUsd?: number;
+}
+
+function aiSettingsBody(provider?: string, model?: string): Record<string, unknown> {
+  const p = provider || getAiProvider();
+  const body: Record<string, unknown> = { provider: p };
+  const m = model ?? getAiModel();
+  if (m) body.model = m;
+  const key = getOpenRouterApiKey();
+  if (key) body.openRouterApiKey = key;
+  return body;
+}
+
+/**
+ * Stream one answer with the website's request shape. Calls `onDelta` with the
+ * accumulated text, resolves with the final message and usage/cache metadata.
+ */
+export async function streamChatV2(
+  params: {
+    recipeId: string;
+    recipeIds: string[];
+    includeAllRecipes: boolean;
+    chatId: string;
+    history: ChatMessage[];
+    message: string;
+    provider: string;
+    model: string;
+  },
+  onDelta: (accumulated: string, firstDelta: boolean) => void,
+  signal?: AbortSignal
+): Promise<{ full: string; usage: ChatUsage | null; cache: unknown; error: string | null }> {
+  const res = await fetch(`${apiBase()}/api/ai/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', ...authHeaders() },
+    body: JSON.stringify({
+      recipeId: params.recipeId,
+      recipeIds: params.recipeIds,
+      includeAllRecipes: params.includeAllRecipes,
+      chatId: params.chatId,
+      history: params.history,
+      message: params.message,
+      ...aiSettingsBody(params.provider, params.model)
+    }),
+    signal
+  });
+  if (!res.ok || !res.body) {
+    let msg = 'Request failed';
+    try {
+      const j: any = await res.json();
+      msg = j?.userMessage || j?.error || msg;
+    } catch {
+      /* non-JSON */
+    }
+    throw new Error(msg);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full = '';
+  let done = false;
+  let usage: ChatUsage | null = null;
+  let cache: unknown = null;
+  let error: string | null = null;
+  let first = true;
+  const handle = (line: string) => {
+    const t = line.trim();
+    if (!t) return;
+    let d: any;
+    try {
+      d = JSON.parse(t);
+    } catch {
+      return;
+    }
+    if (d.ping === true || d.status === 'started') return;
+    if (d.error) {
+      error = String(d.error);
+      return;
+    }
+    if (typeof d.delta === 'string') {
+      full += d.delta;
+      onDelta(full, first);
+      first = false;
+    }
+    if (d.cache && typeof d.cache === 'object') cache = d.cache;
+    if (d.usage && typeof d.usage === 'object') usage = d.usage;
+    if (d.done && typeof d.fullMessage === 'string' && !done) {
+      full = d.fullMessage;
+      done = true;
+      onDelta(full, false);
+    }
+  };
+  while (true) {
+    const r = await reader.read();
+    if (r.done) break;
+    buffer += decoder.decode(r.value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const l of lines) {
+      handle(l);
+      if (error) break;
+    }
+    if (error) break;
+  }
+  if (!error) buffer.split('\n').forEach(handle);
+  return { full, usage, cache, error };
+}
+
+/** Short AI title for a chat tab (POST /api/ai/chat-title). */
+export async function generateChatTitle(messages: ChatMessage[], provider: string, model: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${apiBase()}/api/ai/chat-title`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
+      body: JSON.stringify({ messages, ...aiSettingsBody(provider, model) })
+    });
+    const data: any = await res.json().catch(() => ({}));
+    return res.ok && data?.title ? String(data.title) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** POST /api/ai/propose-variant with preview:true (website flow). */
+export async function proposeVariantPreview(body: {
+  recipeId: string;
+  targetRecipeId: string;
+  recipeIds: string[];
+  variantMessage: string;
+  provider: string;
+  model: string;
+}): Promise<any> {
+  const res = await fetch(`${apiBase()}/api/ai/propose-variant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
+    body: JSON.stringify({ ...body, preview: true, ...aiSettingsBody(body.provider, body.model) })
+  });
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) throw new Error((data && typeof data.error === 'string' && data.error) || `Variante konnte nicht vorbereitet werden (HTTP ${res.status}).`);
+  return data;
+}
+
+/** POST /api/ai/propose-edit (website flow): returns the preview token. */
+export async function proposeEditPreview(body: {
+  recipeId: string;
+  recipeIds: string[];
+  regions: string[];
+  editMessage: string;
+  provider: string;
+  model: string;
+}): Promise<string> {
+  const res = await fetch(`${apiBase()}/api/ai/propose-edit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
+    body: JSON.stringify({ ...body, ...aiSettingsBody(body.provider, body.model) })
+  });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Edit-Vorschlag konnte nicht vorbereitet werden.');
+  if (data.preview === true && data.token) return String(data.token);
+  throw new Error('Edit-Vorschlag konnte nicht vorbereitet werden.');
+}

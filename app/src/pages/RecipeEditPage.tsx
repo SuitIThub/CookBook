@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type {
   Recipe,
@@ -13,7 +13,8 @@ import type {
 import { localRecipe, saveLocalRecipe, deleteLocalRecipe, localIngredients, localRecipes } from '@/lib/localData';
 import { uploadRecipeImage, deleteRecipeImage } from '@/lib/recipeImages';
 import { runSync } from '@/lib/syncRunner';
-import { assetUrl } from '@/lib/api';
+import { assetUrl, apiGet } from '@/lib/api';
+import { discardDraft } from '@/lib/aiChat';
 import { getAvailableUnits } from '@core/units';
 import { NUTRITION_FIELDS } from '@core/nutrition';
 
@@ -167,9 +168,19 @@ function Card({ children }: { children: React.ReactNode }) {
 
 /* ----------------------------------------------------------------- page */
 
-export default function RecipeEditPage() {
-  const { id } = useParams<{ id: string }>();
+export default function RecipeEditPage({ variantDraft = false }: { variantDraft?: boolean }) {
+  const { id: routeId, parentId } = useParams<{ id: string; parentId: string }>();
+  const id = variantDraft ? undefined : routeId;
   const isNew = !id;
+  const [searchParams] = useSearchParams();
+  // AI edit proposal from the chat: /rezept/:id/bearbeiten?aiDraft=1&aiEditToken=…
+  const aiEditToken = !variantDraft && searchParams.get('aiDraft') === '1' ? searchParams.get('aiEditToken') : null;
+  // AI variant proposal: /rezept/:parentId/variante-neu?draft=…
+  const variantToken = variantDraft ? searchParams.get('draft') : null;
+  const [aiBanner, setAiBanner] = useState<{ title: string; note?: string } | null>(null);
+  const [aiOriginal, setAiOriginal] = useState<Recipe | null>(null);
+  const [aiDraftRecipe, setAiDraftRecipe] = useState<Recipe | null>(null);
+  const [variantInfo, setVariantInfo] = useState<{ parentId: string; parentTitle: string; variantName: string } | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -187,16 +198,70 @@ export default function RecipeEditPage() {
   const [linkingStep, setLinkingStep] = useState<{ groupId: string; stepId: string } | null>(null);
 
   useEffect(() => {
+    if (variantDraft) {
+      (async () => {
+        try {
+          const d = await apiGet<{ parentRecipeId: string; variantName: string; recipeData: any }>(`/api/ai/variant-draft?token=${encodeURIComponent(variantToken || '')}`);
+          const parent = await localRecipe(d.parentRecipeId || parentId!);
+          setVariantInfo({ parentId: d.parentRecipeId || parentId!, parentTitle: parent?.title || '', variantName: d.variantName || 'KI-Variante' });
+          setForm(toForm({ ...d.recipeData, id: 'draft', parentRecipeId: d.parentRecipeId, variantName: d.variantName } as Recipe));
+        } catch {
+          navigate(`/rezept/${parentId}`, { replace: true });
+          return;
+        }
+        setLoading(false);
+      })();
+      return;
+    }
     if (isNew) {
       setForm(toForm(null));
       return;
     }
-    localRecipe(id!).then((r) => {
+    (async () => {
+      const r = await localRecipe(id!);
       setExisting(r);
+      if (aiEditToken) {
+        // Website flow: the edit form shows the AI draft, changes are marked.
+        try {
+          const draft = await apiGet<Recipe | null>(`/api/drafts?recipeId=${encodeURIComponent(id!)}`);
+          if (draft) {
+            setAiOriginal(r);
+            setAiDraftRecipe(draft);
+            setForm(toForm(draft));
+            setLoading(false);
+            return;
+          }
+        } catch {
+          /* fall through to the stored recipe */
+        }
+      }
       setForm(toForm(r));
       setLoading(false);
-    });
-  }, [id, isNew]);
+    })();
+  }, [id, isNew, variantDraft]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mark fields/items changed by the AI proposal (port of applyAiEditHighlights).
+  useEffect(() => {
+    if (!aiEditToken || loading || !aiDraftRecipe) return;
+    let cancelled = false;
+    (async () => {
+      let data: any = null;
+      try {
+        data = await apiGet<any>(`/api/ai/edit-preview?token=${encodeURIComponent(aiEditToken)}`);
+      } catch {
+        data = null;
+      }
+      if (cancelled) return;
+      const count = markAiChanges(aiOriginal, aiDraftRecipe, data?.highlights ?? []);
+      setAiBanner({
+        title: count > 0 ? `KI-Änderungsvorschlag – ${count} Stelle${count === 1 ? '' : 'n'} markiert. Bitte prüfen und speichern.` : 'KI-Änderungsvorschlag geladen – bitte prüfen und speichern.',
+        note: data?.diagnostics && data.diagnostics.status && data.diagnostics.status !== 'ok' ? (typeof data.diagnostics.message === 'string' ? data.diagnostics.message : 'Hinweis zur KI-Antwort.') : undefined
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [aiEditToken, loading, aiDraftRecipe, aiOriginal]);
 
   // Autocomplete + category/tag suggestions derived from the local DB (offline).
   useEffect(() => {
@@ -365,6 +430,7 @@ export default function RecipeEditPage() {
     setError(null);
     try {
       const saved = await saveLocalRecipe(isNew ? null : id!, data);
+      if (aiEditToken && id) await discardDraft(id).catch(() => {});
       queryClient.invalidateQueries();
       navigate(`/rezept/${saved.id}`);
     } catch (e) {
@@ -380,7 +446,7 @@ export default function RecipeEditPage() {
     setBusy(true);
     setError(null);
     try {
-      const rootId = existing?.parentRecipeId ?? existing?.id;
+      const rootId = variantInfo?.parentId ?? existing?.parentRecipeId ?? existing?.id;
       const saved = await saveLocalRecipe(null, {
         ...data,
         images: existing?.images,
@@ -450,7 +516,20 @@ export default function RecipeEditPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h1 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">{isNew ? 'Neues Rezept' : 'Rezept bearbeiten'}</h1>
+      {variantInfo && (
+        <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-800 dark:bg-indigo-900/20">
+          <p className="text-sm text-indigo-800 dark:text-indigo-200">
+            KI-Vorschlag für eine neue Variante von „{variantInfo.parentTitle}“. Du kannst alles anpassen und dann als neue Variante speichern oder abbrechen.
+          </p>
+        </div>
+      )}
+      <h1 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">{variantInfo ? 'Neue Variante' : isNew ? 'Neues Rezept' : 'Rezept bearbeiten'}</h1>
+      {aiBanner && (
+        <div id="ai-edit-highlight-banner" className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50/70 p-3 dark:border-indigo-800 dark:bg-indigo-900/20">
+          <p className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">{aiBanner.title}</p>
+          {aiBanner.note && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{aiBanner.note}</p>}
+        </div>
+      )}
 
       <div className="space-y-6">
         {/* Grundinformationen */}
@@ -460,30 +539,30 @@ export default function RecipeEditPage() {
             {form.isVariant && (
               <div>
                 <label className={labelCls}>Varianten-Tab Name</label>
-                <input className={inputCls} value={form.variantName} placeholder="z.B. Vegan, Scharf, Ohne Zwiebeln" onChange={(e) => patch({ variantName: e.target.value })} />
+                <input id="edit-variant-name" className={inputCls} value={form.variantName} placeholder="z.B. Vegan, Scharf, Ohne Zwiebeln" onChange={(e) => patch({ variantName: e.target.value })} />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Dieser Name wird im Varianten-Tab angezeigt.</p>
               </div>
             )}
             <div>
               <label className={labelCls}>Titel <span className="text-red-500">*</span></label>
-              <input className={inputCls} value={form.title} onChange={(e) => patch({ title: e.target.value })} />
+              <input id="edit-title" className={inputCls} value={form.title} onChange={(e) => patch({ title: e.target.value })} />
             </div>
             <div>
               <label className={labelCls}>Untertitel</label>
-              <input className={inputCls} value={form.subtitle} onChange={(e) => patch({ subtitle: e.target.value })} />
+              <input id="edit-subtitle" className={inputCls} value={form.subtitle} onChange={(e) => patch({ subtitle: e.target.value })} />
             </div>
             <div>
               <label className={labelCls}>Beschreibung</label>
-              <textarea className={inputCls} rows={3} value={form.description} onChange={(e) => patch({ description: e.target.value })} />
+              <textarea id="edit-description" className={inputCls} rows={3} value={form.description} onChange={(e) => patch({ description: e.target.value })} />
             </div>
             <div>
               <label className={labelCls}>Quell-URL (optional)</label>
-              <input className={inputCls} type="url" value={form.sourceUrl} placeholder="https://example.com/recipe" onChange={(e) => patch({ sourceUrl: e.target.value })} />
+              <input id="edit-source-url" className={inputCls} type="url" value={form.sourceUrl} placeholder="https://example.com/recipe" onChange={(e) => patch({ sourceUrl: e.target.value })} />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">URL der Quelle, von der das Rezept importiert wurde (z.B. YouTube, Kochblog, etc.)</p>
             </div>
             <div>
               <label className={labelCls}>Portionen <span className="text-red-500">*</span></label>
-              <input className={inputCls} type="number" min={1} step={1} value={form.servings} onChange={(e) => patch({ servings: e.target.value })} />
+              <input id="edit-servings" className={inputCls} type="number" min={1} step={1} value={form.servings} onChange={(e) => patch({ servings: e.target.value })} />
             </div>
             <div>
               <div className="mb-3 flex items-center justify-between">
@@ -492,7 +571,7 @@ export default function RecipeEditPage() {
                   + Zeit hinzufügen
                 </button>
               </div>
-              <div className="space-y-3">
+              <div id="time-entries-container" className="space-y-3">
                 {form.times.map((t, i) => (
                   <div key={t.id} className="flex items-end gap-3">
                     <div className="flex-1">
@@ -512,7 +591,7 @@ export default function RecipeEditPage() {
             </div>
             <div>
               <label className={labelCls}>Schwierigkeit</label>
-              <select className={inputCls} value={form.difficulty} onChange={(e) => patch({ difficulty: e.target.value })}>
+              <select id="edit-difficulty" className={inputCls} value={form.difficulty} onChange={(e) => patch({ difficulty: e.target.value })}>
                 <option value="">Wählen...</option>
                 <option value="leicht">Leicht</option>
                 <option value="mittel">Mittel</option>
@@ -528,6 +607,7 @@ export default function RecipeEditPage() {
                   <div key={f.key}>
                     <label className={labelCls}>{f.editLabel}</label>
                     <input
+                      id={f.inputId}
                       className={inputCls}
                       type="number"
                       min={0}
@@ -550,6 +630,7 @@ export default function RecipeEditPage() {
             <div>
               <label className={labelCls}>Kategorie <span className="text-red-500">*</span></label>
               <input
+                id="recipe-category"
                 className={inputCls}
                 list="category-list"
                 value={form.category}
@@ -564,7 +645,7 @@ export default function RecipeEditPage() {
             </div>
             <div>
               <label className={labelCls}>Tags</label>
-              <div className="flex min-h-[2.5rem] flex-wrap items-center gap-2 rounded-md border border-gray-300 bg-gray-50 p-2 dark:border-gray-600 dark:bg-gray-700">
+              <div id="tags-container" className="flex min-h-[2.5rem] flex-wrap items-center gap-2 rounded-md border border-gray-300 bg-gray-50 p-2 dark:border-gray-600 dark:bg-gray-700">
                 {form.category && (
                   <span className="inline-flex items-center rounded-full bg-orange-100 px-3 py-1 text-sm text-orange-800 dark:bg-orange-900/50 dark:text-orange-200">{form.category}</span>
                 )}
@@ -647,7 +728,8 @@ export default function RecipeEditPage() {
                         e.stopPropagation();
                         onDropItem('ing', g.id, it.id);
                       }}
-                      className="rounded-md border border-gray-200 bg-white p-3 transition-colors duration-200 dark:border-gray-600 dark:bg-gray-800"
+                      data-ingredient-id={it.id}
+                      className="ingredient-edit-item rounded-md border border-gray-200 bg-white p-3 transition-colors duration-200 dark:border-gray-600 dark:bg-gray-800"
                     >
                       <div className="space-y-3">
                         <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-x-3 sm:space-y-0">
@@ -738,6 +820,26 @@ export default function RecipeEditPage() {
       {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {/* EditFormActions */}
+      {variantInfo ? (
+        <div className="mb-4 mt-8">
+          <div className="flex flex-col space-y-3 sm:hidden">
+            <button type="button" disabled={busy} onClick={() => saveAsVariant(variantInfo.variantName)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 px-6 py-4 text-base font-medium text-white transition-colors hover:bg-indigo-600 disabled:opacity-50">
+              <span>Als neue Variante speichern</span>
+            </button>
+            <button type="button" onClick={() => navigate(`/rezept/${variantInfo.parentId}`)} className="w-full rounded-lg border-2 border-gray-300 bg-white px-6 py-4 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
+              Abbrechen
+            </button>
+          </div>
+          <div className="mx-auto hidden max-w-4xl items-center justify-end gap-3 sm:flex">
+            <button type="button" onClick={() => navigate(`/rezept/${variantInfo.parentId}`)} className="rounded-md border border-gray-300 bg-white px-6 py-3 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
+              Abbrechen
+            </button>
+            <button type="button" disabled={busy} onClick={() => saveAsVariant(variantInfo.variantName)} className="flex items-center gap-2 rounded-md bg-indigo-500 px-6 py-3 text-white transition-colors hover:bg-indigo-600 disabled:opacity-50">
+              <span>Als neue Variante speichern</span>
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="mb-4 mt-8">
         <div className="flex flex-col space-y-3 sm:hidden">
           <button type="button" onClick={save} disabled={busy} className="flex w-full touch-manipulation items-center justify-center space-x-2 rounded-lg bg-green-500 px-6 py-4 text-base font-medium text-white shadow-sm transition-colors hover:bg-green-600 active:bg-green-700 disabled:opacity-50">
@@ -786,6 +888,8 @@ export default function RecipeEditPage() {
           </div>
         </div>
       </div>
+
+      )}
 
       {variantModal && <VariantModal onClose={() => setVariantModal(false)} onCreate={saveAsVariant} />}
 
@@ -1015,7 +1119,8 @@ function StepEditor({
         e.stopPropagation();
         onDrop();
       }}
-      className="rounded-md border border-gray-200 bg-white p-3 transition-colors duration-200 sm:p-4 dark:border-gray-600 dark:bg-gray-800"
+      data-step-id={step.id}
+      className="step-edit-item rounded-md border border-gray-200 bg-white p-3 transition-colors duration-200 sm:p-4 dark:border-gray-600 dark:bg-gray-800"
     >
       <div className="flex flex-col space-y-3 sm:flex-row sm:items-start sm:space-x-3 sm:space-y-0">
         <div className="flex items-center space-x-2 sm:flex-col sm:space-x-0 sm:space-y-2">
@@ -1208,4 +1313,104 @@ function VariantModal({ onClose, onCreate }: { onClose: () => void; onCreate: (n
       </div>
     </div>
   );
+}
+
+/**
+ * Port of the website's applyAiEditHighlights: mark the fields/items the AI
+ * proposal changed with .ai-edit-changed + a "Geändert" badge (DOM, by the
+ * same ids/data attributes the website editor uses). Returns the count.
+ */
+function markAiChanges(original: Recipe | null, draft: Recipe | null, highlights: { path?: string }[]): number {
+  const marked = new Set<Element>();
+  const markElement = (el: Element | null) => {
+    if (!el || marked.has(el)) return;
+    marked.add(el);
+    el.classList.add('ai-edit-changed');
+    if (!el.querySelector(':scope > .ai-edit-changed-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'ai-edit-changed-badge';
+      badge.textContent = 'Geändert';
+      el.appendChild(badge);
+    }
+  };
+  const markInput = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    markElement(el.parentElement && el.parentElement !== document.body ? el.parentElement : el);
+    el.classList.add('ai-edit-changed-field');
+  };
+  const markBySelector = (sel: string) => document.querySelectorAll(sel).forEach((el) => markElement(el));
+  const j = (v: unknown) => {
+    try {
+      return JSON.stringify(v ?? null);
+    } catch {
+      return String(v);
+    }
+  };
+  const flat = (groups: any[] | undefined, key: 'ingredients' | 'steps') => {
+    const map = new Map<string, any>();
+    const visit = (items: any[]) =>
+      (items || []).forEach((it) => {
+        if (!it || typeof it !== 'object') return;
+        if (Array.isArray(it[key])) return visit(it[key]);
+        if (typeof it.id === 'string' && it.id) map.set(it.id, it);
+      });
+    (groups || []).forEach((g) => visit(g?.[key]));
+    return map;
+  };
+  const nutritionIds = NUTRITION_FIELDS.map((f) => f.inputId);
+  if (original && draft) {
+    const o: any = original;
+    const d: any = draft;
+    if ((o.title || '') !== (d.title || '')) markInput('edit-title');
+    if ((o.subtitle || '') !== (d.subtitle || '')) markInput('edit-subtitle');
+    if ((o.description || '') !== (d.description || '')) markInput('edit-description');
+    if ((o.sourceUrl || '') !== (d.sourceUrl || '')) markInput('edit-source-url');
+    if ((o.variantName || '') !== (d.variantName || '')) markInput('edit-variant-name');
+    if ((o.category || '') !== (d.category || '')) markInput('recipe-category');
+    if (j(o.tags || []) !== j(d.tags || [])) markElement(document.getElementById('tags-container'));
+    if ((o.metadata?.servings ?? null) !== (d.metadata?.servings ?? null)) markInput('edit-servings');
+    if ((o.metadata?.difficulty || '') !== (d.metadata?.difficulty || '')) markInput('edit-difficulty');
+    if (j(o.metadata?.nutrition || {}) !== j(d.metadata?.nutrition || {})) nutritionIds.forEach(markInput);
+    if (j(o.metadata?.timeEntries || []) !== j(d.metadata?.timeEntries || [])) markElement(document.getElementById('time-entries-container'));
+    const oi = flat(o.ingredientGroups, 'ingredients');
+    for (const [id, di] of flat(d.ingredientGroups, 'ingredients')) {
+      const a = oi.get(id);
+      const changed =
+        !a ||
+        (a.name || '') !== (di.name || '') ||
+        (a.description || '') !== (di.description || '') ||
+        j(a.quantities) !== j(di.quantities) ||
+        (a.alternativeGroupId || '') !== (di.alternativeGroupId || '') ||
+        !!a.isAlternativeDefault !== !!di.isAlternativeDefault;
+      if (changed) markElement(document.querySelector(`.ingredient-edit-item[data-ingredient-id="${CSS.escape(id)}"]`));
+    }
+    const os = flat(o.preparationGroups, 'steps');
+    for (const [id, ds] of flat(d.preparationGroups, 'steps')) {
+      const a = os.get(id);
+      const changed =
+        !a ||
+        (a.text || '') !== (ds.text || '') ||
+        j(a.linkedIngredients) !== j(ds.linkedIngredients) ||
+        j(a.intermediateIngredients) !== j(ds.intermediateIngredients) ||
+        (a.timer ?? null) !== (ds.timer ?? null);
+      if (changed) markElement(document.querySelector(`.step-edit-item[data-step-id="${CSS.escape(id)}"]`));
+    }
+  }
+  if (marked.size === 0) {
+    const paths = new Set(highlights.map((h) => h.path || ''));
+    if (paths.has('title')) markInput('edit-title');
+    if (paths.has('subtitle')) markInput('edit-subtitle');
+    if (paths.has('description')) markInput('edit-description');
+    if (paths.has('category')) markInput('recipe-category');
+    if (paths.has('tags')) markBySelector('#tags-container');
+    if (paths.has('metadata.servings')) markInput('edit-servings');
+    if (paths.has('metadata.nutrition')) nutritionIds.forEach(markInput);
+    if (paths.has('metadata.timeEntries')) markElement(document.getElementById('time-entries-container'));
+    if (paths.has('ingredientGroups')) markBySelector('.ingredient-edit-item');
+    if (paths.has('preparationGroups')) markBySelector('.step-edit-item');
+  }
+  const first = marked.values().next().value as Element | undefined;
+  first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return marked.size;
 }
