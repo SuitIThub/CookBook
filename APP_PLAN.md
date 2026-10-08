@@ -121,8 +121,8 @@ Adapter; der 12-MB-shopping_lists-Smell separat untersuchen.
   Rest-Check: sql.js-WASM im echten Capacitor-WebView (Route `/_localtest` als Probe).
 - ✅ **Y-sync**: pull/push, Outbox, LWW inkl. Deletes, Drei-Wege-Merge für Einkaufslisten,
   Opt-out (private Rezepte), Live-Stream. Details + aktueller Stand: `APP_PARITY.md`.
+- ✅ **Y-tracker**: Tracker offline — gemeinsame Logik `trackerService.ts`, Sync pro Alias.
 - Hinweis: On-device-DB ist **sql.js + IndexedDB** (nicht `@capacitor-community/sqlite`).
 
 ## Bewusst später
-- Tracker offline (aktuell online-first über REST).
 - Shared-Types als eigenes Package (erst wenn Drift real wird).
