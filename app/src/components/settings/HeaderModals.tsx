@@ -2,6 +2,7 @@
  * Header controls shared by every page — ports of the website's
  * AliasSettingsModal, AISettingsModal and the Datenspar-Modus toggle.
  */
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { apiGet } from '@/lib/api';
 import { getAlias, getToken, TOKEN_KEY, getAiSettings, saveAiSettings, type AiProvider } from '@/lib/settings';
@@ -141,6 +142,9 @@ export function AliasSettingsModal({ onClose }: { onClose: () => void }) {
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token: Speichern &amp; Synchronisieren. Wird nur auf diesem Gerät gespeichert (nicht geteilt).
             </p>
+            <Link to="/admin/aliasse" onClick={onClose} className="mt-2 inline-block text-xs text-orange-600 hover:underline dark:text-orange-400">
+              Aliasse &amp; Tokens verwalten (Admin)
+            </Link>
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
             {current ? `Aktiv – synchronisiert als "${current}".` : 'Kein Alias gesetzt. Einstellungen bleiben nur auf diesem Gerät.'}

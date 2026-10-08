@@ -144,12 +144,12 @@ function extractError(body: unknown, fallback: string): string {
 
 export async function apiGet<T>(path: string, opts?: { timeoutMs?: number; headers?: Record<string, string> }): Promise<T> {
   const r = await raw('GET', path, { timeoutMs: opts?.timeoutMs, headers: opts?.headers });
-  if (r.status < 200 || r.status >= 300) throw new ApiError(`GET ${path} failed with ${r.status}`, r.status, path);
+  if (r.status < 200 || r.status >= 300) throw new ApiError(extractError(r.body, `GET ${path} failed with ${r.status}`), r.status, path);
   return r.body as T;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const r = await raw('POST', path, { json: body });
+export async function apiPost<T>(path: string, body: unknown, opts?: { headers?: Record<string, string> }): Promise<T> {
+  const r = await raw('POST', path, { json: body, headers: opts?.headers });
   if (r.status < 200 || r.status >= 300) throw new ApiError(extractError(r.body, `POST ${path} failed with ${r.status}`), r.status, path);
   return r.body as T;
 }
@@ -160,8 +160,8 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
   return r.body as T;
 }
 
-export async function apiDelete<T>(path: string): Promise<T> {
-  const r = await raw('DELETE', path);
+export async function apiDelete<T>(path: string, opts?: { headers?: Record<string, string> }): Promise<T> {
+  const r = await raw('DELETE', path, { headers: opts?.headers });
   if (r.status < 200 || r.status >= 300) throw new ApiError(extractError(r.body, `DELETE ${path} failed with ${r.status}`), r.status, path);
   return r.body as T;
 }

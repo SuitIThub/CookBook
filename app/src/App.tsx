@@ -19,6 +19,7 @@ import LocalDbTestPage from './pages/LocalDbTestPage';
 import SyncTestPage from './pages/SyncTestPage';
 import PushTestPage from './pages/PushTestPage';
 import SettingsPage from './pages/SettingsPage';
+import AdminAliasesPage from './pages/AdminAliasesPage';
 import OptoutTestPage from './pages/OptoutTestPage';
 import ProductsPage from './pages/ProductsPage';
 import IngredientsPage from './pages/IngredientsPage';
@@ -247,6 +248,7 @@ export default function App() {
           <Route path="/einkaufsliste/:id/bearbeiten" element={<ShoppingListEditPage />} />
           <Route path="/tracker" element={<TrackerPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />
+          <Route path="/admin/aliasse" element={<AdminAliasesPage />} />
           <Route path="/_optouttest" element={<OptoutTestPage />} />
           <Route path="*" element={<p className="text-muted">Seite nicht gefunden.</p>} />
         </Routes>

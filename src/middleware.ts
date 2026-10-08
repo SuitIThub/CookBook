@@ -7,7 +7,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Accept, X-Alias, X-Auth-Token',
+    'Access-Control-Allow-Headers': 'Content-Type, Accept, X-Alias, X-Auth-Token, X-Admin-Token',
     'Access-Control-Max-Age': '86400'
   };
 }
@@ -25,7 +25,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     // Write gating: GET/HEAD are open (read-only capability without a token);
     // state-changing methods require a valid per-alias token.
-    if (WRITE_METHODS.has(request.method)) {
+    // Admin endpoints authenticate with the admin token themselves (X-Admin-Token).
+    if (WRITE_METHODS.has(request.method) && !url.pathname.startsWith('/api/admin/')) {
       const alias = request.headers.get('x-alias') || '';
       const token = request.headers.get('x-auth-token') || '';
       if (!validateAuth(alias, token)) {

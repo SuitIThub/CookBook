@@ -1,0 +1,210 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Aliasse verwalten">
+  <div class="mx-auto max-w-3xl space-y-6 px-4 py-6">
+    <div>
+      <h1 class="heading-primary mb-2">Aliasse verwalten</h1>
+      <p class="text-muted">Aliasse anlegen, Zugangs-Tokens neu erzeugen oder Aliasse löschen. Dafür brauchst du den Admin-Token des Servers (Umgebungsvariable <code>ADMIN_TOKEN</code>).</p>
+    </div>
+
+    <div class="card">
+      <div class="card-content space-y-3">
+        <label for="admin-token" class="form-label">Admin-Token</label>
+        <div class="flex gap-2">
+          <input id="admin-token" type="password" class="form-input flex-1" autocomplete="off" placeholder="ADMIN_TOKEN des Servers" />
+          <button id="admin-login" type="button" class="btn btn-primary">Anmelden</button>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Wird nur in diesem Browser gespeichert.</p>
+        <p id="admin-error" class="hidden text-sm text-red-600 dark:text-red-400"></p>
+      </div>
+    </div>
+
+    <div id="admin-panel" class="hidden space-y-6">
+      <div id="token-result" class="hidden rounded-lg border border-green-300 bg-green-50 p-4 dark:border-green-700 dark:bg-green-900/20">
+        <p class="text-sm font-medium text-green-800 dark:text-green-200">Neuer Token für „<span id="token-result-alias"></span>“ — jetzt notieren, er wird nur einmal angezeigt:</p>
+        <div class="mt-2 flex gap-2">
+          <code id="token-result-value" class="flex-1 break-all rounded bg-white px-2 py-1 text-sm dark:bg-gray-900"></code>
+          <button id="token-copy" type="button" class="btn btn-secondary">Kopieren</button>
+        </div>
+        <p class="mt-2 text-xs text-green-700 dark:text-green-300">Der bisherige Token dieses Alias ist ab sofort ungültig — auf allen Geräten den neuen eintragen.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-content space-y-3">
+          <h2 class="heading-secondary">Neuer Alias</h2>
+          <div class="flex gap-2">
+            <input id="new-alias" type="text" maxlength="128" class="form-input flex-1" placeholder="Alias, z. B. Anna" autocomplete="off" />
+            <button id="new-alias-btn" type="button" class="btn btn-success">Anlegen</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-content space-y-3">
+          <h2 class="heading-secondary">Vorhandene Aliasse</h2>
+          <div id="alias-list" class="divide-y divide-gray-200 dark:divide-gray-700"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="delete-dialog" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4" aria-modal="true">
+    <div class="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+      <div class="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Alias „<span id="delete-alias-name"></span>“ löschen?</h2>
+      </div>
+      <div class="space-y-3 p-4 text-sm text-gray-700 dark:text-gray-200">
+        <p>Der Token wird ungültig und registrierte Geräte bekommen keine Pings mehr.</p>
+        <label class="flex items-start gap-2">
+          <input id="delete-purge" type="checkbox" class="mt-0.5 h-4 w-4" />
+          <span>Auch alle Daten des Alias löschen: Einstellungen, Favoriten, Tracker (Gewicht, Tagebuch, Essenspläne). <strong>Nicht rückgängig zu machen.</strong></span>
+        </label>
+      </div>
+      <div class="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+        <button id="delete-cancel" type="button" class="btn btn-secondary">Abbrechen</button>
+        <button id="delete-confirm" type="button" class="btn btn-danger">Löschen</button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  type AliasInfo = { alias: string; createdAt: number | null; hasToken: boolean; devices: number; settings: number; trackerEntries: number };
+  const KEY = 'cookbook.adminToken';
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const tokenInput = $<HTMLInputElement>('admin-token');
+  const errorEl = $('admin-error');
+  const panel = $('admin-panel');
+  const listEl = $('alias-list');
+  let pendingDelete = '';
+
+  const showError = (msg: string) => {
+    errorEl.textContent = msg;
+    errorEl.classList.toggle('hidden', !msg);
+  };
+
+  async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const res = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': localStorage.getItem(KEY) || '' },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data as T;
+  }
+
+  function render(aliases: AliasInfo[]) {
+    listEl.innerHTML = '';
+    if (aliases.length === 0) listEl.innerHTML = '<p class="py-2 text-sm text-gray-500">Noch keine Aliasse.</p>';
+    for (const a of aliases) {
+      const row = document.createElement('div');
+      row.className = 'flex flex-wrap items-center gap-2 py-3';
+      const info = document.createElement('div');
+      info.className = 'min-w-0 flex-1';
+      const name = document.createElement('div');
+      name.className = 'font-medium text-gray-900 dark:text-white';
+      name.textContent = a.alias;
+      const meta = document.createElement('div');
+      meta.className = 'text-xs text-gray-500 dark:text-gray-400';
+      meta.textContent = [
+        a.hasToken ? `Token seit ${a.createdAt ? new Date(a.createdAt).toLocaleDateString('de-DE') : '?'}` : 'kein Token (nur Lesen)',
+        `${a.devices} Gerät(e)`,
+        `${a.settings} Einstellung(en)`,
+        `${a.trackerEntries} Tracker-Einträge`
+      ].join(' · ');
+      info.append(name, meta);
+      const regen = document.createElement('button');
+      regen.type = 'button';
+      regen.className = 'btn btn-secondary text-sm';
+      regen.textContent = a.hasToken ? 'Neuer Token' : 'Token erzeugen';
+      regen.addEventListener('click', () => void issue(a.alias, a.hasToken));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-danger text-sm';
+      del.textContent = 'Löschen';
+      del.addEventListener('click', () => openDelete(a.alias));
+      row.append(info, regen, del);
+      listEl.append(row);
+    }
+  }
+
+  async function load() {
+    try {
+      const data = await call<{ aliases: AliasInfo[] }>('GET', '/api/admin/aliases');
+      showError('');
+      panel.classList.remove('hidden');
+      render(data.aliases);
+    } catch (error) {
+      panel.classList.add('hidden');
+      showError((error as Error).message);
+    }
+  }
+
+  async function issue(alias: string, replacing: boolean) {
+    if (replacing && !confirm(`Neuen Token für „${alias}“ erzeugen? Der bisherige Token funktioniert danach auf keinem Gerät mehr.`)) return;
+    try {
+      const r = await call<{ alias: string; token: string }>('POST', '/api/admin/aliases', { alias });
+      $('token-result-alias').textContent = r.alias;
+      $('token-result-value').textContent = r.token;
+      $('token-result').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await load();
+    } catch (error) {
+      alert(`Fehler: ${(error as Error).message}`);
+    }
+  }
+
+  function openDelete(alias: string) {
+    pendingDelete = alias;
+    $('delete-alias-name').textContent = alias;
+    $<HTMLInputElement>('delete-purge').checked = false;
+    $('delete-dialog').classList.replace('hidden', 'flex');
+  }
+  const closeDelete = () => $('delete-dialog').classList.replace('flex', 'hidden');
+
+  $('delete-cancel').addEventListener('click', closeDelete);
+  $('delete-confirm').addEventListener('click', async () => {
+    const purge = $<HTMLInputElement>('delete-purge').checked;
+    try {
+      await call('DELETE', `/api/admin/aliases?alias=${encodeURIComponent(pendingDelete)}${purge ? '&purge=1' : ''}`);
+      closeDelete();
+      if ($('token-result-alias').textContent === pendingDelete) $('token-result').classList.add('hidden');
+      await load();
+    } catch (error) {
+      alert(`Fehler: ${(error as Error).message}`);
+    }
+  });
+
+  $('new-alias-btn').addEventListener('click', () => {
+    const input = $<HTMLInputElement>('new-alias');
+    const alias = input.value.trim();
+    if (!alias) return;
+    input.value = '';
+    void issue(alias, false);
+  });
+  $('token-copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('token-result-value').textContent || '');
+      $('token-copy').textContent = 'Kopiert!';
+      setTimeout(() => ($('token-copy').textContent = 'Kopieren'), 1500);
+    } catch {
+      /* clipboard blocked — the token is visible to copy by hand */
+    }
+  });
+  $('admin-login').addEventListener('click', () => {
+    localStorage.setItem(KEY, tokenInput.value.trim());
+    void load();
+  });
+  tokenInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('admin-login').click();
+  });
+
+  const saved = localStorage.getItem(KEY);
+  if (saved) {
+    tokenInput.value = saved;
+    void load();
+  }
+</script>
