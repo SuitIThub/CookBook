@@ -3,6 +3,8 @@ import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-d
 import { useQueryClient } from '@tanstack/react-query';
 import { startAutoSync } from './lib/syncRunner';
 import { installShareTarget } from './lib/shareTarget';
+import { checkForUpdate, canInstallInApp, SHOW_UPDATE_EVENT, type AvailableUpdate } from './lib/appUpdate';
+import UpdateDialog from './components/UpdateDialog';
 import SyncIndicator from './components/sync/SyncIndicator';
 import { LowBandwidthToggle, AliasSettingsModal, AISettingsModal } from './components/settings/HeaderModals';
 import { ThemeToggle, openAliasSettings, openAiSettings, OPEN_ALIAS_EVENT, OPEN_AI_EVENT } from './components/settings/headerActions';
@@ -136,10 +138,21 @@ function Nav() {
   );
 }
 
-/** Global Alias/KI modals, opened from any page via openAliasSettings()/openAiSettings(). */
+/** Global Alias/KI/Update modals, opened from any page via openAliasSettings()/openAiSettings()/showUpdate(). */
 function GlobalModals() {
   const [alias, setAlias] = useState(false);
   const [ai, setAi] = useState(false);
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
+  // On app start (Android): offer a newer GitHub release.
+  useEffect(() => {
+    if (!canInstallInApp()) return;
+    checkForUpdate().then((u) => u && setUpdate(u), () => {});
+  }, []);
+  useEffect(() => {
+    const show = (e: Event) => setUpdate((e as CustomEvent<AvailableUpdate>).detail);
+    document.addEventListener(SHOW_UPDATE_EVENT, show);
+    return () => document.removeEventListener(SHOW_UPDATE_EVENT, show);
+  }, []);
   useEffect(() => {
     const a = () => setAlias(true);
     const k = () => setAi(true);
@@ -154,6 +167,7 @@ function GlobalModals() {
     <>
       {alias && <AliasSettingsModal onClose={() => setAlias(false)} />}
       {ai && <AISettingsModal onClose={() => setAi(false)} />}
+      {update && <UpdateDialog update={update} onClose={() => setUpdate(null)} />}
     </>
   );
 }
