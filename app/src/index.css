@@ -1,0 +1,84 @@
+/* Shared design system, copied verbatim from the website (../../src/styles/components.css)
+   so the app and site look identical. Imported first so @apply resolves and the
+   Tailwind utility layer can still override component classes. */
+@import './styles/components.css';
+@import './styles/recipe-list.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* AddNoteModal saving indicator (same as the website's AddNoteModal) */
+@keyframes add-note-progress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+.add-note-progress-bar {
+  animation: add-note-progress 1.2s ease-in-out infinite;
+}
+
+/* ShoppingListModal: lists dated today (same as the website) */
+#existing-lists button.shopping-list-today {
+  border: 2px solid #f97316 !important;
+  background: linear-gradient(135deg, rgb(255 247 237 / 0.9) 0%, rgb(255 237 213 / 0.7) 100%) !important;
+}
+.dark #existing-lists button.shopping-list-today {
+  background: linear-gradient(135deg, rgb(127 29 29 / 0.35) 0%, rgb(154 52 18 / 0.3) 100%) !important;
+  border-color: #fb923c !important;
+}
+
+/* ShoppingListCard: lists dated today (same as the website) */
+.shopping-list-today {
+  border: 2px solid #f97316 !important;
+  background: linear-gradient(135deg, rgb(255 247 237 / 0.7) 0%, rgb(255 237 213 / 0.5) 100%) !important;
+}
+.dark .shopping-list-today {
+  background: linear-gradient(135deg, rgb(127 29 29 / 0.25) 0%, rgb(154 52 18 / 0.2) 100%) !important;
+  border-color: #fb923c !important;
+}
+
+/* LiveNutritionPanel product picker (same as the website's inline style) */
+.live-product-row { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; }
+.live-product-row .live-product-slot,
+.live-product-row .live-product-select,
+.live-product-row .live-link-product { width: 100%; }
+.live-product-row .live-product-name { overflow-wrap: anywhere; }
+@media (min-width: 1024px) {
+  .live-product-row { flex-direction: row; align-items: center; }
+  .live-product-row .live-product-name { flex: 1 1 auto; min-width: 0; }
+  .live-product-row .live-product-slot { width: auto; }
+  .live-product-row .live-product-select { width: auto; max-width: 20rem; }
+  .live-product-row .live-link-product { width: auto; white-space: nowrap; }
+}
+
+/* RecipeAIChatModal (same as the website) */
+.recipe-ai-chat-input-row { padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); }
+.recipe-ai-chat-live-spinner {
+  width: 0.75rem; height: 0.75rem; border-radius: 9999px;
+  border: 2px solid rgb(199 210 254); border-top-color: rgb(79 70 229);
+  animation: recipe-ai-spin 0.7s linear infinite; flex-shrink: 0;
+}
+.recipe-ai-waiting-dots { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 1.25rem; }
+.recipe-ai-waiting-dots span {
+  width: 0.4rem; height: 0.4rem; border-radius: 9999px; background: rgb(129 140 248);
+  animation: recipe-ai-bounce 1.1s ease-in-out infinite;
+}
+.recipe-ai-waiting-dots span:nth-child(2) { animation-delay: 0.15s; }
+.recipe-ai-waiting-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes recipe-ai-spin { to { transform: rotate(360deg); } }
+@keyframes recipe-ai-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.45; } 40% { transform: translateY(-3px); opacity: 1; } }
+
+/* Native live barcode scan: the camera renders behind the WebView, so the page
+   becomes transparent and only the scanner overlay stays visible. */
+html.barcode-scanner-active,
+body.barcode-scanner-active {
+  background: transparent !important;
+}
+body.barcode-scanner-active * {
+  visibility: hidden;
+}
+body.barcode-scanner-active .barcode-scanner-ui,
+body.barcode-scanner-active .barcode-scanner-ui * {
+  visibility: visible;
+}

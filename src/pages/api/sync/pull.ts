@@ -1,0 +1,99 @@
+import type { APIRoute } from 'astro';
+import { db } from '../../../lib/database.server';
+import { stripShoppingListNotes as stripNotes } from '../../../lib/syncMerge';
+import { TRACKER_TABLES, type TrackerSyncType } from '../../../lib/database';
+
+/**
+ * Pull endpoint (server -> client). Returns changes since a monotonic cursor
+ * (sync_changes.seq). `since<=0` returns a full snapshot for the requested
+ * types; otherwise the delta (collapsed to the latest op per entity). The
+ * client applies upserts/deletes into its local sql.js replica.
+ * Deletes carry `deletedAt` (tombstone time) for delete-vs-edit LWW.
+ *
+ * Tracker types (weight_log, meal_plan, diary_entry) are per-alias: they are
+ * only served for the alias in the X-Alias header and never cross profiles.
+ */
+type SyncChange = { type: string; id: string; op: 'upsert' | 'delete'; data?: unknown; deletedAt?: number };
+
+const REGISTRY: Record<string, { getAll: () => { id: string }[]; getOne: (id: string) => unknown }> = {
+  recipe: { getAll: () => db.getAllRecipes(), getOne: (id) => db.getRecipe(id) },
+  product: { getAll: () => db.getAllProducts(), getOne: (id) => db.getProduct(id) },
+  supermarket: { getAll: () => db.getAllSupermarkets(), getOne: (id) => db.getSupermarket(id) },
+  ingredient: {
+    getAll: () => db.getAllCatalogueIngredients(),
+    getOne: (id) => db.getCatalogueIngredientById(id)
+  },
+  shopping_list: {
+    getAll: () => db.getAllShoppingLists().map(stripNotes),
+    getOne: (id) => {
+      const l = db.getShoppingList(id);
+      return l ? stripNotes(l) : l;
+    }
+  }
+};
+
+const isTracker = (t: string): t is TrackerSyncType => t in TRACKER_TABLES;
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+export const GET: APIRoute = async ({ url, request }) => {
+  try {
+    const sp = new URL(url).searchParams;
+    const since = Number(sp.get('since') || '0') || 0;
+    const alias = (request.headers.get('x-alias') || '').trim().slice(0, 128);
+    const requested = (sp.get('types') || 'recipe').split(',').map((s) => s.trim());
+    const types = requested.filter((t) => REGISTRY[t] || (isTracker(t) && alias));
+    if (types.length === 0) return json({ error: 'no valid types' }, 400);
+
+    // Read the high-water mark first so anything committed after is re-pulled next time.
+    const cursor = db.getMaxSyncSeq();
+    const changes: SyncChange[] = [];
+
+    if (since <= 0) {
+      // Initial full snapshot.
+      for (const t of types) {
+        const rows = isTracker(t) ? db.getTrackerRowsForAlias(t, alias) : REGISTRY[t].getAll();
+        for (const row of rows) {
+          changes.push({ type: t, id: row.id, op: 'upsert', data: row });
+        }
+      }
+    } else {
+      // Incremental delta: collapse the change log to the latest op per entity.
+      const log = db.getSyncChangesSince(since, types);
+      const latest = new Map<string, { entity_type: string; entity_id: string; op: string }>();
+      for (const c of log) {
+        // Other profiles' tracker rows are none of this client's business.
+        if (isTracker(c.entity_type) && c.alias !== alias) continue;
+        latest.set(`${c.entity_type}|${c.entity_id}`, c);
+      }
+      for (const c of latest.values()) {
+        // Deletes carry their tombstone time so the client can let a newer
+        // unpushed local edit win over an older remote delete.
+        const del = (): SyncChange => ({
+          type: c.entity_type,
+          id: c.entity_id,
+          op: 'delete',
+          deletedAt: db.getTombstoneTime(c.entity_type, c.entity_id) ?? undefined
+        });
+        if (c.op === 'delete') {
+          changes.push(del());
+        } else {
+          const t = c.entity_type;
+          const row = isTracker(t) ? db.getTrackerRow(t, c.entity_id) : REGISTRY[t].getOne(c.entity_id);
+          if (row) changes.push({ type: t, id: c.entity_id, op: 'upsert', data: row });
+          else changes.push(del());
+        }
+      }
+    }
+
+    return json({ cursor, changes });
+  } catch (error) {
+    console.error('sync/pull error:', error);
+    return json({ error: 'Internal server error' }, 500);
+  }
+};

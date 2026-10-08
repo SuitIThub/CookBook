@@ -1,0 +1,73 @@
+/* Component-scoped styles from the website's recipe-list components
+   (RecipeCard.astro / RecipeViewControls.astro <style> blocks), which live
+   outside components.css. Kept here so the app matches 1:1. */
+
+/* Tags (RecipeCard) */
+.tag {
+  @apply text-xs py-0.5 px-2 rounded-full bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300;
+}
+.tag-more {
+  @apply text-xs py-0.5 px-2 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400;
+}
+/* Detail-page tags are slightly larger and clickable; category gets a distinct fill. */
+a.tag {
+  @apply px-3 py-1 text-sm;
+}
+.category-tag {
+  @apply bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200;
+}
+
+/* Recipe detail hero: content panel overlaps the image and fades from
+   transparent (image shows through behind the title) to the solid card bg,
+   matching the website's RecipeHeader. */
+.recipe-hero-overlap {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 12%,
+    rgba(255, 255, 255, 0.9) 24%,
+    #fff 38%,
+    #fff 100%
+  );
+}
+.dark .recipe-hero-overlap {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(31, 41, 55, 0.55) 12%,
+    rgba(31, 41, 55, 0.9) 24%,
+    #1f2937 38%,
+    #1f2937 100%
+  );
+}
+
+/* Selected card highlight (RecipeCard) */
+.recipe-card.selected {
+  @apply ring-2 ring-orange-500;
+}
+
+/* Cooking-mode timer surface must sit above the fullscreen cooking overlay
+   (z-50). components.css pins .timer-footer/.timer-sidebar to z-30 with
+   !important, so raise them here (loaded after components.css, higher
+   specificity) only while inside cooking mode. */
+.cook-timer-layer.timer-footer,
+.cook-timer-layer.timer-sidebar {
+  z-index: 60 !important;
+}
+
+/* View controls segmented buttons (RecipeViewControls) */
+.rvc-group {
+  @apply inline-flex items-center rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-0.5;
+}
+.rvc-seg {
+  @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 transition-colors;
+}
+.rvc-seg:hover {
+  @apply bg-gray-100 dark:bg-gray-700;
+}
+.rvc-seg.active {
+  @apply bg-orange-500 text-white;
+}
+.rvc-seg.active:hover {
+  @apply bg-orange-600;
+}

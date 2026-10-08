@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../lib/database';
+import { db } from '../../../lib/database.server';
 
 /**
  * Link/unlink a product to a catalogue ingredient, or toggle the ingredient's

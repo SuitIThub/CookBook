@@ -63,6 +63,26 @@
           Kein Passwort nötig – wer denselben Alias kennt, teilt die Einstellungen.
         </p>
       </div>
+      <div>
+        <label for="token-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zugangs-Token</label>
+        <input
+          id="token-input"
+          type="password"
+          name="cookbook-token"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          placeholder="Vom Admin erhalten (leer = nur Lesen)"
+          class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token:
+          Speichern &amp; Synchronisieren. Wird nur auf diesem Gerät gespeichert (nicht geteilt).
+        </p>
+      </div>
       <div id="alias-status" class="text-sm text-gray-500 dark:text-gray-400"></div>
     </div>
     <div class="flex justify-between gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
@@ -307,6 +327,7 @@
       modal.__aliasWired = true;
 
       var input = document.getElementById('alias-input');
+      var tokenInput = document.getElementById('token-input');
       var status = document.getElementById('alias-status');
       var saveBtn = document.getElementById('alias-save-btn');
       var clearBtn = document.getElementById('alias-clear-btn');
@@ -324,8 +345,16 @@
       }
       sync._registerUiRefresher(updateStatus);
 
+      function saveToken() {
+        if (!tokenInput) return;
+        var tok = (tokenInput.value || '').trim();
+        if (tok) localStorage.setItem('cookbook.token', tok);
+        else localStorage.removeItem('cookbook.token');
+      }
+
       function open() {
         if (input) input.value = sync.getAlias();
+        if (tokenInput) tokenInput.value = localStorage.getItem('cookbook.token') || '';
         updateStatus();
         modal.classList.remove('hidden');
         if (input) setTimeout(function () { input.focus(); }, 0);
@@ -339,16 +368,23 @@
       modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
 
       if (saveBtn) saveBtn.addEventListener('click', function () {
+        // Store the token first so the settings push triggered by setAlias is authorized.
+        saveToken();
         sync.setAlias(input ? input.value : '');
         close();
       });
       if (clearBtn) clearBtn.addEventListener('click', function () {
         sync.setAlias('');
+        localStorage.removeItem('cookbook.token');
         if (input) input.value = '';
+        if (tokenInput) tokenInput.value = '';
         updateStatus();
       });
       if (input) input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { sync.setAlias(input.value); close(); }
+        if (e.key === 'Enter') { saveToken(); sync.setAlias(input.value); close(); }
+      });
+      if (tokenInput) tokenInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { saveToken(); sync.setAlias(input ? input.value : ''); close(); }
       });
 
       document.addEventListener('click', function (e) {

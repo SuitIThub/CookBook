@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 import Layout from '../../../layouts/Layout.astro';
-import { db } from '../../../lib/database';
+import { apiGet } from '../../../lib/apiClient';
 import { getDraftVariant } from '../../../lib/draftVariantStore';
 import type { Recipe } from '../../../types/recipe';
 import EditRecipeForm from '../../../components/recipe/edit/EditRecipeForm.astro';
@@ -14,7 +14,7 @@ if (!parentId) {
   return Astro.redirect('/rezepte');
 }
 
-const parentRecipe = db.getRecipe(parentId);
+const parentRecipe = await apiGet<Recipe>(`/api/recipes?id=${encodeURIComponent(parentId)}`, Astro).catch(() => null);
 if (!parentRecipe) {
   return Astro.redirect('/404');
 }

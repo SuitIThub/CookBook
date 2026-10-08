@@ -18,6 +18,35 @@ const { title } = Astro.props;
 
 <!DOCTYPE html>
 <html lang="de-DE" style="background-color: #111827; color: #f9fafb;">
+  <script is:inline>
+    // Attach auth headers (alias + token) to same-origin /api requests. Installed
+    // first so every later fetch is covered. Writes need a valid token (server
+    // returns 403 otherwise); reads work without one. Token is stored per device
+    // and never synced. Set alias/token via the Alias & Sync modal.
+    (function () {
+      if (window.__cookbookFetchAuth) return;
+      window.__cookbookFetchAuth = true;
+      var orig = window.fetch;
+      window.fetch = function (input, init) {
+        try {
+          var url = typeof input === 'string' ? input : (input && input.url) || '';
+          var isApi = url.indexOf('/api/') === 0 || url.indexOf(window.location.origin + '/api/') === 0;
+          if (isApi) {
+            init = init || {};
+            var headers = new Headers(
+              (init && init.headers) || (typeof input !== 'string' && input && input.headers) || {}
+            );
+            var alias = localStorage.getItem('cookbook.alias') || '';
+            var token = localStorage.getItem('cookbook.token') || '';
+            if (alias) headers.set('X-Alias', alias);
+            if (token) headers.set('X-Auth-Token', token);
+            init.headers = headers;
+          }
+        } catch (e) {}
+        return orig.call(this, input, init);
+      };
+    })();
+  </script>
   <script>
     // Theme + layout detection (runs immediately to prevent flash)
     (function() {

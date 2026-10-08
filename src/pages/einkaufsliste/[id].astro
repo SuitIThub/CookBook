@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
-import { db } from '../../lib/database';
+import { apiGet } from '../../lib/apiClient';
 import type { ShoppingList } from '../../types/recipe';
 import GroupingSuggestionModal from '../../components/shopping_list/GroupingSuggestionModal.astro';
 import ViewNotesModal from '../../components/modals/ViewNotesModal.astro';
@@ -15,10 +15,10 @@ if (!id) {
   return Astro.redirect('/einkaufslisten');
 }
 
-// Einkaufsliste laden
+// Einkaufsliste laden (404 -> apiGet wirft -> Liste bleibt null -> redirect)
 let shoppingList: ShoppingList | null = null;
 try {
-  shoppingList = db.getShoppingList(id);
+  shoppingList = await apiGet<ShoppingList>(`/api/shopping-lists?id=${encodeURIComponent(id)}`, Astro);
 } catch (error) {
   console.error('Error loading shopping list:', error);
 }
@@ -31,7 +31,7 @@ if (!shoppingList) {
 let permanentListSummary: { itemCount: number; recipeCount: number } | null = null;
 let globalTemplateSummary: { itemCount: number; recipeCount: number } | null = null;
 if (!shoppingList.isPermanent) {
-  const permanentList = db.getPermanentShoppingList();
+  const permanentList = await apiGet<ShoppingList | null>('/api/shopping-lists/permanent', Astro).catch(() => null);
   if (permanentList && (permanentList.items.length > 0 || (permanentList.recipes?.length ?? 0) > 0)) {
     permanentListSummary = {
       itemCount: permanentList.items.length,
@@ -41,7 +41,7 @@ if (!shoppingList.isPermanent) {
 
   // Vorlage nur beim ersten Öffnen (Import-Modal) anbieten
   if (!shoppingList.hasSeenGlobalTemplatePrompt) {
-    const globalTemplate = db.getGlobalTemplateShoppingList();
+    const globalTemplate = await apiGet<ShoppingList | null>('/api/shopping-lists?action=global-template', Astro).catch(() => null);
     if (globalTemplate && (globalTemplate.items.length > 0 || (globalTemplate.recipes?.length ?? 0) > 0)) {
       globalTemplateSummary = {
         itemCount: globalTemplate.items.length,
@@ -2001,6 +2001,10 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
        // --- Note modals and TinyMCE ---
        let noteTinyMCE = null;
        let addNoteTargetItemIds = null; // single item id or comma-separated for multi
+       // Cap note size so an embedded image can't bloat a list to megabytes
+       // (which breaks the app sync and makes the list unusable). ~2 MB.
+       const MAX_NOTE_IMAGE_BYTES = 2 * 1024 * 1024;
+       const MAX_NOTE_BYTES = 2 * 1024 * 1024;
        
        function openViewNotesModal(itemIdsStr) {
          const ids = itemIdsStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -2087,7 +2091,13 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
              content_css: isDark ? 'dark' : 'default',
              paste_data_images: true,
              images_upload_handler: (blobInfo) => {
-               return new Promise((resolve) => {
+               return new Promise((resolve, reject) => {
+                 // Embedded images bloat the note (stored + synced as base64). Cap
+                 // each image so a note can't grow to megabytes and break sync/UI.
+                 if (blobInfo.blob().size > MAX_NOTE_IMAGE_BYTES) {
+                   reject({ message: 'Bild ist zu groß (max. 2 MB). Bitte verkleinern.', remove: true });
+                   return;
+                 }
                  const reader = new FileReader();
                  reader.onload = () => resolve(reader.result);
                  reader.readAsDataURL(blobInfo.blob());
@@ -2160,6 +2170,12 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
            content = document.getElementById('note-editor-textarea')?.value || '';
          }
          const trimmed = (content || '').trim();
+         // Safety net: pasted images embed as base64 and bypass images_upload_handler,
+         // so also cap the whole note here. A multi-MB note breaks sync + the UI.
+         if (new Blob([trimmed]).size > MAX_NOTE_BYTES) {
+           alert('Die Notiz ist zu groß (max. 2 MB). Bitte eingefügte Bilder verkleinern oder entfernen.');
+           return;
+         }
          const updatedItems = shoppingListData.items.map(i =>
            i.id === item.id ? { ...i, note: trimmed || undefined } : i
          );

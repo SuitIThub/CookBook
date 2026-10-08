@@ -124,6 +124,8 @@ export interface Recipe {
   productAssignments?: Record<string, string>;
   /** Legacy recipe supermarket; live pick lives in alias settings. */
   preferredSupermarketId?: string;
+  /** Per-record sync opt-out: private recipes stay local and are never pushed. */
+  isPrivate?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -139,6 +141,7 @@ export interface ShoppingListItem {
   recipeIngredientId?: string; // Optional: Original Ingredient ID aus dem Rezept
   manualGroupId?: string; // Optional: ID for manually grouped items
   note?: string; // Optional: rich text note for this product (HTML from TinyMCE)
+  noteRef?: string; // Sync only: digest standing in for a large note stripped from the payload
   alternativeGroupId?: string; // Optional: marks item as belonging to an alternative set
   alternativeOptionId?: string; // Optional: the selected option (Ingredient.id) this item came from
   productId?: string; // Optional: linked catalogue product for price/nutrition
