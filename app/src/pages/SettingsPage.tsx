@@ -10,6 +10,7 @@ import { apiGet } from '@/lib/api';
 import { fullResync, getSyncStatus, subscribeSyncStatus, runSync, type SyncStatus } from '@/lib/syncRunner';
 import { onAliasSettingsChanged } from '@/lib/aliasSync';
 import { openAliasSettings, openAiSettings } from '@/components/settings/headerActions';
+import { APP_VERSION, checkForUpdate, showUpdate } from '@/lib/appUpdate';
 
 export default function SettingsPage() {
   const [serverUrl, setServerUrl] = useState(getServerUrl());
@@ -62,6 +63,22 @@ export default function SettingsPage() {
     }
   };
 
+  const [checking, setChecking] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const onCheckUpdate = async () => {
+    setChecking(true);
+    setUpdateMsg(null);
+    try {
+      const u = await checkForUpdate(false);
+      if (u) showUpdate(u);
+      else setUpdateMsg('Die App ist aktuell.');
+    } catch (e) {
+      setUpdateMsg(`Prüfung fehlgeschlagen: ${(e as Error).message}`);
+    } finally {
+      setChecking(false);
+    }
+  };
+
   const hint = 'mt-1 text-xs text-gray-500 dark:text-gray-400';
   const last = sync.lastSyncAt ? new Date(sync.lastSyncAt).toLocaleString('de-DE') : 'noch nie';
 
@@ -111,6 +128,22 @@ export default function SettingsPage() {
             <p className={hint}>Lädt alle Daten (inkl. Einkaufslisten &amp; Sammelliste) vollständig neu vom Server. Hilft, wenn nach einem App-Update Daten fehlen.</p>
             {resyncMsg && <p className="mt-1 font-mono text-sm text-gray-600 dark:text-gray-300">{resyncMsg}</p>}
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-content space-y-3 text-sm text-gray-700 dark:text-gray-300">
+          <h2 className="heading-secondary">App-Version</h2>
+          <p>
+            Installiert: <strong>{APP_VERSION}</strong>
+          </p>
+          <div className="flex items-center gap-3">
+            <button onClick={onCheckUpdate} disabled={checking} className="btn btn-secondary disabled:opacity-50">
+              {checking ? 'Suche …' : 'Nach Updates suchen'}
+            </button>
+            {updateMsg && <span className="text-sm text-gray-600 dark:text-gray-300">{updateMsg}</span>}
+          </div>
+          <p className={hint}>Neue Versionen erscheinen als Release auf GitHub; die App prüft beim Start automatisch.</p>
         </div>
       </div>
     </div>

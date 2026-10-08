@@ -1,5 +1,18 @@
 apply plugin: 'com.android.application'
 
+// Single version source: app/package.json ("1.2.3" → versionCode 10203).
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version as String
+def appVersionCode = appVersion.tokenize('.').collect { it.replaceAll('[^0-9]', '') as int }
+        .with { (it[0] ?: 0) * 10000 + (it[1] ?: 0) * 100 + (it[2] ?: 0) }
+
+// Release signing (same key for every release, so updates install over the
+// previous version): env vars in CI, or keystore.properties locally (untracked).
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) keystorePropsFile.withInputStream { keystoreProps.load(it) }
+def signingValue = { String env, String prop -> System.getenv(env) ?: keystoreProps.getProperty(prop) }
+def releaseStoreFile = signingValue('KOCHBUCH_KEYSTORE_FILE', 'storeFile')
+
 android {
     namespace "de.kochbuch.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +20,8 @@ android {
         applicationId "de.kochbuch.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +29,19 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseStoreFile) {
+                storeFile file(releaseStoreFile)
+                storePassword signingValue('KOCHBUCH_KEYSTORE_PASSWORD', 'storePassword')
+                keyAlias signingValue('KOCHBUCH_KEY_ALIAS', 'keyAlias')
+                keyPassword signingValue('KOCHBUCH_KEY_PASSWORD', 'keyPassword')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseStoreFile) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
