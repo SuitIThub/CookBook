@@ -124,8 +124,18 @@ export function runSync(): Promise<SyncOutcome> {
 }
 
 let onChanged: (() => void) | null = null;
+const dataListeners = new Set<() => void>();
 function notifyChanged(o: SyncOutcome) {
-  if (o.online && (o.applied || o.deleted || o.pushed)) onChanged?.();
+  if (o.online && (o.applied || o.deleted || o.pushed)) {
+    onChanged?.();
+    dataListeners.forEach((l) => l());
+  }
+}
+
+/** Subscribe to "a sync changed local data" (for pages that don't use react-query). */
+export function onSyncDataChanged(fn: () => void): () => void {
+  dataListeners.add(fn);
+  return () => dataListeners.delete(fn);
 }
 
 const HEARTBEAT_MS = 60000;

@@ -240,6 +240,8 @@ export async function setAlias(newAlias: string): Promise<void> {
   connect();
   await pullAliasSettings();
   listeners.forEach((l) => l());
+  // The new profile's tracker rows (weight, diary, meal plans) come via the data sync.
+  if (next !== prev) void import('./syncRunner').then((m) => m.runSync()).catch(() => {});
 }
 
 export function onAliasSettingsChanged(fn: () => void): () => void {

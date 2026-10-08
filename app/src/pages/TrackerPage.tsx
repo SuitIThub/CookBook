@@ -28,6 +28,7 @@ import type {
 } from '@shared/tracker';
 import { getAlias } from '../lib/settings';
 import { onAliasSettingsChanged } from '../lib/aliasSync';
+import { onSyncDataChanged } from '../lib/syncRunner';
 import { openAliasSettings } from '../components/settings/headerActions';
 import { searchProducts as offSearch, lookupProductByEan } from '../lib/products';
 import * as tracker from '../lib/tracker';
@@ -380,6 +381,17 @@ function TrackerBody({ alias, dark }: { alias: string; dark: boolean }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // rows synced in from another device (same alias) → reload the visible day
+  useEffect(
+    () =>
+      onSyncDataChanged(() => {
+        refreshWeight().catch(() => undefined);
+        refreshDiary(selectedDay).catch(() => undefined);
+        refreshPlans(selectedDay).catch(() => undefined);
+      }),
+    [selectedDay, refreshWeight, refreshDiary, refreshPlans]
+  );
 
   // recompute learned TDEE whenever weight changes
   useEffect(() => {
