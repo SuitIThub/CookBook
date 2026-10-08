@@ -89,16 +89,22 @@ const HANDLERS: Record<
   },
   shopping_list: {
     applyUpsert: (data: ShoppingList) => {
-      // The pull strips item notes (they can be huge base64 blobs the app never
-      // renders); re-attach them from the stored list by item id so an app push
-      // — which carries no notes — doesn't wipe notes authored on the website.
+      // The pull replaces big item notes by `noteRef` (see syncMerge.ts);
+      // re-attach the stored note for those items so an app push never wipes
+      // notes authored on the website. Clients speaking notes protocol 2 send
+      // `noteRef` for every stripped note, so an item without note AND without
+      // ref means the user removed the note. Older clients (no protocol flag)
+      // never had notes → always re-attach.
       const existing = db.getShoppingList(data.id);
-      if (existing) {
+      if (existing && Array.isArray(data.items)) {
         const notes = new Map(existing.items.filter((i) => i.note != null).map((i) => [i.id, i.note]));
-        if (notes.size && Array.isArray(data.items)) {
-          for (const it of data.items) if (it.note == null && notes.has(it.id)) it.note = notes.get(it.id);
+        const v2 = (data as any).__notesV === 2;
+        for (const it of data.items as any[]) {
+          if (it.note == null && notes.has(it.id) && (!v2 || it.noteRef)) it.note = notes.get(it.id);
+          delete it.noteRef;
         }
       }
+      delete (data as any).__notesV;
       db.upsertShoppingListForSync(data);
       // Notify live (SSE) clients — e.g. the website's open list view — so an
       // app edit shows up without a manual page reload. (upsertShoppingListForSync
@@ -173,7 +179,7 @@ export const POST: APIRoute = async ({ request }) => {
           const current = db.getShoppingList(ch.id)!;
           const result = mergeShoppingList(ch.base, ch.data, current);
           if (!sameShoppingListContent(result, current)) {
-            handler.applyUpsert({ ...result, updatedAt: new Date(Math.max(now, incoming)).toISOString() });
+            handler.applyUpsert({ ...result, __notesV: ch.data.__notesV, updatedAt: new Date(Math.max(now, incoming)).toISOString() });
           }
           merged++;
           resultFor(ch.type, ch.id);

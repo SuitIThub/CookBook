@@ -7,9 +7,6 @@ import {
   localVariants,
   setLocalRecipePrivate,
   createLocalVariant,
-  localShoppingLists,
-  createLocalShoppingList,
-  addRecipeToLocalShoppingList
 } from '@/lib/localData';
 import { computeLocalRecipeNutrition } from '@/lib/localNutrition';
 import { exportRecipeMarkdown, exportRecipeJson, copyRecipeMarkdown } from '@/lib/recipeExport';
@@ -570,14 +567,7 @@ export default function RecipeDetailPage() {
 
       {showChat && <AIChatModal recipeId={recipe.id} recipeTitle={recipe.title} onClose={() => setShowChat(false)} />}
       {showAddToList && (
-        <AddToShoppingListModal
-          recipeId={recipe.id}
-          recipeTitle={recipe.title}
-          onClose={() => setShowAddToList(false)}
-          loadLists={localShoppingLists}
-          createList={createLocalShoppingList}
-          addRecipe={addRecipeToLocalShoppingList}
-        />
+        <AddToShoppingListModal recipeIds={[recipe.id]} onClose={() => setShowAddToList(false)} />
       )}
       {catalogueFor && (
         <CatalogueModal

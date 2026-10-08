@@ -1,11 +1,13 @@
 /**
  * Recipe export, generated locally so it works fully offline. Markdown reuses
  * the shared core (`recipeToMarkdown`) so the format matches the website; JSON
- * is the raw recipe. Downloads go through a Blob + anchor, which works in the
- * Capacitor webview as well as the browser.
+ * is the raw recipe. Files are saved via lib/fileSave (download in the browser,
+ * share sheet on device). Bulk exports mirror /api/recipes/export.
  */
 import type { Recipe } from '@/types';
 import { recipeToMarkdown } from '@core/recipeMarkdown';
+import { saveTextFile } from './fileSave';
+import { apiGet } from './api';
 
 export function recipeMarkdown(recipe: Recipe): string {
   return recipeToMarkdown(recipe);
@@ -24,15 +26,7 @@ function slug(title: string): string {
 }
 
 export function downloadText(filename: string, text: string, mime: string): void {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  void saveTextFile(filename, text, mime).catch((e) => console.error('Export failed', e));
 }
 
 export function exportRecipeMarkdown(recipe: Recipe): void {
@@ -51,4 +45,30 @@ export async function copyRecipeMarkdown(recipe: Recipe): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** JSON export like /api/recipes/export?format=json (all = no images, selection = external images only). */
+export function exportRecipesJson(recipes: Recipe[], selection: boolean): void {
+  const data = recipes.map((r) => {
+    if (!selection) {
+      const { images: _i, imageUrl: _u, ...clean } = r as any;
+      return clean;
+    }
+    return {
+      ...r,
+      images: (r.images ?? [])
+        .filter((img) => img.url && !img.url.startsWith('/uploads/'))
+        .map((img) => ({ id: img.id, filename: img.filename, url: img.url, uploadedAt: img.uploadedAt }))
+    };
+  });
+  downloadText(selection ? 'selected_recipes.json' : 'recipes.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
+}
+
+/** Full export with embedded images (.rcb) — built by the server, so online only. */
+export async function exportRecipesRcb(ids?: string[]): Promise<void> {
+  const q = ids && ids.length ? `&ids=${ids.join(',')}` : '';
+  const data = await apiGet<unknown>(`/api/recipes/export?format=rcb${q}`, { timeoutMs: 180000 });
+  const list = Array.isArray(data) ? data : [];
+  const filename = list.length === 1 ? `${String((list[0] as any).title || 'rezept').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.rcb` : 'recipes.rcb';
+  await saveTextFile(filename, JSON.stringify(data, null, 2), 'application/json');
 }

@@ -1,16 +1,10 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Recipe } from '@/types';
-import {
-  localRecipes,
-  deleteLocalRecipe,
-  localShoppingLists,
-  createLocalShoppingList,
-  addRecipeToLocalShoppingList
-} from '@/lib/localData';
+import { localRecipes, deleteLocalRecipe, addRecipesToLocalShoppingList } from '@/lib/localData';
 import { runSync } from '@/lib/syncRunner';
-import { exportRecipeJson } from '@/lib/recipeExport';
+import { exportRecipesJson, exportRecipesRcb } from '@/lib/recipeExport';
 import RecipeCard from '@/components/recipe_list/RecipeCard';
 import ImportModal from '@/components/ImportModal';
 import AddToShoppingListModal from '@/components/AddToShoppingListModal';
@@ -54,7 +48,12 @@ export default function RecipesPage() {
   const [showImport, setShowImport] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [selectionMode, setSelectionMode] = useState(false);
+  const [searchParams] = useSearchParams();
+  // "Rezept hinzufügen" on a shopping list opens this page in selection mode.
+  const addToListId = searchParams.get('addToList');
+  const [selectionMode, setSelectionMode] = useState(!!addToListId);
+  const [addingToList, setAddingToList] = useState(false);
+  const [bulkListOpen, setBulkListOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addToListFor, setAddToListFor] = useState<Recipe | null>(null);
 
@@ -124,10 +123,41 @@ export default function RecipesPage() {
       return n;
     });
 
-  const bulkExport = () => {
-    for (const r of filtered) if (selectedIds.has(r.id)) exportRecipeJson(r);
+  const cancelSelection = () => {
     setSelectionMode(false);
     setSelectedIds(new Set());
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Möchten Sie wirklich ${selectedIds.size} Rezept${selectedIds.size === 1 ? '' : 'e'} löschen?`)) return;
+    for (const id of selectedIds) await deleteLocalRecipe(id);
+    cancelSelection();
+    queryClient.invalidateQueries();
+    runSync().catch(() => {});
+  };
+
+  const exportRcb = (ids?: string[]) =>
+    exportRecipesRcb(ids).catch(() => alert('Der vollständige Export (mit Bildern) braucht eine Verbindung zum Server.'));
+
+  const confirmAddToList = async () => {
+    if (!addToListId) return;
+    const ids = [...selectedIds];
+    if (ids.length === 0) {
+      navigate(`/einkaufsliste/${addToListId}`);
+      return;
+    }
+    setAddingToList(true);
+    try {
+      await addRecipesToLocalShoppingList(addToListId, ids);
+      queryClient.invalidateQueries();
+      runSync().catch(() => {});
+      navigate(`/einkaufsliste/${addToListId}`);
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen zur Einkaufsliste:', error);
+      alert('Die Rezepte konnten nicht zur Einkaufsliste hinzugefügt werden.');
+      setAddingToList(false);
+    }
   };
 
   if (isLoading) return <p className="text-muted">Lade Rezepte …</p>;
@@ -149,41 +179,69 @@ export default function RecipesPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-0">
+      {/* Header (RecipeListHeader) */}
+      <div className="flex flex-col gap-4 md:flex-row md:justify-between md:gap-0">
         <div>
           <h1 className="heading-primary">Meine Rezepte</h1>
-          <p className="mt-1 text-muted">{filtered.length} Rezepte gefunden</p>
+          <p className="mt-1 text-muted">
+            {filtered.length} Rezepte gefunden
+            {(selectionMode || addToListId) && (
+              <span> (<span className="text-orange-600 dark:text-orange-400">{selectedIds.size} ausgewählt</span>)</span>
+            )}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {selectionMode ? (
-            <>
-              <button onClick={bulkExport} disabled={selectedIds.size === 0} className="btn btn-primary flex items-center gap-2 disabled:opacity-50">
-                Exportieren ({selectedIds.size})
-              </button>
-              <button onClick={() => { setSelectionMode(false); setSelectedIds(new Set()); }} className="btn btn-secondary">Abbrechen</button>
-            </>
-          ) : (
-            <>
-              <button onClick={() => setSelectionMode(true)} className="btn btn-secondary flex flex-1 items-center justify-center gap-2 md:flex-none">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                <span>Auswählen</span>
-              </button>
-              <button onClick={randomRecipe} className="btn btn-secondary flex flex-1 items-center justify-center gap-2 md:flex-none">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                <span>Zufälliges Rezept</span>
-              </button>
-              <Link to="/rezept/neu" className="btn btn-primary flex flex-1 items-center justify-center gap-2 md:flex-none">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                <span>Neues Rezept</span>
-              </Link>
-              <button onClick={() => setShowImport(true)} className="btn btn-secondary flex flex-1 items-center justify-center gap-2 md:flex-none">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" /></svg>
-                <span>Importieren</span>
-              </button>
-            </>
-          )}
-        </div>
+
+        {addToListId ? (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => navigate(`/einkaufsliste/${addToListId}`)} className="btn btn-secondary flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <span>Abbrechen</span>
+            </button>
+            <button onClick={confirmAddToList} disabled={addingToList} className="btn btn-primary flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+              <span>Zur Einkaufsliste hinzufügen</span>
+            </button>
+          </div>
+        ) : selectionMode ? (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={cancelSelection} className="btn btn-secondary flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <span>Auswahl beenden</span>
+            </button>
+            <button onClick={bulkDelete} className="btn btn-danger flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              <span>Löschen</span>
+            </button>
+            <ExportMenu
+              onJson={() => exportRecipesJson(originals.filter((r) => selectedIds.has(r.id)), true)}
+              onRcb={() => exportRcb([...selectedIds])}
+            />
+            <button onClick={() => selectedIds.size > 0 && setBulkListOpen(true)} className="btn btn-secondary flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+              <span>Zur Einkaufsliste</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setSelectionMode(true)} className="btn btn-secondary flex flex-1 items-center justify-center space-x-2 md:hidden">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              <span>Auswählen</span>
+            </button>
+            <button onClick={randomRecipe} className="btn btn-secondary flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+              <span>Zufälliges Rezept</span>
+            </button>
+            <Link to="/rezept/neu" className="btn btn-primary flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              <span>Neues Rezept</span>
+            </Link>
+            <button onClick={() => setShowImport(true)} className="btn btn-secondary flex flex-1 items-center justify-center space-x-2 md:flex-none">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" /></svg>
+              <span>Importieren</span>
+            </button>
+            <ExportMenu onJson={() => exportRecipesJson(data ?? [], false)} onRcb={() => exportRcb()} />
+          </div>
+        )}
       </div>
 
       {/* Search + category filter */}
@@ -266,15 +324,47 @@ export default function RecipesPage() {
       </div>
 
       {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={onImported} />}
-      {addToListFor && (
-        <AddToShoppingListModal
-          recipeId={addToListFor.id}
-          recipeTitle={addToListFor.title}
-          onClose={() => setAddToListFor(null)}
-          loadLists={localShoppingLists}
-          createList={createLocalShoppingList}
-          addRecipe={addRecipeToLocalShoppingList}
-        />
+      {addToListFor && <AddToShoppingListModal recipeIds={[addToListFor.id]} onClose={() => setAddToListFor(null)} />}
+      {bulkListOpen && <AddToShoppingListModal recipeIds={[...selectedIds]} onClose={() => setBulkListOpen(false)} />}
+    </div>
+  );
+}
+
+/** "Exportieren" dropdown (JSON ohne Bilder / Vollständig mit Bildern), like RecipeListHeader. */
+function ExportMenu({ onJson, onRcb }: { onJson: () => void; onRcb: () => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [open]);
+  return (
+    <div className="relative flex-1 md:flex-none">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className="btn btn-secondary flex w-full items-center justify-center space-x-2"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+        <span>Exportieren</span>
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 z-10 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          <div className="py-1">
+            <button onClick={onJson} className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              JSON (ohne Bilder)
+            </button>
+            <button onClick={onRcb} className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" /></svg>
+              Vollständig (mit Bildern)
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

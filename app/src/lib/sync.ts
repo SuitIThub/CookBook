@@ -43,6 +43,8 @@ interface EntityHandler {
   /** Three-way merge (base, local, remote) — enables per-item merging + base tracking. */
   merge?(base: any, local: any, remote: any): any;
   same?(a: any, b: any): boolean;
+  /** Shape of the row in a push payload (default: as stored). */
+  pushData?(row: any): any;
 }
 const REGISTRY: Record<string, EntityHandler> = {
   recipe: {
@@ -71,7 +73,10 @@ const REGISTRY: Record<string, EntityHandler> = {
     del: (db, id) => db.deleteShoppingListForSync(id),
     get: (db, id) => db.getShoppingList(id),
     merge: mergeShoppingList,
-    same: sameShoppingListContent
+    same: sameShoppingListContent,
+    // Notes protocol 2: stripped big notes carry `noteRef`; an item with neither
+    // note nor ref had its note removed (server must not re-attach it).
+    pushData: (row) => ({ ...row, __notesV: 2 })
   }
 };
 const SYNCED_TYPES = Object.keys(REGISTRY);
@@ -284,7 +289,7 @@ export async function pushToServer(): Promise<PushResult> {
       changes.push({ type: c.entity_type, id: c.entity_id, op: 'delete', deletedAt: ms(row.updatedAt) || Date.now() });
     } else if (row) {
       const base = handler.merge ? db.getSyncBase(c.entity_type, c.entity_id) : null;
-      changes.push({ type: c.entity_type, id: c.entity_id, op: 'upsert', data: row, ...(base ? { base } : {}) });
+      changes.push({ type: c.entity_type, id: c.entity_id, op: 'upsert', data: handler.pushData ? handler.pushData(row) : row, ...(base ? { base } : {}) });
     } else {
       const deletedAt = db.getTombstoneTime(c.entity_type, c.entity_id) ?? Date.now();
       changes.push({ type: c.entity_type, id: c.entity_id, op: 'delete', deletedAt });

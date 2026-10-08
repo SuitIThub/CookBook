@@ -13,8 +13,8 @@
  *  - deleted on one side, untouched  → deleted
  *  - deleted on one side, edited on the other → the edit wins (nothing is lost)
  *
- * Item `note`s are not part of the comparison: the sync payload strips them
- * (they can be multi-MB base64 HTML), so the remote/server copy's note is kept.
+ * Item notes are compared by digest, so a stripped note (`noteRef`) equals the
+ * full note it stands for and the full remote copy is kept.
  *
  * Pure and framework-free — used by the server push endpoint and by the app's
  * pull. Without a base (legacy rows) callers fall back to whole-list LWW.
@@ -41,10 +41,16 @@ function stable(v: unknown): string {
   return JSON.stringify(v ?? null);
 }
 
+/** Note identity: stripped notes carry `noteRef` (digest), full ones are digested. */
+function noteId(it: any): string | null {
+  if (it?.noteRef) return it.noteRef;
+  return typeof it?.note === 'string' && it.note ? noteDigest(it.note) : null;
+}
+
 function itemKey(it: ShoppingListItem | undefined): string {
   if (!it) return '∅';
-  const { note: _note, ...rest } = it;
-  return stable(rest);
+  const { note: _note, noteRef: _ref, ...rest } = it as any;
+  return stable({ ...rest, n: noteId(it) });
 }
 function recipeKey(r: ShoppingListRecipe | undefined): string {
   return r ? stable(r) : '∅';
@@ -130,8 +136,15 @@ export function mergeShoppingList(base: ShoppingList, local: ShoppingList, remot
     remote.items ?? [],
     itemKey,
     localWins,
-    // Keep the remote note (the local copy has it stripped).
-    (w, r) => (r && r.note != null && w.note == null ? { ...w, note: r.note } : w)
+    // Winner only has the stripped ref of the same note → keep the full remote note.
+    (w, r) => {
+      const ref = (w as any).noteRef;
+      if (ref && r && typeof r.note === 'string' && noteDigest(r.note) === ref) {
+        const { noteRef: _r, ...rest } = w as any;
+        return { ...rest, note: r.note };
+      }
+      return w;
+    }
   );
   merged.recipes = mergeKeyed<ShoppingListRecipe>(
     base.recipes ?? [],
@@ -158,11 +171,34 @@ export function sameShoppingListContent(a: ShoppingList | null | undefined, b: S
 
 /**
  * Item notes are rich-text HTML authored on the website and can embed base64
- * images (one list hit ~12 MB). The app never renders notes, so sync payloads
- * drop them; the server re-attaches them by item id on push.
+ * images (one list hit ~12 MB). Small notes travel inline; a note larger than
+ * NOTE_INLINE_MAX is replaced in sync payloads by `noteRef` (a digest of the
+ * note) — the app fetches it on demand (/api/shopping-lists/item-note) and the
+ * server re-attaches it on push while `noteRef` is still present.
  */
+export const NOTE_INLINE_MAX = 32 * 1024;
+
+/** Short stable digest (FNV-1a, 2×32 bit) — identical in browser and Node. */
+export function noteDigest(note: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < note.length; i++) {
+    const c = note.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x811c9dc5) >>> 0;
+  }
+  return h1.toString(36) + '.' + h2.toString(36) + '.' + note.length.toString(36);
+}
+
 export function stripShoppingListNotes<T>(list: T): T {
   const l = list as any;
   if (!l || !Array.isArray(l.items)) return list;
-  return { ...l, items: l.items.map((it: any) => (it && it.note != null ? { ...it, note: undefined } : it)) };
+  return {
+    ...l,
+    items: l.items.map((it: any) =>
+      it && typeof it.note === 'string' && it.note.length > NOTE_INLINE_MAX
+        ? { ...it, note: undefined, noteRef: noteDigest(it.note) }
+        : it
+    )
+  };
 }

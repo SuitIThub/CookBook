@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeShoppingList, sameShoppingListContent } from './syncMerge';
+import { mergeShoppingList, sameShoppingListContent, stripShoppingListNotes, noteDigest, NOTE_INLINE_MAX } from './syncMerge';
 import type { ShoppingList, ShoppingListItem } from '../types/recipe';
 
 const item = (id: string, extra: Partial<ShoppingListItem> = {}): ShoppingListItem => ({
@@ -65,13 +65,27 @@ test('true conflict: newer list wins', () => {
   assert.equal(mergeShoppingList(base, older, remote).items[0].name, 'remote');
 });
 
-test('remote notes survive a local edit of the same item', () => {
-  const b = list([item('a', { note: '<p>big</p>' })], '2026-01-01T10:00:00Z');
-  const local = list([item('a', { isChecked: true })], '2026-01-01T10:05:00Z'); // note stripped
-  const remote = b;
-  const m = mergeShoppingList({ ...b, items: [item('a')] }, local, remote);
+test('stripped big note (noteRef) survives a local edit of the same item', () => {
+  const big = '<p>' + 'x'.repeat(NOTE_INLINE_MAX + 10) + '</p>';
+  const full = list([item('a', { note: big })], '2026-01-01T10:00:00Z');
+  const stripped = stripShoppingListNotes(full);
+  assert.equal((stripped.items[0] as any).noteRef, noteDigest(big));
+  assert.equal(stripped.items[0].note, undefined);
+  const local = list([{ ...stripped.items[0], isChecked: true }], '2026-01-01T10:05:00Z');
+  const m = mergeShoppingList(stripped, local, full);
   assert.equal(m.items[0].isChecked, true);
-  assert.equal(m.items[0].note, '<p>big</p>');
+  assert.equal(m.items[0].note, big);
+  assert.equal((m.items[0] as any).noteRef, undefined);
+});
+
+test('small notes travel inline and note edits merge', () => {
+  const b = list([item('a', { note: 'alt' }), item('b')], '2026-01-01T10:00:00Z');
+  assert.equal(stripShoppingListNotes(b).items[0].note, 'alt');
+  const local = list([item('a', { note: 'neu' }), item('b')], '2026-01-01T10:05:00Z');
+  const remote = list([item('a', { note: 'alt' }), item('b', { isChecked: true })], '2026-01-01T10:06:00Z');
+  const m = mergeShoppingList(b, local, remote);
+  assert.equal(m.items[0].note, 'neu');
+  assert.equal(m.items[1].isChecked, true);
 });
 
 test('scalar fields merge per field', () => {
@@ -82,9 +96,10 @@ test('scalar fields merge per field', () => {
   assert.equal(m.preferredSupermarketId, 's1');
 });
 
-test('sameShoppingListContent ignores notes and timestamps', () => {
-  const a = list([item('a', { note: 'x' })], '2026-01-01T10:00:00Z');
-  const b = list([item('a')], '2026-02-01T10:00:00Z');
-  assert.equal(sameShoppingListContent(a, b), true);
-  assert.equal(sameShoppingListContent(a, list([item('a', { isChecked: true })], '2026')), false);
+test('sameShoppingListContent compares notes by digest, ignores timestamps', () => {
+  const big = 'y'.repeat(NOTE_INLINE_MAX + 1);
+  const a = list([item('a', { note: big })], '2026-01-01T10:00:00Z');
+  assert.equal(sameShoppingListContent(a, stripShoppingListNotes({ ...a, updatedAt: '2026-02-01' as any })), true);
+  assert.equal(sameShoppingListContent(a, list([item('a', { note: 'other' })], '2026')), false);
+  assert.equal(sameShoppingListContent(a, list([item('a', { note: big, isChecked: true })], '2026')), false);
 });
