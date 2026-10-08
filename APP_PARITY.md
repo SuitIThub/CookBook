@@ -76,5 +76,5 @@ synchronisieren wie auf der Website.
 ## App-Extras (über die Website hinaus)
 - Offline-first mit lokaler Replica + Outbox, Live-Sync, Sync-Indikator, Barcode-Scan nativ.
 - Tracker offline nutzbar (Website braucht Verbindung).
-- Offen/Ideen: Android-Share-Intent (Website: Web-Share-Target) für Rezept-Import.
+- „Teilen → Kochbuch“ (Android-Share-Intent, Website: Web-Share-Target) öffnet den Rezept-Import mit dem Link (eec9e4b, Gerätetest offen).
 - Auf echtem Android-Gerät getestet (2026-10-08): Barcode-Scan, OFF-Suche (auch ohne Server), Live-Sync zwischen zwei Geräten.
