@@ -37,7 +37,7 @@ export const POST: APIRoute = async ({ request }) => {
     const result = await sendPush(tokens, {
       title: `🛒 ${list.title}`,
       body: `${from} bittet dich, die Einkaufsliste anzusehen${message ? `: „${message}“` : '.'}`,
-      data: { route: `/einkaufsliste/${list.id}`, listId: list.id, from },
+      data: { route: `/einkaufsliste/${list.id}`, listId: list.id, sender: from },
       channelId: 'shopping_pings'
     });
     for (const dead of result.deadTokens) pushStore.unregister(dead);
@@ -45,7 +45,10 @@ export const POST: APIRoute = async ({ request }) => {
     for (const alias of new Set(result.deadTokens.map((t) => aliasOf.get(t)!))) {
       if (pushStore.tokensFor(alias).length === 0) noDevice.push(alias);
     }
-    return json({ sent: result.sent, noDevice });
+    if (result.sent === 0 && result.errors.length) {
+      return json({ error: `Firebase hat die Nachricht abgelehnt: ${result.errors.join('; ')}`, noDevice }, 502);
+    }
+    return json({ sent: result.sent, noDevice, errors: result.errors });
   } catch (error) {
     console.error('shopping-lists/ping error:', error);
     return json({ error: (error as Error).message }, 502);

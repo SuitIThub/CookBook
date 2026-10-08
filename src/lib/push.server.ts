@@ -120,22 +120,39 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
 export interface PushMessage {
   title: string;
   body: string;
-  /** String key/values delivered to the app (e.g. `route` to open on tap). */
+  /**
+   * String key/values delivered to the app (e.g. `route` to open on tap).
+   * Must not use FCM-reserved keys (`from`, `notification`, `message_type`,
+   * anything starting with `google`/`gcm`) — FCM rejects the whole message.
+   */
   data?: Record<string, string>;
   /** Android notification channel (created by the app). */
   channelId?: string;
 }
 
 /**
- * Send to the given device tokens. Returns how many were delivered and the
- * tokens FCM reported as dead (the caller removes them).
+ * FCM says this token will never work again (app uninstalled / data cleared /
+ * garbage). Only then is a device dropped — a rejected *message* (bad payload)
+ * must not cost the user their registration.
  */
-export async function sendPush(tokens: string[], message: PushMessage): Promise<{ sent: number; deadTokens: string[] }> {
+function isDeadToken(status: number, body: any): boolean {
+  if (status === 404) return true;
+  const details: any[] = body?.error?.details ?? [];
+  if (details.some((d) => d?.errorCode === 'UNREGISTERED')) return true;
+  return details.some((d) => (d?.fieldViolations ?? []).some((v: any) => v?.field === 'message.token'));
+}
+
+/**
+ * Send to the given device tokens. Returns how many were delivered, the tokens
+ * FCM reported as dead (the caller removes them) and other FCM errors.
+ */
+export async function sendPush(tokens: string[], message: PushMessage): Promise<{ sent: number; deadTokens: string[]; errors: string[] }> {
   const sa = serviceAccount();
   if (!sa) throw new Error('Push ist auf dem Server nicht eingerichtet (FIREBASE_SERVICE_ACCOUNT fehlt).');
   const bearer = await accessToken(sa);
   let sent = 0;
   const deadTokens: string[] = [];
+  const errors: string[] = [];
   await Promise.all(
     tokens.map(async (token) => {
       const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
@@ -158,9 +175,19 @@ export async function sendPush(tokens: string[], message: PushMessage): Promise<
         return;
       }
       const text = await res.text();
-      if (res.status === 404 || text.includes('UNREGISTERED') || text.includes('INVALID_ARGUMENT')) deadTokens.push(token);
-      else console.error(`FCM send failed (HTTP ${res.status}):`, text);
+      let body: any = null;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        /* not JSON */
+      }
+      if (isDeadToken(res.status, body)) {
+        deadTokens.push(token);
+        return;
+      }
+      console.error(`FCM send failed (HTTP ${res.status}):`, text);
+      errors.push(body?.error?.message || `HTTP ${res.status}`);
     })
   );
-  return { sent, deadTokens };
+  return { sent, deadTokens, errors: [...new Set(errors)] };
 }

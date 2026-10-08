@@ -69,6 +69,14 @@ export function AliasSettingsModal({ onClose }: { onClose: () => void }) {
   const [token, setToken] = useState(getToken());
   const [current, setCurrent] = useState(getAlias());
   useEffect(() => onAliasSettingsChanged(() => setCurrent(getAlias())), []);
+  // Website: does the saved token belong to the saved alias? (else every write → 403)
+  const [tokenValid, setTokenValid] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!getAlias() || !getToken()) return;
+    apiGet<{ valid: boolean }>('/api/auth/check')
+      .then((r) => setTokenValid(r.valid))
+      .catch(() => setTokenValid(null));
+  }, [current]);
 
   const saveToken = () => {
     const t = token.trim();
@@ -142,6 +150,11 @@ export function AliasSettingsModal({ onClose }: { onClose: () => void }) {
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token: Speichern &amp; Synchronisieren. Wird nur auf diesem Gerät gespeichert (nicht geteilt).
             </p>
+            {tokenValid !== null && current && (
+              <p className={`mt-1 text-xs ${tokenValid ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {tokenValid ? `✓ Token gültig für „${current}“` : `✗ Token passt nicht zu „${current}“ — Speichern und Pings schlagen fehl.`}
+              </p>
+            )}
             <Link to="/admin/aliasse" onClick={onClose} className="mt-2 inline-block text-xs text-orange-600 hover:underline dark:text-orange-400">
               Aliasse &amp; Tokens verwalten (Admin)
             </Link>
