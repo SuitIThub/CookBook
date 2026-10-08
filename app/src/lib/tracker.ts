@@ -1,14 +1,32 @@
 /**
- * Tracker data access for the app. Mirrors the website's tracker.astro network
- * calls, but routed through the app's native-HTTP api client (api.ts) so it
- * works on device. Everything is keyed by the configured alias (kochbuch.alias).
+ * Tracker data access for the app — local-first. Weight logs, meal plans and
+ * diary entries live in the local replica and run through the SAME request
+ * logic as the server endpoints (@core/trackerService), so the tracker works
+ * offline; the sync engine replicates the rows per alias (sync.ts). Product and
+ * ingredient-catalogue searches read the replica too.
  *
  * The body profile is stored per-alias on the server via /api/alias-settings
  * (same key the website uses, `cookbook.tracker.profile`) and cached locally so
  * the goal math has something to work with offline.
  */
-import { apiGet, apiPost, apiPut, apiDelete } from './api';
+import { apiGet, apiPost } from './api';
 import { getAlias } from './settings';
+import { getLocalDb } from './localDb';
+import { runSync } from './syncRunner';
+import { computeLivePanel } from './localNutrition';
+import { roundNutritionValues } from '@core/recipeNutrition';
+import {
+  diaryDelete,
+  diaryGet,
+  diaryPost,
+  diaryPut,
+  mealPlansGet,
+  recipeSuggestions,
+  weightDelete,
+  weightGet,
+  weightPost,
+  type ServiceResult,
+} from '@core/trackerService';
 import type { NutritionData } from '@shared/recipe';
 import type {
   BodyProfile,
@@ -81,29 +99,48 @@ export async function saveProfile(profile: BodyProfile): Promise<void> {
   }
 }
 
+// ------------------------------------------------------------ local core ----
+function unwrap<T>(r: ServiceResult): T {
+  if (r.status >= 400) throw new Error((r.body as { error?: string })?.error || `Fehler ${r.status}`);
+  return r.body as T;
+}
+
+/** Read through the shared tracker logic on the local replica. */
+async function read<T>(fn: (db: any) => ServiceResult): Promise<T> {
+  const { db } = await getLocalDb();
+  return unwrap<T>(fn(db));
+}
+
+/** Write locally, persist, then sync in the background (no-op offline). */
+async function write<T>(fn: (db: any) => ServiceResult): Promise<T> {
+  const { db, persist } = await getLocalDb();
+  const result = unwrap<T>(fn(db));
+  await persist();
+  runSync().catch(() => {});
+  return result;
+}
+
 // ----------------------------------------------------------------- weight ----
 export async function getWeightLogs(): Promise<WeightLog[]> {
   const alias = getAlias();
   if (!alias) return [];
-  const data = await apiGet<{ logs: WeightLog[] }>(`/api/tracker/weight?alias=${enc(alias)}`);
+  const data = await read<{ logs: WeightLog[] }>((db) => weightGet(db, alias));
   return data.logs || [];
 }
 
 export async function addWeightLog(weightKg: number, loggedAt: string): Promise<WeightLog> {
-  return apiPost<WeightLog>('/api/tracker/weight', { alias: getAlias(), weightKg, loggedAt });
+  return write<WeightLog>((db) => weightPost(db, { alias: getAlias(), weightKg, loggedAt }));
 }
 
 export async function deleteWeightLog(id: string): Promise<void> {
-  await apiDelete(`/api/tracker/weight?id=${enc(id)}`);
+  await write((db) => weightDelete(db, id));
 }
 
 // ------------------------------------------------------------------ diary ----
 export async function getDiary(fromIso: string, toIso: string): Promise<DiaryEntry[]> {
   const alias = getAlias();
   if (!alias) return [];
-  const data = await apiGet<{ entries: DiaryEntry[] }>(
-    `/api/tracker/diary?alias=${enc(alias)}&from=${enc(fromIso)}&to=${enc(toIso)}`
-  );
+  const data = await read<{ entries: DiaryEntry[] }>((db) => diaryGet(db, { alias, from: fromIso, to: toIso }));
   return data.entries || [];
 }
 
@@ -114,31 +151,30 @@ export interface DiaryEntryDetail extends DiaryEntry {
 
 export async function getDiaryEntry(id: string): Promise<DiaryEntryDetail | null> {
   try {
-    return await apiGet<DiaryEntryDetail>(`/api/tracker/diary?id=${enc(id)}`);
+    // May rebuild + store a missing composition (legacy entries) → persisted like a write.
+    return await write<DiaryEntryDetail>((db) => diaryGet(db, { id }));
   } catch {
     return null;
   }
 }
 
 export async function addDiaryEntry(body: Record<string, unknown>): Promise<DiaryEntry> {
-  return apiPost<DiaryEntry>('/api/tracker/diary', { alias: getAlias(), ...body });
+  return write<DiaryEntry>((db) => diaryPost(db, { alias: getAlias(), ...body }));
 }
 
 export async function updateComposition(body: Record<string, unknown>): Promise<DiaryEntryDetail> {
-  return apiPut<DiaryEntryDetail>('/api/tracker/diary', body);
+  return write<DiaryEntryDetail>((db) => diaryPut(db, body));
 }
 
 export async function deleteDiaryEntry(id: string): Promise<void> {
-  await apiDelete(`/api/tracker/diary?id=${enc(id)}`);
+  await write((db) => diaryDelete(db, id));
 }
 
 // -------------------------------------------------------------- meal plans ----
 export async function getActivePlans(activeOnIso: string): Promise<MealPlan[]> {
   const alias = getAlias();
   if (!alias) return [];
-  const data = await apiGet<{ plans: MealPlan[] }>(
-    `/api/tracker/meal-plans?alias=${enc(alias)}&activeOn=${enc(activeOnIso)}`
-  );
+  const data = await read<{ plans: MealPlan[] }>((db) => mealPlansGet(db, { alias, activeOn: activeOnIso }));
   return data.plans || [];
 }
 
@@ -153,10 +189,10 @@ export interface RecipeSuggestion {
 }
 
 export async function getSuggestions(kcal: number, protein?: number, limit = 4): Promise<RecipeSuggestion[]> {
-  const params = new URLSearchParams({ kcal: String(kcal), limit: String(limit) });
-  if (protein && protein > 0) params.set('protein', String(protein));
   try {
-    const data = await apiGet<{ suggestions: RecipeSuggestion[] }>(`/api/tracker/recipe-suggestions?${params.toString()}`);
+    const data = await read<{ suggestions: RecipeSuggestion[] }>((db) =>
+      recipeSuggestions(db, { kcal, protein: protein && protein > 0 ? protein : undefined, limit })
+    );
     return data.suggestions || [];
   } catch {
     return [];
@@ -168,19 +204,25 @@ export interface LiveNutritionResult {
   price?: { hasAnyData?: boolean; perServing?: number };
 }
 
+/** Per-serving nutrition/price of a plan's recipe with its product choices (website: /live-nutrition). */
 export async function getLiveNutrition(recipeId: string, productAssignments: Record<string, string>): Promise<LiveNutritionResult | null> {
   try {
-    return await apiPost<LiveNutritionResult>(`/api/recipes/${enc(recipeId)}/live-nutrition`, { productAssignments });
+    const { db } = await getLocalDb();
+    const recipe = db.getRecipe(recipeId);
+    if (!recipe) return null;
+    const live = await computeLivePanel(recipe, { productAssignments });
+    return { nutrition: { perServing: roundNutritionValues(live.nutrition.perServing) }, price: live.price };
   } catch {
     return null;
   }
 }
 
 // ---------------------------------------------------------- product search ----
+const direct = (body: unknown): ServiceResult => ({ status: 200, body });
+
 export async function searchRegisterProducts(query: string, limit = 12): Promise<Product[]> {
   try {
-    const data = await apiGet<Product[]>(`/api/products?q=${enc(query)}&limit=${limit}`);
-    return Array.isArray(data) ? data : [];
+    return await read<Product[]>((db) => direct(db.searchProducts(query, limit)));
   } catch {
     return [];
   }
@@ -195,8 +237,7 @@ export interface CatalogueRow {
 
 export async function searchCatalogue(query: string, limit = 8): Promise<CatalogueRow[]> {
   try {
-    const data = await apiGet<CatalogueRow[]>(`/api/ingredients/catalogue?q=${enc(query)}&limit=${limit}`);
-    return Array.isArray(data) ? data : [];
+    return await read<CatalogueRow[]>((db) => direct(db.searchCatalogueIngredients(query, limit)));
   } catch {
     return [];
   }
@@ -204,8 +245,7 @@ export async function searchCatalogue(query: string, limit = 8): Promise<Catalog
 
 export async function linkedProducts(catalogueIngredientId: string): Promise<Product[]> {
   try {
-    const data = await apiGet<Product[]>(`/api/products?ingredientId=${enc(catalogueIngredientId)}`);
-    return Array.isArray(data) ? data : [];
+    return await read<Product[]>((db) => direct(db.getProductsForIngredient(catalogueIngredientId)));
   } catch {
     return [];
   }
@@ -226,17 +266,21 @@ export async function ensureSavedProduct(p: {
 }): Promise<string | undefined> {
   if (p.id) return p.id;
   try {
-    const created = await apiPost<{ id?: string }>('/api/products', {
-      ean: p.ean ?? null,
-      name: p.name,
-      brand: p.brand ?? null,
-      netGrams: p.netGrams ?? null,
-      packageLabel: p.packageLabel ?? null,
-      imageUrl: p.imageUrl ?? null,
-      source: p.source === 'openfoodfacts' ? 'openfoodfacts' : 'manual',
-      offCode: p.offCode ?? null,
-      nutritionPer100g: p.nutritionPer100g ?? null,
-    });
+    const created = await write<Product>((db) =>
+      direct(
+        db.upsertProduct({
+          ean: p.ean ?? null,
+          name: p.name,
+          brand: p.brand ?? null,
+          netGrams: p.netGrams ?? null,
+          packageLabel: p.packageLabel ?? null,
+          imageUrl: p.imageUrl ?? null,
+          source: p.source === 'openfoodfacts' ? 'openfoodfacts' : 'manual',
+          offCode: p.offCode ?? null,
+          nutritionPer100g: p.nutritionPer100g ?? {},
+        })
+      )
+    );
     return created?.id;
   } catch {
     return undefined;

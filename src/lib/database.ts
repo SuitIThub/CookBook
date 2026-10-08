@@ -558,15 +558,15 @@ export class CookbookDatabase {
   getSyncChangesSince(
     sinceSeq: number,
     types: string[]
-  ): { seq: number; entity_type: string; entity_id: string; op: string }[] {
+  ): { seq: number; entity_type: string; entity_id: string; alias: string | null; op: string }[] {
     if (types.length === 0) return [];
     const placeholders = types.map(() => '?').join(',');
     return this.db
       .prepare(
-        `SELECT seq, entity_type, entity_id, op FROM sync_changes
+        `SELECT seq, entity_type, entity_id, alias, op FROM sync_changes
          WHERE seq > ? AND entity_type IN (${placeholders}) ORDER BY seq`
       )
-      .all(sinceSeq, ...types) as { seq: number; entity_type: string; entity_id: string; op: string }[];
+      .all(sinceSeq, ...types) as { seq: number; entity_type: string; entity_id: string; alias: string | null; op: string }[];
   }
 
   /**
@@ -752,6 +752,52 @@ export class CookbookDatabase {
 
   deleteIngredientForSync(id: string): void {
     this.db.prepare('DELETE FROM ingredients WHERE id = ?').run(id);
+  }
+
+  // Per-alias tracker rows (weight logs, meal plans, diary) are synced as raw
+  // table rows: the tables are flat, so the row itself is the wire format and
+  // no business logic runs on apply. `updatedAt` (epoch ms) is added for
+  // last-write-wins where the table has an updated_at column.
+
+  /** Raw tracker row, or null. */
+  getTrackerRow(type: TrackerSyncType, id: string): TrackerRow | null {
+    const t = TRACKER_TABLES[type];
+    const row = this.db.prepare(`SELECT * FROM ${t.table} WHERE id = ?`).get(id) as any;
+    return row ? trackerRowOut(row) : null;
+  }
+
+  /** All raw tracker rows of one alias (initial sync snapshot). */
+  getTrackerRowsForAlias(type: TrackerSyncType, alias: string): TrackerRow[] {
+    const t = TRACKER_TABLES[type];
+    return (this.db.prepare(`SELECT * FROM ${t.table} WHERE alias = ?`).all(alias) as any[]).map(trackerRowOut);
+  }
+
+  upsertTrackerRowForSync(type: TrackerSyncType, row: TrackerRow): void {
+    const t = TRACKER_TABLES[type];
+    const cols = t.columns.filter((c) => c === 'id' || c in row);
+    const values = cols.map((c) => {
+      const v = (row as any)[c];
+      return v === undefined ? null : v;
+    });
+    const updates = cols.filter((c) => c !== 'id').map((c) => `${c}=excluded.${c}`).join(', ');
+    this.db
+      .prepare(
+        `INSERT INTO ${t.table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})
+         ON CONFLICT(id) DO UPDATE SET ${updates}`
+      )
+      .run(...values);
+  }
+
+  deleteTrackerRowForSync(type: TrackerSyncType, id: string): void {
+    this.db.prepare(`DELETE FROM ${TRACKER_TABLES[type].table} WHERE id = ?`).run(id);
+  }
+
+  /** Alias recorded with an entity's tombstone (scoped types), or null. */
+  getTombstoneAlias(type: string, id: string): string | null {
+    const r = this.db
+      .prepare('SELECT alias FROM sync_tombstones WHERE entity_type = ? AND entity_id = ?')
+      .get(type, id) as any;
+    return r?.alias ?? null;
   }
 
   // Recipe CRUD operations
@@ -3275,6 +3321,40 @@ function safeParseJson<T>(value: string | null): T | undefined {
 }
 
 /** Coerce a Date|string (as it arrives over the sync wire) to an ISO string. */
+export type TrackerSyncType = 'weight_log' | 'meal_plan' | 'diary_entry';
+export type TrackerRow = { id: string; alias: string; updatedAt?: number; [column: string]: unknown };
+
+export const TRACKER_TABLES: Record<TrackerSyncType, { table: string; columns: string[] }> = {
+  weight_log: { table: 'weight_logs', columns: ['id', 'alias', 'logged_at', 'weight_kg'] },
+  meal_plan: {
+    table: 'meal_plans',
+    columns: [
+      'id', 'alias', 'recipe_id', 'scheduled_at', 'servings', 'supermarket_id', 'status',
+      'product_assignments_json', 'reminder_minutes', 'nutrition_snapshot_json', 'created_at', 'updated_at'
+    ]
+  },
+  diary_entry: {
+    table: 'diary_entries',
+    columns: [
+      'id', 'alias', 'eaten_at', 'source', 'plan_id', 'recipe_id', 'product_id', 'label', 'grams',
+      'servings', 'nutrition_json', 'cost_snapshot', 'composition_json', 'created_at'
+    ]
+  }
+};
+
+/** SQLite CURRENT_TIMESTAMP ('YYYY-MM-DD HH:MM:SS', UTC) or ISO → epoch ms. */
+function sqliteTimeMs(v: unknown): number | undefined {
+  if (typeof v !== 'string' || !v) return undefined;
+  const t = Date.parse(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(v) ? `${v.replace(' ', 'T')}Z` : v);
+  return Number.isFinite(t) ? t : undefined;
+}
+
+function trackerRowOut(row: any): TrackerRow {
+  const out = { ...row } as TrackerRow;
+  if (row.updated_at != null) out.updatedAt = sqliteTimeMs(row.updated_at);
+  return out;
+}
+
 function syncIso(v: unknown): string {
   if (v instanceof Date) return v.toISOString();
   if (typeof v === 'string') return v;

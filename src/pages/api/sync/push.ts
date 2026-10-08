@@ -5,6 +5,7 @@ import type { Recipe } from '../../../types/recipe';
 import type { Product, Supermarket, CatalogueIngredient } from '../../../types/tracker';
 import type { ShoppingList } from '../../../types/recipe';
 import { mergeShoppingList, sameShoppingListContent, stripShoppingListNotes } from '../../../lib/syncMerge';
+import { TRACKER_TABLES, type TrackerRow, type TrackerSyncType } from '../../../lib/database';
 
 /**
  * Push endpoint (client -> server). Applies client changes with last-write-wins
@@ -126,8 +127,35 @@ const HANDLERS: Record<
   }
 };
 
+// Per-alias tracker rows: raw table rows, LWW on updatedAt where the table has
+// one (meal plans); weight logs/diary entries have none → last push wins, and a
+// server tombstone always beats an untimed upsert (no resurrection).
+for (const type of Object.keys(TRACKER_TABLES) as TrackerSyncType[]) {
+  HANDLERS[type] = {
+    applyUpsert: (data: TrackerRow) => db.upsertTrackerRowForSync(type, data),
+    applyDelete: (id: string) => db.deleteTrackerRowForSync(type, id),
+    existingUpdatedAt: (id: string) => {
+      const row = db.getTrackerRow(type, id);
+      return row ? row.updatedAt ?? 0 : null;
+    },
+    current: (id) => db.getTrackerRow(type, id)
+  };
+}
+
+const isTracker = (t: string): t is TrackerSyncType => t in TRACKER_TABLES;
+
+/** Tracker rows may only be written by their own alias (the authenticated one). */
+function ownsTrackerChange(ch: PushChange, alias: string): boolean {
+  if (!isTracker(ch.type)) return true;
+  if (!alias) return false;
+  const owner = db.getTrackerRow(ch.type, ch.id)?.alias ?? db.getTombstoneAlias(ch.type, ch.id);
+  if (owner != null && owner !== alias) return false;
+  return ch.op === 'delete' || ch.data?.alias === alias;
+}
+
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const alias = (request.headers.get('x-alias') || '').trim().slice(0, 128);
     const body = (await request.json()) as { changes?: PushChange[] };
     const changes = Array.isArray(body?.changes) ? body.changes : [];
 
@@ -145,7 +173,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     for (const ch of changes) {
       const handler = HANDLERS[ch.type];
-      if (!handler) {
+      if (!handler || !ownsTrackerChange(ch, alias)) {
         skipped++;
         continue;
       }
@@ -167,7 +195,7 @@ export const POST: APIRoute = async ({ request }) => {
         if (existing === null) {
           // Deleted on the server after this edit was made → the delete wins.
           const tomb = db.getTombstoneTime(ch.type, ch.id);
-          if (tomb !== null && incoming > 0 && tomb > incoming) {
+          if (tomb !== null && (incoming > 0 ? tomb > incoming : isTracker(ch.type))) {
             skipped++;
             resultFor(ch.type, ch.id);
             continue;

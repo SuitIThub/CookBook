@@ -9,6 +9,10 @@
  *    version both sides agreed on) so two people editing one list both win.
  *  - Private recipes are local-only: never uploaded (a previously shared copy
  *    is deleted on the server) and never overwritten/deleted by remote changes.
+ *  - Tracker rows (weight, meal plans, diary) belong to one alias: they're only
+ *    pulled for the configured alias (cursor per type AND alias, so switching
+ *    profiles pulls the new one's history) and the server only accepts the
+ *    alias' own rows. Rows without updatedAt: a tombstone beats an upsert.
  *
  * Cursors are the server's monotonic sync_changes.seq, kept PER ENTITY TYPE
  * (each type is pulled in its own request; a single shared high-water mark
@@ -17,6 +21,7 @@
 import { getLocalDb } from './localDb';
 import { apiGet, apiPost, ApiError } from './api';
 import { mergeShoppingList, sameShoppingListContent } from '@core/syncMerge';
+import { getAlias } from './settings';
 
 const LEGACY_CURSOR_KEY = 'kochbuch.sync.cursor';
 const CURSORS_KEY = 'kochbuch.sync.cursors';
@@ -45,7 +50,15 @@ interface EntityHandler {
   same?(a: any, b: any): boolean;
   /** Shape of the row in a push payload (default: as stored). */
   pushData?(row: any): any;
+  /** Per-alias type: only synced while an alias is set. */
+  scoped?: boolean;
 }
+const trackerHandler = (type: string): EntityHandler => ({
+  upsert: (db, d) => db.upsertTrackerRowForSync(type, d),
+  del: (db, id) => db.deleteTrackerRowForSync(type, id),
+  get: (db, id) => db.getTrackerRow(type, id),
+  scoped: true
+});
 const REGISTRY: Record<string, EntityHandler> = {
   recipe: {
     upsert: (db, d) => db.upsertRecipe(d),
@@ -77,7 +90,10 @@ const REGISTRY: Record<string, EntityHandler> = {
     // Notes protocol 2: stripped big notes carry `noteRef`; an item with neither
     // note nor ref had its note removed (server must not re-attach it).
     pushData: (row) => ({ ...row, __notesV: 2 })
-  }
+  },
+  weight_log: trackerHandler('weight_log'),
+  meal_plan: trackerHandler('meal_plan'),
+  diary_entry: trackerHandler('diary_entry')
 };
 const SYNCED_TYPES = Object.keys(REGISTRY);
 
@@ -128,7 +144,7 @@ function writeCursors(c: Record<string, number>): void {
  * so pending local writes stay pushable.
  */
 export function resetPullCursor(): void {
-  writeCursors(Object.fromEntries(SYNCED_TYPES.map((t) => [t, 0])));
+  writeCursors({});
 }
 
 function getPushCursor(): number {
@@ -169,7 +185,7 @@ function applyRemote(db: any, ch: RemoteChange, pending: Set<string>): 'applied'
   if (!local) {
     // Deleted locally after this version was written → the local delete wins.
     const tomb = db.getTombstoneTime(ch.type, ch.id);
-    if (tomb !== null && incomingTs > 0 && tomb > incomingTs) return 'kept';
+    if (tomb !== null && (incomingTs > 0 ? tomb > incomingTs : !!handler.scoped)) return 'kept';
     handler.upsert(db, ch.data);
     if (handler.merge) db.setSyncBase(ch.type, ch.id, ch.data);
     return 'applied';
@@ -209,7 +225,10 @@ function applyRemote(db: any, ch: RemoteChange, pending: Set<string>): 'applied'
 // bridge / a short timeout can't deliver. Per-type requests keep each response
 // bounded and isolate a heavy type so it can't block the others.
 const PULL_TIMEOUT_MS = 60000; // background sync, non-interactive → generous.
-const TYPE_ORDER = ['supermarket', 'ingredient', 'product', 'recipe', 'shopping_list'];
+const TYPE_ORDER = ['supermarket', 'ingredient', 'product', 'recipe', 'shopping_list', 'meal_plan', 'diary_entry', 'weight_log'];
+
+/** Cursor slot: per-alias types keep one cursor per alias. */
+const cursorKey = (type: string, alias: string) => (REGISTRY[type]?.scoped ? `${type}@${alias}` : type);
 
 /**
  * Pull once. On network failure returns { ok:false, offline:true } and leaves
@@ -218,7 +237,8 @@ const TYPE_ORDER = ['supermarket', 'ingredient', 'product', 'recipe', 'shopping_
 export async function pullFromServer(): Promise<PullResult> {
   const { db, persist } = await getLocalDb();
   const cursors = readCursors();
-  const types = TYPE_ORDER.filter((t) => SYNCED_TYPES.includes(t));
+  const alias = getAlias();
+  const types = TYPE_ORDER.filter((t) => SYNCED_TYPES.includes(t) && (alias || !REGISTRY[t].scoped));
 
   let applied = 0;
   let deleted = 0;
@@ -227,7 +247,8 @@ export async function pullFromServer(): Promise<PullResult> {
   let firstError: string | undefined;
 
   for (const type of types) {
-    const since = cursors[type] || 0;
+    const slot = cursorKey(type, alias);
+    const since = cursors[slot] || 0;
     let res: PullResponse;
     try {
       res = await apiGet<PullResponse>(`/api/sync/pull?since=${since}&types=${type}`, { timeoutMs: PULL_TIMEOUT_MS });
@@ -248,7 +269,7 @@ export async function pullFromServer(): Promise<PullResult> {
         else if (r === 'deleted') deleted++;
       }
     });
-    cursors[type] = Math.max(since, res.cursor);
+    cursors[slot] = Math.max(since, res.cursor);
     writeCursors(cursors);
   }
 
@@ -284,6 +305,9 @@ export async function pushToServer(): Promise<PushResult> {
     const handler = REGISTRY[c.entity_type];
     if (!handler) continue;
     const row = c.op === 'delete' ? null : handler.get(db, c.entity_id);
+    // Another profile's tracker rows (written before an alias switch) can't be
+    // pushed under the current alias; the server would reject them anyway.
+    if (row && handler.scoped && row.alias !== getAlias()) continue;
     if (row && handler.localOnly?.(row)) {
       // Made private: remove any previously shared copy from the server.
       changes.push({ type: c.entity_type, id: c.entity_id, op: 'delete', deletedAt: ms(row.updatedAt) || Date.now() });
