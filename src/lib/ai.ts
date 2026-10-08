@@ -1034,3 +1034,66 @@ export async function aiStructured<T>(prompt: string, schema: Record<string, unk
     throw new Error(`Ungültige KI-Antwort: ${raw.slice(0, 200)}`);
   }
 }
+
+/**
+ * Structured answer from a vision model over images and/or PDFs (receipts).
+ * OpenRouter accepts PDFs directly (file parts; parsed by OpenRouter for
+ * models without native PDF input); Ollama only takes images.
+ */
+export async function visionStructured<T>(
+  prompt: string,
+  schema: Record<string, unknown>,
+  files: { mime: string; base64: string; name: string }[],
+  mode: 'openrouter' | 'ollama',
+  model: string,
+  openRouterApiKey?: string
+): Promise<T> {
+  let raw: string;
+  if (mode === 'openrouter') {
+    const apiKey = openRouterApiKey?.trim() || getOpenRouterEnvApiKey();
+    const content = [
+      { type: 'text', text: prompt },
+      ...files.map((f) =>
+        f.mime === 'application/pdf'
+          ? { type: 'file', file: { filename: f.name, file_data: `data:application/pdf;base64,${f.base64}` } }
+          : { type: 'image_url', image_url: { url: `data:${f.mime};base64,${f.base64}` } }
+      )
+    ];
+    const call = async (withSchema: boolean) => {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: getOpenRouterHeaders(apiKey, true),
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          messages: [{ role: 'user', content }],
+          ...(withSchema ? { response_format: { type: 'json_schema', json_schema: { name: 'result', strict: false, schema } } } : {})
+        })
+      });
+      if (!res.ok) throw new Error(`OpenRouter-Bildanalyse fehlgeschlagen (${res.status}): ${(await res.text()).slice(0, 300)}`);
+      const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      return data.choices?.[0]?.message?.content ?? '';
+    };
+    try {
+      raw = await call(true);
+    } catch (err) {
+      console.warn('Vision structured output rejected, retrying without schema:', err);
+      raw = await call(false);
+    }
+  } else {
+    const images = files.filter((f) => f.mime.startsWith('image/')).map((f) => f.base64);
+    const res = await fetch(getOllamaChatUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, stream: false, format: schema, options: { temperature: 0 }, messages: [{ role: 'user', content: prompt, images }] })
+    });
+    if (!res.ok) throw new Error(`Ollama-Bildanalyse fehlgeschlagen (${res.status}): ${(await res.text()).slice(0, 300)}`);
+    raw = ((await res.json()) as { message?: { content?: string } }).message?.content ?? '';
+  }
+  const json = extractJsonObject(raw).replace(/,(\s*[}\]])/g, '$1');
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    throw new Error(`Ungültige KI-Antwort: ${raw.slice(0, 200)}`);
+  }
+}

@@ -1,0 +1,301 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Kassenbon einlesen">
+  <div class="container mx-auto max-w-3xl px-4 py-6 space-y-5">
+    <div>
+      <a href="/produkte" class="text-sm text-orange-600 hover:underline dark:text-orange-400">← Produktregister</a>
+      <h1 class="mt-1 text-3xl font-bold text-gray-900 dark:text-white">Kassenbon einlesen</h1>
+      <p class="text-sm text-gray-600 dark:text-gray-400">Foto oder PDF eines Kassenbons bzw. einer Rechnung hochladen. Die Posten werden Produkten zugeordnet; du prüfst alles, bevor Preise gespeichert werden. Die Bilder werden nach der Auswertung gelöscht.</p>
+    </div>
+
+    <section id="rc-upload" class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 space-y-3">
+      <label class="block text-sm text-gray-700 dark:text-gray-200">
+        Supermarkt
+        <select id="rc-preset" class="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white">
+          <option value="">automatisch erkennen</option>
+        </select>
+      </label>
+      <label class="inline-block cursor-pointer rounded bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600">
+        Bilder/PDF wählen
+        <input id="rc-files" type="file" accept="image/*,application/pdf" multiple class="hidden" />
+      </label>
+      <ul id="rc-file-list" class="text-sm text-gray-700 dark:text-gray-200"></ul>
+      <p class="text-xs text-gray-500 dark:text-gray-400">Lange Bons gern in mehreren Fotos. Ausgewertet mit dem Modell „Bilder lesen“ aus den KI-Einstellungen.</p>
+      <p id="rc-progress" class="text-sm text-gray-600 dark:text-gray-300"></p>
+      <div class="flex justify-end">
+        <button type="button" id="rc-analyze" disabled class="rounded bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600 disabled:opacity-50">Auswerten</button>
+      </div>
+    </section>
+
+    <section id="rc-review" class="hidden space-y-4">
+      <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label class="block text-sm text-gray-700 dark:text-gray-200">
+          Supermarkt
+          <select id="rc-market" class="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white"></select>
+          <input id="rc-new-market" placeholder="Name des Supermarkts" class="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white" />
+        </label>
+        <label class="block text-sm text-gray-700 dark:text-gray-200">
+          Datum
+          <input id="rc-date" type="date" class="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white" />
+          <span id="rc-total" class="mt-1 block text-xs text-gray-500 dark:text-gray-400"></span>
+        </label>
+      </div>
+      <div id="rc-lines" class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700"></div>
+      <div id="rc-save-msg" class="text-sm"></div>
+      <div class="flex justify-between gap-2">
+        <button type="button" id="rc-back" class="rounded border border-gray-300 px-4 py-2 text-gray-700 dark:border-gray-600 dark:text-gray-200">Zurück</button>
+        <button type="button" id="rc-save" class="rounded bg-green-600 px-4 py-2 font-medium text-white hover:bg-green-700 disabled:opacity-50">Übernehmen</button>
+      </div>
+    </section>
+  </div>
+</Layout>
+
+<script>
+  import { CHANGE_CLS, commitLines, currentPrice, euro, initialChoice, LINE_CONFIDENCE, packPrice, priceChange, suggestName, type PricedProduct, type ReceiptResult } from '../../lib/receiptReview';
+
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  let files: File[] = [];
+  let markets: { id: string; name: string }[] = [];
+  let products: PricedProduct[] = [];
+  let result: ReceiptResult | null = null;
+  let choices: string[] = [];
+  let newNames: string[] = [];
+  let prices: number[] = [];
+
+  function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+  const field = 'rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white';
+  const label = (p: PricedProduct) => (p.brand ? `${p.brand} – ${p.name}` : p.name);
+
+  async function loadLists() {
+    const [m, p] = await Promise.all([fetch('/api/supermarkets').then((r) => r.json()).catch(() => []), fetch('/api/products').then((r) => r.json()).catch(() => [])]);
+    markets = Array.isArray(m) ? m : m.supermarkets ?? [];
+    products = Array.isArray(p) ? p : [];
+    const preset = $('rc-preset');
+    for (const mk of markets) {
+      const o = el('option', '', mk.name);
+      o.value = mk.id;
+      preset.append(o);
+    }
+  }
+
+  function renderFiles() {
+    const list = $('rc-file-list');
+    list.textContent = '';
+    files.forEach((f, i) => {
+      const li = el('li', 'flex items-center justify-between');
+      li.append(el('span', 'truncate', f.name));
+      const rm = el('button', 'px-2 text-red-500', '×');
+      rm.type = 'button';
+      rm.setAttribute('aria-label', `${f.name} entfernen`);
+      rm.addEventListener('click', () => {
+        files = files.filter((_, j) => j !== i);
+        renderFiles();
+      });
+      li.append(rm);
+      list.append(li);
+    });
+    ($('rc-analyze') as HTMLButtonElement).disabled = files.length === 0;
+  }
+
+  async function analyze() {
+    const btn = $('rc-analyze') as HTMLButtonElement;
+    const progress = $('rc-progress');
+    btn.disabled = true;
+    progress.className = 'text-sm text-gray-600 dark:text-gray-300';
+    progress.textContent = 'Beleg wird hochgeladen …';
+    try {
+      const form = new FormData();
+      files.forEach((f) => form.append('file', f, f.name));
+      const preset = ($('rc-preset') as HTMLSelectElement).value;
+      if (preset) form.append('supermarketId', preset);
+      form.append('ai', localStorage.getItem('cookbook.ai.settings') || '{}');
+      const start = await fetch('/api/receipts/analyze', { method: 'POST', body: form });
+      const started = await start.json();
+      if (!start.ok) throw new Error(started.error || `HTTP ${start.status}`);
+      let job = started;
+      while (job.stage !== 'done' && job.stage !== 'error') {
+        await new Promise((r) => setTimeout(r, 2000));
+        const res = await fetch(`/api/receipts/analyze?job=${encodeURIComponent(started.jobId)}`);
+        job = await res.json();
+        if (!res.ok) throw new Error(job.error || `HTTP ${res.status}`);
+        progress.textContent = job.message;
+      }
+      if (job.stage === 'error' || !job.result) throw new Error(job.error || 'Auswertung fehlgeschlagen.');
+      showReview(job.result);
+    } catch (e) {
+      progress.className = 'text-sm text-red-600 dark:text-red-400';
+      progress.textContent = (e as Error).message;
+      btn.disabled = false;
+    }
+  }
+
+  function showReview(r: ReceiptResult) {
+    result = r;
+    choices = r.lines.map(initialChoice);
+    newNames = r.lines.map((l) => suggestName(l.text));
+    prices = r.lines.map((l) => l.unitPrice);
+    const market = $('rc-market') as HTMLSelectElement;
+    market.textContent = '';
+    const neu = el('option', '', '+ Neuer Supermarkt …');
+    neu.value = '';
+    market.append(neu);
+    for (const mk of markets) {
+      const o = el('option', '', mk.name);
+      o.value = mk.id;
+      market.append(o);
+    }
+    market.value = r.supermarketId ?? '';
+    ($('rc-new-market') as HTMLInputElement).value = r.supermarketId ? '' : r.store;
+    ($('rc-date') as HTMLInputElement).value = r.date;
+    $('rc-total').textContent = r.total != null ? `Summe laut Beleg: ${euro(r.total)}` : '';
+    $('rc-upload').classList.add('hidden');
+    $('rc-review').classList.remove('hidden');
+    syncMarket();
+    renderLines();
+  }
+
+  function syncMarket() {
+    const id = ($('rc-market') as HTMLSelectElement).value;
+    $('rc-new-market').classList.toggle('hidden', !!id);
+  }
+
+  function renderLines() {
+    if (!result) return;
+    const marketId = ($('rc-market') as HTMLSelectElement).value || null;
+    const box = $('rc-lines');
+    box.textContent = '';
+    const sorted = [...products].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+    result.lines.forEach((line, i) => {
+      const row = el('div', 'space-y-1 py-3');
+      const head = el('div', 'flex items-start justify-between gap-2');
+      head.append(el('span', 'font-mono text-sm text-gray-900 dark:text-white', line.text));
+      const conf = LINE_CONFIDENCE[line.confidence];
+      const badge = el('span', `shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${conf.cls}`, conf.label);
+      badge.title = line.reason;
+      head.append(badge);
+      const qty = el('div', 'flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300');
+      qty.append(el('span', '', line.unit === 'kg' ? `${line.quantity.toLocaleString('de-DE')} kg ×` : `${line.quantity} ×`));
+      const price = el('input', `w-20 ${field}`) as HTMLInputElement;
+      price.type = 'number';
+      price.step = '0.01';
+      price.min = '0';
+      price.value = String(prices[i]);
+      price.setAttribute('aria-label', `Regulärer Preis für ${line.text}`);
+      price.addEventListener('change', () => {
+        prices[i] = Number(price.value);
+        renderLines();
+      });
+      qty.append(price, el('span', '', `${line.unit === 'kg' ? '€/kg' : '€'} regulär`));
+      if (line.discount > 0) qty.append(el('span', 'text-green-700 dark:text-green-400', `−${euro(line.discount)} Rabatt (bezahlt ${euro(line.total)})`));
+
+      const sel = el('select', `block w-full ${field}`) as HTMLSelectElement;
+      sel.setAttribute('aria-label', `Produkt für ${line.text}`);
+      const opt = (value: string, text: string, parent: HTMLElement = sel) => {
+        const o = el('option', '', text);
+        o.value = value;
+        parent.append(o);
+      };
+      opt('', '— nicht übernehmen —');
+      opt('ignore', 'Ignorieren (immer)');
+      opt('new', '+ Neues Produkt anlegen …');
+      const candIds = new Set(line.candidates.map((c) => c.id));
+      if (line.candidates.length) {
+        const g = el('optgroup') as HTMLOptGroupElement;
+        g.label = 'Passende Produkte';
+        line.candidates.forEach((c) => opt(c.id, c.name, g));
+        sel.append(g);
+      }
+      const all = el('optgroup') as HTMLOptGroupElement;
+      all.label = 'Alle Produkte';
+      sorted.filter((p) => !candIds.has(p.id)).forEach((p) => opt(p.id, label(p), all));
+      sel.append(all);
+      sel.value = choices[i] ?? '';
+      sel.addEventListener('change', () => {
+        choices[i] = sel.value;
+        renderLines();
+      });
+      row.append(head, qty, sel);
+      if (choices[i] === 'new') {
+        const name = el('input', `block w-full ${field}`) as HTMLInputElement;
+        name.value = newNames[i] ?? '';
+        name.placeholder = 'Name des neuen Produkts';
+        name.setAttribute('aria-label', `Name für neues Produkt aus ${line.text}`);
+        name.addEventListener('input', () => (newNames[i] = name.value));
+        row.append(name);
+      }
+      const c = choices[i];
+      if (c && c !== 'ignore') {
+        const product = c !== 'new' ? products.find((p) => p.id === c) : undefined;
+        const ch = priceChange(currentPrice(product, marketId), packPrice(line.unit, prices[i], product));
+        row.append(el('p', `text-xs ${CHANGE_CLS[ch.tone]}`, ch.text));
+      }
+      box.append(row);
+    });
+  }
+
+  async function save() {
+    if (!result) return;
+    const btn = $('rc-save') as HTMLButtonElement;
+    const msg = $('rc-save-msg');
+    btn.disabled = true;
+    msg.className = 'text-sm text-gray-600 dark:text-gray-300';
+    msg.textContent = 'Speichere …';
+    const marketId = ($('rc-market') as HTMLSelectElement).value;
+    try {
+      const res = await fetch('/api/receipts/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supermarketId: marketId || undefined,
+          newSupermarket: marketId ? undefined : ($('rc-new-market') as HTMLInputElement).value,
+          date: ($('rc-date') as HTMLInputElement).value,
+          lines: commitLines(result.lines, choices, newNames, prices)
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      msg.className = 'text-sm text-green-700 dark:text-green-400';
+      msg.textContent = `Gespeichert: ${data.prices} Preis(e), ${data.productsCreated} Produkt(e) neu, ${data.ignored} ignoriert, ${data.learned} Posten gemerkt.`;
+      if (data.changes?.length) {
+        const ul = el('ul', 'mt-1 list-disc pl-5 text-xs text-gray-700 dark:text-gray-300');
+        for (const c of data.changes) ul.append(el('li', '', `${c.product}: ${priceChange(c.before, c.after).text}`));
+        msg.append(ul);
+      }
+      $('rc-back').textContent = 'Zum Produktregister';
+      $('rc-back').dataset.done = '1';
+    } catch (e) {
+      msg.className = 'text-sm text-red-600 dark:text-red-400';
+      msg.textContent = `Speichern fehlgeschlagen: ${(e as Error).message}`;
+      btn.disabled = false;
+    }
+  }
+
+  ($('rc-files') as HTMLInputElement).addEventListener('change', (e) => {
+    files = [...files, ...Array.from((e.target as HTMLInputElement).files ?? [])];
+    (e.target as HTMLInputElement).value = '';
+    renderFiles();
+  });
+  $('rc-analyze').addEventListener('click', () => void analyze());
+  $('rc-market').addEventListener('change', () => {
+    syncMarket();
+    renderLines();
+  });
+  $('rc-save').addEventListener('click', () => void save());
+  $('rc-back').addEventListener('click', () => {
+    if ($('rc-back').dataset.done) {
+      window.location.href = '/produkte';
+      return;
+    }
+    $('rc-review').classList.add('hidden');
+    $('rc-upload').classList.remove('hidden');
+    ($('rc-analyze') as HTMLButtonElement).disabled = files.length === 0;
+  });
+  void loadLists();
+</script>

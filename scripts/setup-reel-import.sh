@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# One-time server setup for the Instagram reel import (Debian/Ubuntu).
+# One-time server setup for the Instagram reel import and the receipt import
+# (Debian/Ubuntu).
 #
 #   bash scripts/setup-reel-import.sh            # venv in ~/reel-venv
 #   bash scripts/setup-reel-import.sh /pfad/venv
@@ -12,9 +13,9 @@ set -euo pipefail
 VENV="${1:-$HOME/reel-venv}"
 MODEL="${WHISPER_MODEL:-small}"
 
-echo "==> System packages (ffmpeg, tesseract, python venv)"
+echo "==> System packages (ffmpeg, tesseract, poppler for PDFs, python venv)"
 sudo apt-get update -qq
-sudo apt-get install -y ffmpeg tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng python3-venv
+sudo apt-get install -y ffmpeg tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng poppler-utils python3-venv
 
 echo "==> Python venv: $VENV"
 python3 -m venv "$VENV"

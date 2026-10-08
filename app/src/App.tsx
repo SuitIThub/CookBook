@@ -20,6 +20,7 @@ import SyncTestPage from './pages/SyncTestPage';
 import PushTestPage from './pages/PushTestPage';
 import SettingsPage from './pages/SettingsPage';
 import ProductBatchPage from './pages/ProductBatchPage';
+import ReceiptImportPage from './pages/ReceiptImportPage';
 import AdminAliasesPage from './pages/AdminAliasesPage';
 import OptoutTestPage from './pages/OptoutTestPage';
 import ProductsPage from './pages/ProductsPage';
@@ -244,6 +245,7 @@ export default function App() {
           <Route path="/_pushtest" element={<PushTestPage />} />
           <Route path="/produkte" element={<ProductsPage />} />
           <Route path="/produkte/import" element={<ProductBatchPage />} />
+          <Route path="/produkte/kassenbon" element={<ReceiptImportPage />} />
           <Route path="/zutaten" element={<IngredientsPage />} />
           <Route path="/einkaufslisten" element={<ShoppingListsPage />} />
           <Route path="/einkaufsliste/:id" element={<ShoppingListDetailPage />} />

@@ -16,7 +16,7 @@
  * Env: REEL_PYTHON (venv python with yt-dlp + faster-whisper), YTDLP_BIN (optional standalone yt-dlp), FFMPEG_BIN,
  * TESSERACT_BIN, WHISPER_MODEL (default "small"), INSTAGRAM_COOKIES (Netscape cookies.txt).
  */
-import { spawn } from 'node:child_process';
+import { bin, run } from './proc.server';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,7 +28,6 @@ import { catalogueCandidates, enrichRecipeData } from './recipeEnrich';
 import type { RecipeImage } from '../types/recipe';
 
 const MAX_FRAMES = 12;
-const TIMEOUT_MS = 4 * 60 * 1000;
 
 export function isReelUrl(url: string): boolean {
   try {
@@ -85,30 +84,7 @@ export function startReelImport(url: string, options: ReelImportOptions): ReelJo
 
 /* ----------------------------------------------------------- pipeline */
 
-function run(cmd: string, args: string[], opts: { cwd?: string; timeoutMs?: number } = {}): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd: opts.cwd, windowsHide: true });
-    let stdout = '';
-    let stderr = '';
-    // Decode as UTF-8 across chunk boundaries (umlauts in transcripts/OCR).
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (d) => (stdout += d));
-    child.stderr.on('data', (d) => (stderr += d));
-    const timer = setTimeout(() => child.kill('SIGKILL'), opts.timeoutMs ?? TIMEOUT_MS);
-    child.on('error', (e: NodeJS.ErrnoException) => {
-      clearTimeout(timer);
-      reject(e.code === 'ENOENT' ? new Error(`„${cmd}“ ist auf dem Server nicht installiert.`) : e);
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve({ stdout, stderr });
-      else reject(new Error(`${cmd} fehlgeschlagen (Code ${code}): ${stderr.trim().split('\n').slice(-3).join(' ')}`));
-    });
-  });
-}
 
-const bin = (env: string | undefined, fallback: string) => (env && env.trim()) || fallback;
 
 async function runReelImport(
   url: string,

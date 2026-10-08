@@ -85,6 +85,9 @@ export default function ProductsPage() {
           <Link to="/produkte/import" className="rounded bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700">
             Mehrere hinzufügen
           </Link>
+          <Link to="/produkte/kassenbon" className="rounded bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700">
+            Kassenbon einlesen
+          </Link>
           <button
             type="button"
             onClick={() => setShowMarkets(true)}

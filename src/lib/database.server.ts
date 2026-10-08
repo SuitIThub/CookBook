@@ -11,6 +11,7 @@ import { BetterSqlite3Driver } from './db/betterSqlite3Driver';
 import { ensureAuthSchema, validateToken } from './auth.server';
 import { createPushStore, ensurePushSchema } from './push.server';
 import { createAdminStore } from './admin.server';
+import { createReceiptStore, ensureReceiptSchema } from './receiptStore.server';
 
 export { CookbookDatabase } from './database';
 
@@ -33,3 +34,7 @@ export const pushStore = createPushStore(driver);
 
 // Alias administration (create / rotate token / delete), guarded by ADMIN_TOKEN.
 export const adminStore = createAdminStore(driver);
+
+// Receipt import: learned line texts + price history (server-only).
+ensureReceiptSchema(driver);
+export const receiptStore = createReceiptStore(driver);
