@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { startAutoSync } from './lib/syncRunner';
 import SyncIndicator from './components/sync/SyncIndicator';
+import { LowBandwidthToggle, AliasSettingsModal, AISettingsModal } from './components/settings/HeaderModals';
+import { ThemeToggle, openAliasSettings, openAiSettings, OPEN_ALIAS_EVENT, OPEN_AI_EVENT } from './components/settings/headerActions';
+import HomePage from './pages/HomePage';
 import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import RecipeEditPage from './pages/RecipeEditPage';
@@ -20,61 +23,29 @@ import ShoppingListEditPage from './pages/ShoppingListEditPage';
 import TrackerPage from './pages/TrackerPage';
 import { CookingTimersProvider } from './components/recipe/CookingTimers';
 
-const NAV: { to: string; label: string; end?: boolean }[] = [
-  { to: '/', label: 'Rezepte', end: true },
+const NAV: { to: string; label: string }[] = [
+  { to: '/rezepte', label: 'Rezepte' },
   { to: '/einkaufslisten', label: 'Einkaufslisten' },
   { to: '/zutaten', label: 'Zutaten' },
   { to: '/produkte', label: 'Produkte' },
   { to: '/tracker', label: 'Tracker' }
 ];
 
-function ThemeToggle() {
-  const [dark, setDark] = useState(
-    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
-  );
-  const toggle = () => {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle('dark', next);
-    try {
-      localStorage.setItem('theme', next ? 'dark' : 'light');
-    } catch {
-      /* ignore */
-    }
-  };
+const iconBtn = 'btn-icon text-gray-700 dark:text-gray-300';
+
+function AliasButton() {
   return (
-    <button
-      onClick={toggle}
-      className="btn-icon text-gray-700 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400"
-      aria-label="Farbschema wechseln"
-      title="Farbschema wechseln"
-    >
-      {dark ? (
-        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-          <path
-            fillRule="evenodd"
-            d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"
-            clipRule="evenodd"
-          />
-        </svg>
-      ) : (
-        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M17.293 13.293A8 8 0 0 1 6.707 2.707a8.001 8.001 0 1 0 10.586 10.586z" fillRule="evenodd" />
-        </svg>
-      )}
+    <button type="button" onClick={openAliasSettings} className={iconBtn + ' hover:text-orange-500 dark:hover:text-orange-400'} aria-label="Alias & Synchronisierung" title="Alias & Synchronisierung">
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.83-4" />
+      </svg>
     </button>
   );
 }
 
-function SettingsLink({ onNavigate }: { onNavigate?: () => void }) {
+function AiButton() {
   return (
-    <NavLink
-      to="/einstellungen"
-      onClick={onNavigate}
-      className="btn-icon text-gray-700 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400"
-      aria-label="Einstellungen"
-      title="Einstellungen"
-    >
+    <button type="button" onClick={openAiSettings} className={iconBtn + ' hover:text-indigo-500 dark:hover:text-indigo-400'} aria-label="KI-Einstellungen öffnen" title="KI-Einstellungen">
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path
           strokeLinecap="round"
@@ -84,12 +55,11 @@ function SettingsLink({ onNavigate }: { onNavigate?: () => void }) {
         />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
       </svg>
-    </NavLink>
+    </button>
   );
 }
 
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  'nav-link' + (isActive ? ' text-orange-600 dark:text-orange-400' : '');
+const navLinkClass = ({ isActive }: { isActive: boolean }) => 'nav-link' + (isActive ? ' text-orange-600 dark:text-orange-400' : '');
 
 function Nav() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -107,23 +77,29 @@ function Nav() {
           {/* Desktop navigation */}
           <div className="hidden items-center space-x-4 desktop:flex">
             {NAV.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.end} className={navLinkClass}>
+              <NavLink key={item.to} to={item.to} className={navLinkClass}>
                 {item.label}
               </NavLink>
             ))}
+            {/* App-only: sync state of the offline replica */}
             <SyncIndicator />
+            <LowBandwidthToggle />
+            <AliasButton />
+            <AiButton />
             <ThemeToggle />
-            <SettingsLink />
           </div>
 
           {/* Mobile / tablet controls */}
           <div className="flex items-center space-x-2 desktop:hidden">
             <SyncIndicator />
+            <LowBandwidthToggle mobile />
+            <AliasButton />
+            <AiButton />
             <ThemeToggle />
             <button
               type="button"
               onClick={() => setMenuOpen((o) => !o)}
-              className="btn-icon text-gray-700 hover:text-orange-500 dark:text-gray-300 dark:hover:text-orange-400"
+              className={iconBtn + ' hover:text-orange-500 dark:hover:text-orange-400'}
               aria-label="Menü"
               aria-expanded={menuOpen}
             >
@@ -143,22 +119,13 @@ function Nav() {
           <div className="mt-2 border-t border-gray-200 pb-4 pt-4 desktop:hidden dark:border-gray-700">
             <div className="flex flex-col space-y-3">
               {NAV.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  onClick={() => setMenuOpen(false)}
-                  className={({ isActive }) => navLinkClass({ isActive }) + ' text-base'}
-                >
+                <NavLink key={item.to} to={item.to} onClick={() => setMenuOpen(false)} className={({ isActive }) => navLinkClass({ isActive }) + ' text-base'}>
                   {item.label}
                 </NavLink>
               ))}
-              <NavLink
-                to="/einstellungen"
-                onClick={() => setMenuOpen(false)}
-                className={({ isActive }) => navLinkClass({ isActive }) + ' text-base'}
-              >
-                Einstellungen
+              {/* App-only: server address + full re-sync */}
+              <NavLink to="/einstellungen" onClick={() => setMenuOpen(false)} className={({ isActive }) => navLinkClass({ isActive }) + ' text-base'}>
+                Server &amp; Synchronisierung
               </NavLink>
             </div>
           </div>
@@ -168,8 +135,31 @@ function Nav() {
   );
 }
 
+/** Global Alias/KI modals, opened from any page via openAliasSettings()/openAiSettings(). */
+function GlobalModals() {
+  const [alias, setAlias] = useState(false);
+  const [ai, setAi] = useState(false);
+  useEffect(() => {
+    const a = () => setAlias(true);
+    const k = () => setAi(true);
+    document.addEventListener(OPEN_ALIAS_EVENT, a);
+    document.addEventListener(OPEN_AI_EVENT, k);
+    return () => {
+      document.removeEventListener(OPEN_ALIAS_EVENT, a);
+      document.removeEventListener(OPEN_AI_EVENT, k);
+    };
+  }, []);
+  return (
+    <>
+      {alias && <AliasSettingsModal onClose={() => setAlias(false)} />}
+      {ai && <AISettingsModal onClose={() => setAi(false)} />}
+    </>
+  );
+}
+
 export default function App() {
   const queryClient = useQueryClient();
+  const location = useLocation();
 
   useEffect(
     // Sync on start, on focus/foreground, when back online, periodically and
@@ -178,12 +168,16 @@ export default function App() {
     [queryClient]
   );
 
+  // Start page uses the website's HomeLayout (no nav bar).
+  const isHome = location.pathname === '/';
+
   return (
     <CookingTimersProvider>
-      <Nav />
-      <main className="container mx-auto px-4 py-8">
+      {!isHome && <Nav />}
+      <main className={isHome ? '' : 'container mx-auto px-4 py-8'}>
         <Routes>
-          <Route path="/" element={<RecipesPage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/rezepte" element={<RecipesPage />} />
           <Route path="/rezept/neu" element={<RecipeEditPage />} />
           <Route path="/rezept/:id" element={<RecipeDetailPage />} />
           <Route path="/rezept/:id/bearbeiten" element={<RecipeEditPage />} />
@@ -202,6 +196,7 @@ export default function App() {
           <Route path="*" element={<p className="text-muted">Seite nicht gefunden.</p>} />
         </Routes>
       </main>
+      <GlobalModals />
     </CookingTimersProvider>
   );
 }

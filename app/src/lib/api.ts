@@ -73,10 +73,10 @@ interface Raw {
 async function raw(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
-  opts: { json?: unknown; timeoutMs?: number } = {}
+  opts: { json?: unknown; timeoutMs?: number; headers?: Record<string, string> } = {}
 ): Promise<Raw> {
   const url = `${apiBase()}${path}`;
-  const headers: Record<string, string> = { Accept: 'application/json', ...authHeaders() };
+  const headers: Record<string, string> = { Accept: 'application/json', ...authHeaders(), ...(opts.headers ?? {}) };
   if (opts.json !== undefined) headers['Content-Type'] = 'application/json';
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -142,8 +142,8 @@ function extractError(body: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function apiGet<T>(path: string, opts?: { timeoutMs?: number }): Promise<T> {
-  const r = await raw('GET', path, { timeoutMs: opts?.timeoutMs });
+export async function apiGet<T>(path: string, opts?: { timeoutMs?: number; headers?: Record<string, string> }): Promise<T> {
+  const r = await raw('GET', path, { timeoutMs: opts?.timeoutMs, headers: opts?.headers });
   if (r.status < 200 || r.status >= 300) throw new ApiError(`GET ${path} failed with ${r.status}`, r.status, path);
   return r.body as T;
 }

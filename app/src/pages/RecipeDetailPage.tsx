@@ -242,7 +242,7 @@ export default function RecipeDetailPage() {
     return (
       <div>
         <p className="text-red-600 dark:text-red-400">Rezept nicht gefunden.</p>
-        <Link to="/" className="text-orange-600 hover:underline dark:text-orange-400">← Zurück zur Übersicht</Link>
+        <Link to="/rezepte" className="text-orange-600 hover:underline dark:text-orange-400">← Zurück zur Übersicht</Link>
       </div>
     );
   }

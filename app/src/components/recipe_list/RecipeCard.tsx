@@ -18,9 +18,12 @@ export default function RecipeCard({
   selected = false,
   onToggleSelect,
   onAddToList,
-  onDeleted
+  onDeleted,
+  familyIds: familyIdsProp
 }: {
   recipe: Recipe;
+  /** Original + variants — favorites apply to the whole family (website semantics). */
+  familyIds?: string[];
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
@@ -31,12 +34,19 @@ export default function RecipeCard({
   const displayTags = tags.slice(0, 3);
   const remaining = Math.max(0, tags.length - 3);
   const totalTime = (recipe.metadata.timeEntries ?? []).reduce((t, e) => t + (e.minutes || 0), 0);
-  const familyIds = [recipe.id];
+  const familyIds = familyIdsProp && familyIdsProp.length ? familyIdsProp : [recipe.id];
 
   const [hasAlias] = useState(() => !!getSettings().alias);
-  const [fav, setFav] = useState(() => getFavoriteIds().has(recipe.id));
+  const [fav, setFav] = useState(() => familyIds.some((id) => getFavoriteIds().has(id)));
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Favorites change elsewhere too (other card of the family, alias sync from another device).
+  useEffect(() => {
+    const h = () => setFav(familyIds.some((id) => getFavoriteIds().has(id)));
+    document.addEventListener('cookbook:favorites-changed', h);
+    return () => document.removeEventListener('cookbook:favorites-changed', h);
+  }, [familyIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!menuOpen) return;

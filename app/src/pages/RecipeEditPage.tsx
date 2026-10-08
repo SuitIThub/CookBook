@@ -362,7 +362,7 @@ export default function RecipeEditPage() {
     setBusy(true);
     await deleteLocalRecipe(id);
     queryClient.invalidateQueries();
-    navigate('/');
+    navigate('/rezepte');
   };
 
   const refreshImages = async () => {

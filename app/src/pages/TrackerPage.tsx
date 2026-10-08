@@ -27,6 +27,8 @@ import type {
   WeightLog,
 } from '@shared/tracker';
 import { getAlias } from '../lib/settings';
+import { onAliasSettingsChanged } from '../lib/aliasSync';
+import { openAliasSettings } from '../components/settings/headerActions';
 import { searchProducts as offSearch, lookupProductByEan } from '../lib/products';
 import * as tracker from '../lib/tracker';
 import type { DiaryEntryDetail, RecipeSuggestion } from '../lib/tracker';
@@ -286,7 +288,8 @@ function Html({ html, className }: { html: string; className?: string }) {
 }
 
 export default function TrackerPage() {
-  const alias = getAlias();
+  const [alias, setAliasState] = useState(getAlias);
+  useEffect(() => onAliasSettingsChanged(() => setAliasState(getAlias())), []);
   const dark = useDarkMode();
 
   if (!alias) {
@@ -296,11 +299,11 @@ export default function TrackerPage() {
           <h1 className="mb-2 text-xl font-semibold text-yellow-900 dark:text-yellow-100">Tracker benötigt einen Alias</h1>
           <p className="mb-4 text-sm text-yellow-800 dark:text-yellow-200">
             Der Kalorien- und Nährwerttracker ist an einen Alias gebunden — Körperprofil, Gewichtsverlauf und Tagebuch werden
-            zusammen mit deinen Geräte-Einstellungen synchronisiert. Alias in den Einstellungen setzen.
+            zusammen mit deinen Geräte-Einstellungen synchronisiert.
           </p>
-          <Link to="/einstellungen" className="rounded bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600">
-            Zu den Einstellungen
-          </Link>
+          <button type="button" onClick={openAliasSettings} className="rounded bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600">
+            Alias einrichten
+          </button>
         </div>
       </div>
     );

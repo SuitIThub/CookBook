@@ -3,6 +3,16 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import './index.css';
+import { installAliasSync } from './lib/aliasSync';
+
+// Per-alias settings sync (favorites, theme, product defaults, …) like the website.
+installAliasSync();
+// Datenspar-Modus (same key as the website, synced per alias).
+try {
+  document.documentElement.classList.toggle('low-bandwidth', localStorage.getItem('lowBandwidth') === '1');
+} catch {
+  /* ignore */
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
