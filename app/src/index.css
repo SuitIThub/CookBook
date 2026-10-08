@@ -7,3 +7,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* AddNoteModal saving indicator (same as the website's AddNoteModal) */
+@keyframes add-note-progress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+.add-note-progress-bar {
+  animation: add-note-progress 1.2s ease-in-out infinite;
+}
+
+/* ShoppingListModal: lists dated today (same as the website) */
+#existing-lists button.shopping-list-today {
+  border: 2px solid #f97316 !important;
+  background: linear-gradient(135deg, rgb(255 247 237 / 0.9) 0%, rgb(255 237 213 / 0.7) 100%) !important;
+}
+.dark #existing-lists button.shopping-list-today {
+  background: linear-gradient(135deg, rgb(127 29 29 / 0.35) 0%, rgb(154 52 18 / 0.3) 100%) !important;
+  border-color: #fb923c !important;
+}
+
+/* ShoppingListCard: lists dated today (same as the website) */
+.shopping-list-today {
+  border: 2px solid #f97316 !important;
+  background: linear-gradient(135deg, rgb(255 247 237 / 0.7) 0%, rgb(255 237 213 / 0.5) 100%) !important;
+}
+.dark .shopping-list-today {
+  background: linear-gradient(135deg, rgb(127 29 29 / 0.25) 0%, rgb(154 52 18 / 0.2) 100%) !important;
+  border-color: #fb923c !important;
+}

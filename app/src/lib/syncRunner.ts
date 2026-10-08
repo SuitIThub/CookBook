@@ -59,7 +59,7 @@ let again = false;
  * synced entity type, changed sync payload, etc.). On the first run after an
  * app update the cursors are reset once so a full server snapshot is re-pulled.
  */
-const SYNC_SCHEMA_VERSION = '2026-10-08.per-type-cursors-merge';
+const SYNC_SCHEMA_VERSION = '2026-10-08.note-refs';
 const SCHEMA_VERSION_KEY = 'kochbuch.sync.schemaVersion';
 
 /** Run once at startup: force a full re-pull when the sync schema version changed. */

@@ -16,6 +16,7 @@ import ProductsPage from './pages/ProductsPage';
 import IngredientsPage from './pages/IngredientsPage';
 import ShoppingListsPage from './pages/ShoppingListsPage';
 import ShoppingListDetailPage from './pages/ShoppingListDetailPage';
+import ShoppingListEditPage from './pages/ShoppingListEditPage';
 import TrackerPage from './pages/TrackerPage';
 import { CookingTimersProvider } from './components/recipe/CookingTimers';
 
@@ -194,6 +195,7 @@ export default function App() {
           <Route path="/zutaten" element={<IngredientsPage />} />
           <Route path="/einkaufslisten" element={<ShoppingListsPage />} />
           <Route path="/einkaufsliste/:id" element={<ShoppingListDetailPage />} />
+          <Route path="/einkaufsliste/:id/bearbeiten" element={<ShoppingListEditPage />} />
           <Route path="/tracker" element={<TrackerPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />
           <Route path="/_optouttest" element={<OptoutTestPage />} />

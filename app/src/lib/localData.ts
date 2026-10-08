@@ -242,3 +242,58 @@ export async function setProductIngredientLink(productId: string, ingredientId: 
   db.setProductIngredients(productId, Array.from(ids));
   await persist();
 }
+
+// ---- Shopping lists: Sammelliste / Vorlage / alternatives (shared core, offline) ----
+
+export async function localPermanentShoppingList(): Promise<ShoppingList | null> {
+  const { db } = await getLocalDb();
+  return db.getPermanentShoppingList();
+}
+
+export async function localGlobalTemplateShoppingList(): Promise<ShoppingList | null> {
+  const { db } = await getLocalDb();
+  return db.getGlobalTemplateShoppingList();
+}
+
+/** Move Sammelliste content into `targetListId` (see CookbookDatabase.transferFromPermanentList). */
+export async function transferFromLocalPermanentList(targetListId: string, addPortionsForRecipeIds: string[] = []) {
+  const { db, persist } = await getLocalDb();
+  const res = db.transferFromPermanentList(targetListId, addPortionsForRecipeIds);
+  await persist();
+  return res;
+}
+
+/** Copy the global Vorlage into `targetListId`. */
+export async function applyLocalGlobalTemplate(targetListId: string) {
+  const { db, persist } = await getLocalDb();
+  const res = db.applyGlobalTemplateToList(targetListId);
+  await persist();
+  return res;
+}
+
+export async function previewLocalAlternativeChange(listId: string, recipeId: string, groupId: string, optionId: string) {
+  const { db } = await getLocalDb();
+  return db.previewRecipeAlternativeChange(listId, recipeId, groupId, optionId);
+}
+
+export async function switchLocalAlternative(listId: string, recipeId: string, groupId: string, optionId: string) {
+  const { db, persist } = await getLocalDb();
+  const list = db.updateRecipeAlternativeInShoppingList(listId, recipeId, groupId, optionId);
+  await persist();
+  return list;
+}
+
+/** Add several recipes (uses the catalogue defaults the user chose, like the website). */
+export async function addRecipesToLocalShoppingList(listId: string, recipeIds: string[]): Promise<string[]> {
+  const { db, persist } = await getLocalDb();
+  let defaults: Record<string, string> | undefined;
+  try {
+    defaults = JSON.parse(localStorage.getItem('cookbook.ingredient.defaults') || '{}');
+  } catch {
+    defaults = undefined;
+  }
+  const failed: string[] = [];
+  for (const id of recipeIds) if (!db.addRecipeToShoppingList(listId, id, defaults)) failed.push(id);
+  await persist();
+  return failed;
+}
