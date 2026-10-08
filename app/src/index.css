@@ -68,3 +68,17 @@
 .recipe-ai-waiting-dots span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes recipe-ai-spin { to { transform: rotate(360deg); } }
 @keyframes recipe-ai-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.45; } 40% { transform: translateY(-3px); opacity: 1; } }
+
+/* Native live barcode scan: the camera renders behind the WebView, so the page
+   becomes transparent and only the scanner overlay stays visible. */
+html.barcode-scanner-active,
+body.barcode-scanner-active {
+  background: transparent !important;
+}
+body.barcode-scanner-active * {
+  visibility: hidden;
+}
+body.barcode-scanner-active .barcode-scanner-ui,
+body.barcode-scanner-active .barcode-scanner-ui * {
+  visibility: visible;
+}

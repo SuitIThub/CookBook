@@ -183,8 +183,8 @@ export default function ProductFormModal({ product, onClose, onSaved, prelinkIng
       const shown = local.length + results.length;
       const totalPart = data.count != null ? ` von ${data.count}` : '';
       setOffStatus(shown === 0 ? 'Keine Treffer.' : `${shown} Treffer angezeigt${totalPart}${local.length ? ` (${local.length} lokal)` : ''}.`);
-    } catch {
-      setOffStatus('Suche fehlgeschlagen. Bitte später erneut versuchen.');
+    } catch (err) {
+      setOffStatus(`Suche fehlgeschlagen: ${(err as Error).message}`);
     } finally {
       setOffLoading(false);
     }
@@ -650,9 +650,13 @@ export default function ProductFormModal({ product, onClose, onSaved, prelinkIng
             setScanning(false);
             setOffQuery(code);
             void (async () => {
-              const res = await lookupProductByEan(code).catch(() => null);
-              if (res?.product) applyLookup(res.product, { fromOff: res.source === 'openfoodfacts' });
-              else setOffStatus('Kein Treffer für diesen Barcode.');
+              try {
+                const res = await lookupProductByEan(code);
+                if (res.product) applyLookup(res.product, { fromOff: res.source === 'openfoodfacts' });
+                else setOffStatus(`Kein Treffer für Barcode ${code}.`);
+              } catch (err) {
+                setOffStatus(`Barcode-Lookup fehlgeschlagen: ${(err as Error).message}`);
+              }
             })();
           }}
           onClose={() => setScanning(false)}

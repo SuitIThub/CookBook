@@ -1,4 +1,7 @@
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { apiGet } from './api';
+import { getLocalDb } from './localDb';
+import { lookupOpenFoodFactsProduct, searchOpenFoodFactsProducts } from '@core/openFoodFacts';
 import type { NutritionData } from '@shared/recipe';
 import type { Product } from '@shared/tracker';
 
@@ -38,26 +41,77 @@ export interface ProductSearchResult {
   error?: string;
 }
 
+const OFF_TIMEOUT_MS = 20000;
+
 /**
- * Look up an EAN: the server checks the local product register first, then falls
- * back to Open Food Facts. GET → works without a token (read).
+ * fetch() for the shared OFF client. On a device it goes through the native
+ * HTTP stack (no CORS, and OFF's requested User-Agent can be sent); in the
+ * browser it's the normal fetch.
+ */
+const offFetch: typeof fetch = async (input, init) => {
+  if (!Capacitor.isNativePlatform()) return fetch(input, init);
+  const headers = Object.fromEntries(new Headers(init?.headers).entries());
+  const res = await CapacitorHttp.get({
+    url: String(input),
+    headers,
+    responseType: 'text',
+    connectTimeout: OFF_TIMEOUT_MS,
+    readTimeout: OFF_TIMEOUT_MS
+  });
+  const body = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+  return new Response(body, { status: res.status, headers: { 'Content-Type': 'application/json' } });
+};
+
+/**
+ * Look up an EAN like the website's `/api/products/lookup?ean=`: the product
+ * register first (local replica, works offline), then Open Food Facts —
+ * queried directly from the device, so it works without the Kochbuch server
+ * (e.g. on mobile data). The server is only a fallback if the direct call fails.
  */
 export async function lookupProductByEan(ean: string): Promise<LookupResult> {
-  return apiGet<LookupResult>(`/api/products/lookup?ean=${encodeURIComponent(ean.trim())}`, { timeoutMs: 20000 });
+  const code = ean.trim();
+  const { db } = await getLocalDb();
+  const local = db.getProductByEan(code);
+  if (local) return { source: 'local', product: local as unknown as LookedUpProduct };
+
+  const direct = await lookupOpenFoodFactsProduct(code, offFetch);
+  if (direct.status === 'found') return { source: 'openfoodfacts', product: direct.product as LookedUpProduct };
+  if (direct.status === 'not-found') return { source: 'openfoodfacts', product: null };
+  try {
+    return await apiGet<LookupResult>(`/api/products/lookup?ean=${encodeURIComponent(code)}`, { timeoutMs: OFF_TIMEOUT_MS });
+  } catch {
+    throw new Error(direct.message || 'Open Food Facts nicht erreichbar.');
+  }
 }
 
 /**
- * Text search against Open Food Facts (with a few local register matches mixed
- * in). Mirrors the website's `/api/products/lookup?q=…` search. Needs the app to
- * be online (proxied to the server which talks to OFF).
+ * Text search like the website's `/api/products/lookup?q=…`: local register
+ * matches (page 1) + Open Food Facts, queried directly from the device; the
+ * server is a fallback. Errors come back in `error` (never silently "no hits").
  */
-export async function searchProducts(
-  query: string,
-  page = 1,
-  pageSize = 20
-): Promise<ProductSearchResult> {
-  return apiGet<ProductSearchResult>(
-    `/api/products/lookup?q=${encodeURIComponent(query.trim())}&page=${page}&pageSize=${pageSize}`,
-    { timeoutMs: 20000 }
-  );
+export async function searchProducts(query: string, page = 1, pageSize = 20): Promise<ProductSearchResult> {
+  const q = query.trim();
+  const { db } = await getLocalDb();
+  const local = page === 1 ? (db.searchProducts(q, Math.min(10, pageSize)) as Product[]) : [];
+  const localEans = new Set(local.map((p) => p.ean).filter(Boolean) as string[]);
+
+  const direct = await searchOpenFoodFactsProducts(q, { pageSize, page, fetchFn: offFetch });
+  if (direct.status === 'ok') {
+    return {
+      local,
+      results: direct.products.filter((p) => !localEans.has(p.ean)) as LookedUpProduct[],
+      page: direct.page ?? page,
+      hasMore: Boolean(direct.hasMore),
+      count: direct.count
+    };
+  }
+  try {
+    const viaServer = await apiGet<ProductSearchResult>(
+      `/api/products/lookup?q=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`,
+      { timeoutMs: OFF_TIMEOUT_MS }
+    );
+    return { ...viaServer, local: page === 1 ? local : [] };
+  } catch {
+    return { local, results: [], page, hasMore: false, error: direct.message || 'Open Food Facts nicht erreichbar.' };
+  }
 }

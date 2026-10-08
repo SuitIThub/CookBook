@@ -980,6 +980,8 @@ function ProductSearchBox({
 
   const offState = useRef({ query: '', page: 0, hasMore: false });
   const localTimer = useRef<number | undefined>(undefined);
+  // Latest search wins: a slower register search must not wipe online results.
+  const searchSeq = useRef(0);
 
   const emit = useCallback(
     (p: Pick | null, amt: string, u: string) => {
@@ -1041,6 +1043,7 @@ function ProductSearchBox({
         return;
       }
       setStatus('Register …');
+      const seq = ++searchSeq.current;
       const [products, ingredients] = await Promise.all([
         tracker.searchRegisterProducts(trimmed, includeIngredients ? 8 : 12),
         includeIngredients ? tracker.searchCatalogue(trimmed, 8) : Promise.resolve([]),
@@ -1048,6 +1051,7 @@ function ProductSearchBox({
       const picks: Pick[] = [];
       for (const raw of ingredients) picks.push({ pickKind: 'ingredient', id: raw.id, name: raw.name, nutritionPer100g: raw.nutritionPer100g, gramsByUnit: raw.gramsByUnit });
       for (const raw of products) picks.push({ ...asLocalPick(raw), pickKind: 'product' });
+      if (seq !== searchSeq.current) return;
       setResults(picks);
       setMoreVisible(false);
       if (!picks.length) setStatus('Keine Treffer im Register — „Online suchen“ für Open Food Facts.');
@@ -1077,8 +1081,8 @@ function ProductSearchBox({
           return;
         }
         setStatus(`Kein Produkt zu EAN ${ean} gefunden.`);
-      } catch {
-        setStatus('Barcode-Lookup fehlgeschlagen.');
+      } catch (err) {
+        setStatus(`Barcode-Lookup fehlgeschlagen: ${(err as Error).message}`);
       }
     },
     [select]
@@ -1088,6 +1092,8 @@ function ProductSearchBox({
     async (append: boolean) => {
       const q = query.trim();
       if (!q) return;
+      window.clearTimeout(localTimer.current);
+      const seq = ++searchSeq.current;
       if (/^\d{6,14}$/.test(q)) {
         await lookupEan(q);
         return;
@@ -1103,8 +1109,9 @@ function ProductSearchBox({
       setMoreLoading(true);
       try {
         const data = await offSearch(q, nextPage, 20);
-        if (data?.error && !Array.isArray(data.results)) {
-          setStatus(String(data.error));
+        if (seq !== searchSeq.current) return;
+        if (data?.error && !(data.results?.length || data.local?.length)) {
+          setStatus(`Online-Suche fehlgeschlagen: ${data.error}`);
           setMoreVisible(false);
           return;
         }
