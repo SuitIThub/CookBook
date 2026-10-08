@@ -17,6 +17,10 @@ export { CookbookDatabase } from './database';
 const driver = new BetterSqlite3Driver('./cookbook.db');
 export const db = new CookbookDatabase(driver);
 
+// Secrets (OpenRouter key) synced by older clients into alias settings → remove.
+const scrubbed = db.scrubAliasSecrets();
+if (scrubbed > 0) console.log(`Removed API keys from ${scrubbed} synced alias setting(s).`);
+
 // Server-only token table + validation (kept out of the shared core / app bundle).
 ensureAuthSchema(driver);
 export function validateAuth(alias: string, token: string): boolean {

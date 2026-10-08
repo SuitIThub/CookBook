@@ -11,6 +11,7 @@
  */
 import { apiBase, apiGet, apiPost } from './api';
 import { ALIAS_KEY, getAlias } from './settings';
+import { keepLocalSecrets, stripAliasSecrets } from '@core/aliasSecrets';
 
 const META_KEY = 'cookbook.alias.meta';
 const PENDING_KEY = 'cookbook.alias.pending';
@@ -128,7 +129,7 @@ export async function flushPending(): Promise<void> {
   const keys = getPending();
   if (!getAlias() || keys.length === 0) return;
   const meta = getMeta();
-  const settings = keys.map((key) => ({ key, value: rawGet(key), updatedAt: meta[key] || Date.now() }));
+  const settings = keys.map((key) => ({ key, value: stripAliasSecrets(key, rawGet(key)), updatedAt: meta[key] || Date.now() }));
   if (await pushSettings(settings)) {
     // Keep keys changed while the request was in flight.
     const now = getPending().filter((k) => !keys.includes(k) || (getMeta()[k] || 0) > (meta[k] || 0));
@@ -169,12 +170,14 @@ function applyRemote(settings: RemoteSetting[]) {
     const incomingTs = Number(item.updatedAt) || 0;
     if (incomingTs <= (meta[item.key] || 0)) continue;
     applyingRemote = true;
-    if (item.value === null || item.value === undefined) rawRemove(item.key);
-    else rawSet(item.key, String(item.value));
+    // Secrets (OpenRouter key) are never synced — keep this device's own.
+    const value = item.value == null ? null : keepLocalSecrets(item.key, String(item.value), rawGet(item.key));
+    if (value === null) rawRemove(item.key);
+    else rawSet(item.key, value);
     applyingRemote = false;
     meta[item.key] = incomingTs;
     changed = true;
-    applyKeyEffect(item.key, item.value == null ? null : String(item.value));
+    applyKeyEffect(item.key, value);
   }
   if (changed) {
     saveMeta(meta);
@@ -261,7 +264,7 @@ async function switchSettings(alias: string): Promise<void> {
     const v = rawGet(key);
     if (v === null) continue;
     m2[key] = now;
-    seed.push({ key, value: v, updatedAt: now });
+    seed.push({ key, value: stripAliasSecrets(key, v), updatedAt: now });
   }
   saveMeta(m2);
   if (!(await pushSettings(seed))) savePending(seed.map((s) => s.key));

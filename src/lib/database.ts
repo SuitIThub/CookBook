@@ -23,6 +23,7 @@ import {
   type AlternativeSelection,
 } from './alternatives';
 import { resolveMainCategory } from './recipeCategories';
+import { stripAliasSecrets, AI_SETTINGS_KEY } from './aliasSecrets';
 import {
   collectIngredientsFromGroups,
   applyProductAssignmentsToGroups,
@@ -2480,9 +2481,30 @@ export class CookbookDatabase {
     const rows = stmt.all(alias) as Array<{ key: string; value: string | null; updated_at: number }>;
     return rows.map((row) => ({
       key: row.key,
-      value: row.value,
+      value: stripAliasSecrets(row.key, row.value),
       updatedAt: row.updated_at,
     }));
+  }
+
+  /**
+   * Remove secrets (OpenRouter API key) that older clients synced into the
+   * alias settings — they are stored in plaintext and readable via the alias.
+   * Idempotent; runs at startup. Returns how many rows were cleaned.
+   */
+  scrubAliasSecrets(): number {
+    const rows = this.db
+      .prepare('SELECT alias, value FROM alias_settings WHERE key = ?')
+      .all(AI_SETTINGS_KEY) as Array<{ alias: string; value: string | null }>;
+    let cleaned = 0;
+    for (const row of rows) {
+      const stripped = stripAliasSecrets(AI_SETTINGS_KEY, row.value);
+      if (stripped === row.value) continue;
+      this.db
+        .prepare('UPDATE alias_settings SET value = ? WHERE alias = ? AND key = ?')
+        .run(stripped, row.alias, AI_SETTINGS_KEY);
+      cleaned++;
+    }
+    return cleaned;
   }
 
   /**
@@ -2496,6 +2518,7 @@ export class CookbookDatabase {
     value: string | null,
     updatedAt: number
   ): { applied: boolean; value: string | null; updatedAt: number } {
+    value = stripAliasSecrets(key, value); // never store secrets server-side
     const existingStmt = this.db.prepare(
       'SELECT value, updated_at FROM alias_settings WHERE alias = ? AND key = ?'
     );

@@ -114,6 +114,30 @@
       // switch (the other keys are device preferences).
       var PERSONAL_KEYS = ['cookbook.recipes.favorites', 'cookbook.tracker.profile', 'cookbook.ingredient.defaults', 'cookbook.preferredSupermarket'];
 
+      // Secrets never leave the device via the sync (alias settings are stored
+      // in plaintext and readable via the alias) — see src/lib/aliasSecrets.ts.
+      var SECRET_FIELDS = { 'cookbook.ai.settings': ['openRouterApiKey'] };
+      function stripSecrets(key, value) {
+        var fields = SECRET_FIELDS[key];
+        if (!fields || value == null) return value;
+        try {
+          var o = JSON.parse(value);
+          if (!o || typeof o !== 'object') return value;
+          fields.forEach(function (f) { delete o[f]; });
+          return JSON.stringify(o);
+        } catch (e) { return value; }
+      }
+      function keepLocalSecrets(key, remote, local) {
+        var fields = SECRET_FIELDS[key];
+        if (!fields || remote == null || local == null) return remote;
+        try {
+          var r = JSON.parse(remote), l = JSON.parse(local);
+          if (!r || typeof r !== 'object' || !l || typeof l !== 'object') return remote;
+          fields.forEach(function (f) { if (l[f]) r[f] = l[f]; else delete r[f]; });
+          return JSON.stringify(r);
+        } catch (e) { return remote; }
+      }
+
       var origSetItem = Storage.prototype.setItem;
       var origRemoveItem = Storage.prototype.removeItem;
 
@@ -175,7 +199,7 @@
         var meta = getMeta();
         var settings = [];
         Object.keys(pending).forEach(function (key) {
-          settings.push({ key: key, value: rawGet(key), updatedAt: meta[key] || Date.now() });
+          settings.push({ key: key, value: stripSecrets(key, rawGet(key)), updatedAt: meta[key] || Date.now() });
         });
         pending = {};
         return pushSettings(settings);
@@ -229,14 +253,15 @@
           var localTs = meta[item.key] || 0;
           if (incomingTs <= localTs) return;
 
+          var value = item.value === null || item.value === undefined ? null : keepLocalSecrets(item.key, String(item.value), rawGet(item.key));
           applyingRemote = true;
-          if (item.value === null || item.value === undefined) rawRemove(item.key);
-          else rawSet(item.key, String(item.value));
+          if (value === null) rawRemove(item.key);
+          else rawSet(item.key, value);
           applyingRemote = false;
 
           meta[item.key] = incomingTs;
           changed = true;
-          applyKeyEffect(item.key, item.value == null ? null : String(item.value));
+          applyKeyEffect(item.key, value);
         });
         if (changed) {
           saveMeta(meta);
@@ -313,7 +338,7 @@
                 var v = rawGet(key);
                 if (v === null) return;
                 m2[key] = now;
-                seed.push({ key: key, value: v, updatedAt: now });
+                seed.push({ key: key, value: stripSecrets(key, v), updatedAt: now });
               });
               saveMeta(m2);
               return pushSettings(seed);

@@ -321,7 +321,7 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setApiKey(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Wird nur lokal in deinem Browser gespeichert.</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Wird nur auf diesem Gerät gespeichert und nicht mit dem Alias synchronisiert.</p>
               {apiKey.trim() && (
                 <div className="mt-2">
                   <button
