@@ -24,6 +24,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from './database.server';
 import { describeReelFrames, defaultReelVisionModel, recipeFromReelSources, type AIRequestConfig, type ReelVisionMode } from './ai';
 import { sanitizeRecipeData } from './aiRecipeSanitize';
+import { catalogueCandidates, enrichRecipeData } from './recipeEnrich';
 import type { RecipeImage } from '../types/recipe';
 
 const MAX_FRAMES = 12;
@@ -208,8 +209,11 @@ async function runReelImport(
     ]
       .filter(Boolean)
       .join('\n\n');
-    const raw = await recipeFromReelSources(sources, options.ai);
-    const data = sanitizeRecipeData(raw, String(info.title || 'Rezept aus Reel'));
+    // Existing catalogue ingredients that occur in the material → the model reuses their names.
+    const catalogue = db.getAllCatalogueIngredients().map((c) => c.name);
+    const raw = await recipeFromReelSources(sources, options.ai, catalogueCandidates(sources, catalogue));
+    // Deterministic safety net: catalogue spellings + ingredient links in every step.
+    const { data } = enrichRecipeData(sanitizeRecipeData(raw, String(info.title || 'Rezept aus Reel')), catalogue);
 
     // 6. thumbnail as recipe image, create the recipe
     const images: RecipeImage[] = [];

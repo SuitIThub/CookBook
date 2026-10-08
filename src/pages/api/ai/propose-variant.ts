@@ -10,6 +10,7 @@ import { createDraftToken } from '../../../lib/draftVariantStore';
 import { recipeToMarkdown } from '../../../lib/recipeMarkdown';
 import type { Recipe } from '../../../types/recipe';
 import { ensureId, sanitizeRecipeData } from '../../../lib/aiRecipeSanitize';
+import { enrichRecipeData } from '../../../lib/recipeEnrich';
 
 function getOriginalUnit(
   original: Recipe,
@@ -265,6 +266,8 @@ export const POST: APIRoute = async ({ request }) => {
     if (targetRecipe) {
       recipeData = repairRecipeDataFromOriginal(targetRecipe, recipeData) as Record<string, unknown>;
     }
+    // Catalogue ingredient names + step links the model dropped or never set.
+    recipeData = enrichRecipeData(recipeData, db.getAllCatalogueIngredients().map((c) => c.name)).data;
     const variantRecipeData = targetRecipe
       ? {
           ...recipeData,

@@ -956,20 +956,33 @@ export async function describeReelFrames(
  * Build a complete recipe (recipeData JSON) from the raw material of a cooking
  * video: caption, speech transcript, on-screen text / frame descriptions.
  */
-export async function recipeFromReelSources(sources: string, config?: AIRequestConfig): Promise<Record<string, unknown>> {
+export async function recipeFromReelSources(
+  sources: string,
+  config?: AIRequestConfig,
+  catalogueNames: string[] = []
+): Promise<Record<string, unknown>> {
+  const catalogueBlock = catalogueNames.length
+    ? `
+VORHANDENE ZUTATEN IM KOCHBUCH (verwende für eine Zutat GENAU diesen Namen, wenn sie gemeint ist — Zusätze wie "gehackt" oder "frisch" gehören in "description", nicht in den Namen):
+${catalogueNames.join(', ')}
+`
+    : '';
   const userContent = `Erstelle aus dem folgenden Material eines Koch-Videos (Instagram-Reel) ein vollständiges Rezept als JSON (variantName + recipeData). Antworte NUR mit dem JSON-Objekt, kein anderer Text.
 
 Das Material kann unvollständig, doppelt oder ungeordnet sein (Beschreibung, gesprochener Text, eingeblendeter Text, Bildbeschreibungen). Führe es zu EINEM sauberen Rezept zusammen:
 - title: kurzer, klarer Rezeptname auf Deutsch (keine Emojis, keine Hashtags).
 - description: 1–3 Sätze, worum es geht. Keine Werbung, keine Hashtags, keine Aufrufe zum Folgen/Liken.
 - ingredientGroups: alle Zutaten mit Menge und Einheit. Pro Zutat genau EIN Eintrag in "quantities" ({ "amount": Zahl, "unit": "g" | "ml" | "EL" | "TL" | "Stück" | … }). Ist keine Menge genannt: amount 0 und unit "".
-- preparationGroups: die Zubereitung als klare, nummerierbare Schritte in sinnvoller Reihenfolge. Jeder Schritt mit "id", "text", "linkedIngredients": [], "intermediateIngredients": [].
+- preparationGroups: die Zubereitung als klare, nummerierbare Schritte in sinnvoller Reihenfolge. Jeder Schritt mit "id", "text", "linkedIngredients", "intermediateIngredients": [].
+- linkedIngredients (WICHTIG): in JEDEM Schritt alle Zutaten verknüpfen, die in diesem Schritt verwendet werden — als [{ "ingredientId": "<id der Zutat aus ingredientGroups>", "selectedQuantityIndex": 0 }]. Jede Zutat sollte in mindestens einem Schritt verknüpft sein.
+- Zutatennamen: kurz und einheitlich (z. B. "Zwiebel", nicht "1 große Zwiebel, gewürfelt"); Mengen gehören in "quantities", Zusätze in "description".
+- Jede Zutat einzeln: "Salz und Pfeffer" sind ZWEI Zutaten ("Salz", "Pfeffer"), nicht eine. Gemeinsame Zusätze gehören zu jeder der Zutaten in "description": "Salz und Pfeffer aus der Mühle" → "Salz" (description "aus der Mühle") und "Pfeffer" (description "aus der Mühle").
 - metadata.servings: genannte Portionen, sonst 2. metadata.timeEntries: genannte Zeiten (id, label, minutes).
 - tags: 2–6 passende deutsche Schlagwörter. category: passende Kategorie.
 - variantName: "Reel".
 Erfinde keine Zutaten oder Mengen, die nirgends vorkommen. Übersetze fremdsprachiges Material ins Deutsche.
 Verwende für alle id-Felder kurze eindeutige Werte (z. B. "a1b2c3").
-
+${catalogueBlock}
 --- MATERIAL ---
 ${sources}`;
 

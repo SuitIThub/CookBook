@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import type { RecipeImage } from '../../../../types/recipe';
 import { db } from '../../../../lib/database.server';
 import { RecipeExtractorFactory } from '../../../../lib/recipe-extractors/factory';
+import { enrichRecipeData } from '../../../../lib/recipeEnrich';
 import { v4 as uuidv4 } from 'uuid';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -102,6 +103,12 @@ export const POST: APIRoute = async ({ request }) => {
       sourceUrl: url // Save the source URL
     };
     
+    // Site recipes never link ingredients to steps; reuse catalogue spellings too.
+    const { stats: enrichStats } = enrichRecipeData(finalRecipeData, db.getAllCatalogueIngredients().map((c) => c.name));
+    if (enrichStats.linkedSteps > 0) {
+      warnings.push('Zutaten wurden den Zubereitungsschritten automatisch zugeordnet — bitte kurz prüfen.');
+    }
+
     // Create the recipe
     const createdRecipe = db.createRecipe(finalRecipeData);
     
