@@ -24,9 +24,11 @@ export const POST: APIRoute = async ({ request }) => {
 
   const noDevice: string[] = [];
   const tokens: string[] = [];
+  const aliasOf = new Map<string, string>();
   for (const alias of targets) {
     const t = pushStore.tokensFor(alias);
     if (t.length === 0) noDevice.push(alias);
+    for (const token of t) aliasOf.set(token, alias);
     tokens.push(...t);
   }
   if (tokens.length === 0) return json({ sent: 0, noDevice });
@@ -39,6 +41,10 @@ export const POST: APIRoute = async ({ request }) => {
       channelId: 'shopping_pings'
     });
     for (const dead of result.deadTokens) pushStore.unregister(dead);
+    // Aliases whose devices all turned out to be gone (app uninstalled/reset).
+    for (const alias of new Set(result.deadTokens.map((t) => aliasOf.get(t)!))) {
+      if (pushStore.tokensFor(alias).length === 0) noDevice.push(alias);
+    }
     return json({ sent: result.sent, noDevice });
   } catch (error) {
     console.error('shopping-lists/ping error:', error);

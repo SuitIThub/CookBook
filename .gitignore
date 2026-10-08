@@ -29,3 +29,5 @@ cookbook.db-shm
 cookbook.db-wal
 
 public/uploads/
+# Firebase service-account keys (server push) — never commit
+*firebase-adminsdk*.json
