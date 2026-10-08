@@ -182,6 +182,7 @@ export default function App() {
           <Route path="/rezept/:id" element={<RecipeDetailPage />} />
           <Route path="/rezept/:id/bearbeiten" element={<RecipeEditPage />} />
           <Route path="/rezept/:id/kochen" element={<CookingModePage />} />
+          <Route path="/rezept/:parentId/variante-neu" element={<RecipeEditPage variantDraft />} />
           <Route path="/_localtest" element={<LocalDbTestPage />} />
           <Route path="/_synctest" element={<SyncTestPage />} />
           <Route path="/_pushtest" element={<PushTestPage />} />
