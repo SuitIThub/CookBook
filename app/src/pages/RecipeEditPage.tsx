@@ -177,6 +177,7 @@ export default function RecipeEditPage() {
   const [existing, setExisting] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(!isNew);
   const [busy, setBusy] = useState(false);
+  const [variantModal, setVariantModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imgBusy, setImgBusy] = useState(false);
   const [imgError, setImgError] = useState<string | null>(null);
@@ -274,12 +275,17 @@ export default function RecipeEditPage() {
   };
 
   /* ---------------------------------------------------------------- save */
-  const save = async () => {
-    if (!form.title.trim()) return setError('Titel ist ein Pflichtfeld.');
-    if (!form.category.trim()) return setError('Kategorie ist ein Pflichtfeld.');
-    setBusy(true);
-    setError(null);
-    try {
+  /** Collect the form into recipe data (null + error when required fields are missing). */
+  const buildData = (): any | null => {
+    if (!form.title.trim()) {
+      setError('Titel ist ein Pflichtfeld.');
+      return null;
+    }
+    if (!form.category.trim()) {
+      setError('Kategorie ist ein Pflichtfeld.');
+      return null;
+    }
+    {
       const ingredientGroups: IngredientGroup[] = form.groups
         .map((g) => ({
           id: g.isDefault ? uid() : g.id,
@@ -348,12 +354,47 @@ export default function RecipeEditPage() {
           nutrition: anyNut ? nutrition : existing?.metadata.nutrition
         }
       };
+      return data;
+    }
+  };
+
+  const save = async () => {
+    const data = buildData();
+    if (!data) return;
+    setBusy(true);
+    setError(null);
+    try {
       const saved = await saveLocalRecipe(isNew ? null : id!, data);
       queryClient.invalidateQueries();
       navigate(`/rezept/${saved.id}`);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
+    }
+  };
+
+  /** "Als Variante speichern": the current form becomes a new variant of the root original. */
+  const saveAsVariant = async (variantName: string) => {
+    const data = buildData();
+    if (!data) return false;
+    setBusy(true);
+    setError(null);
+    try {
+      const rootId = existing?.parentRecipeId ?? existing?.id;
+      const saved = await saveLocalRecipe(null, {
+        ...data,
+        images: existing?.images,
+        imageUrl: existing?.imageUrl,
+        parentRecipeId: rootId,
+        variantName: variantName.trim()
+      });
+      queryClient.invalidateQueries();
+      navigate(`/rezept/${saved.id}`);
+      return true;
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+      return false;
     }
   };
 
@@ -696,17 +737,57 @@ export default function RecipeEditPage() {
 
       {error && <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="mt-8 flex items-center justify-between gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
-        {!isNew ? (
-          <button onClick={remove} disabled={busy} className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400">Löschen</button>
-        ) : (
-          <span />
-        )}
-        <div className="flex gap-2">
-          <button onClick={() => navigate(isNew ? '/' : `/rezept/${id}`)} disabled={busy} className="rounded-md border border-gray-300 px-4 py-2 text-sm dark:border-gray-600">Abbrechen</button>
-          <button onClick={save} disabled={busy} className="rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50">Speichern</button>
+      {/* EditFormActions */}
+      <div className="mb-4 mt-8">
+        <div className="flex flex-col space-y-3 sm:hidden">
+          <button type="button" onClick={save} disabled={busy} className="flex w-full touch-manipulation items-center justify-center space-x-2 rounded-lg bg-green-500 px-6 py-4 text-base font-medium text-white shadow-sm transition-colors hover:bg-green-600 active:bg-green-700 disabled:opacity-50">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            <span>Speichern</span>
+          </button>
+          {!isNew && (
+            <button type="button" onClick={() => setVariantModal(true)} disabled={busy} className="flex w-full touch-manipulation items-center justify-center space-x-2 rounded-lg bg-indigo-500 px-6 py-4 text-base font-medium text-white shadow-sm transition-colors hover:bg-indigo-600 active:bg-indigo-700 disabled:opacity-50">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+              <span>Als Variante speichern</span>
+            </button>
+          )}
+          {!isNew && (
+            <button type="button" onClick={remove} disabled={busy} className="flex w-full touch-manipulation items-center justify-center space-x-2 rounded-lg bg-red-500 px-6 py-4 text-base font-medium text-white shadow-sm transition-colors hover:bg-red-600 active:bg-red-700 disabled:opacity-50">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              <span>Rezept löschen</span>
+            </button>
+          )}
+          <button type="button" onClick={() => navigate(isNew ? '/rezepte' : `/rezept/${id}`)} disabled={busy} className="w-full touch-manipulation rounded-lg border-2 border-gray-300 bg-white px-6 py-4 text-base font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 active:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:active:bg-gray-600">
+            Abbrechen
+          </button>
+        </div>
+        <div className="mx-auto hidden max-w-4xl items-center justify-between sm:flex">
+          {!isNew ? (
+            <button type="button" onClick={remove} disabled={busy} className="flex items-center space-x-2 rounded-md bg-red-500 px-6 py-3 text-white transition-colors hover:bg-red-600 disabled:opacity-50">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              <span>Rezept löschen</span>
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex space-x-3">
+            <button type="button" onClick={() => navigate(isNew ? '/rezepte' : `/rezept/${id}`)} disabled={busy} className="rounded-md border border-gray-300 bg-white px-6 py-3 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
+              Abbrechen
+            </button>
+            {!isNew && (
+              <button type="button" onClick={() => setVariantModal(true)} disabled={busy} className="flex items-center space-x-2 rounded-md bg-indigo-500 px-6 py-3 text-white transition-colors hover:bg-indigo-600 disabled:opacity-50">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                <span>Als Variante speichern</span>
+              </button>
+            )}
+            <button type="button" onClick={save} disabled={busy} className="flex items-center space-x-2 rounded-md bg-green-500 px-6 py-3 text-white transition-colors hover:bg-green-600 disabled:opacity-50">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              <span>Speichern</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {variantModal && <VariantModal onClose={() => setVariantModal(false)} onCreate={saveAsVariant} />}
 
       {linkingStep && linkingStepObj && (
         <ManualLinkModal
@@ -1084,6 +1165,45 @@ function ManualLinkModal({
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-md border border-gray-300 px-4 py-2 text-sm dark:border-gray-600">Abbrechen</button>
           <button onClick={commit} className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600">Übernehmen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** VariantModal port: name the new variant, then the edited form is saved as it. */
+function VariantModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string) => Promise<boolean> }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => {
+    if (!name.trim()) {
+      alert('Bitte gib einen Namen für die Variante ein.');
+      return;
+    }
+    setBusy(true);
+    const ok = await onCreate(name);
+    if (!ok) setBusy(false);
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">Neue Rezeptvariante erstellen</h3>
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">Bitte gib einen kurzen Titel für diese Variante ein, damit du sie später leicht wiedererkennst.</p>
+        <div className="mb-4">
+          <label htmlFor="variant-name-input" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Variantenname</label>
+          <input
+            id="variant-name-input"
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && confirm()}
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-500"
+            placeholder="z. B. „Ohne Zucker“, „Schnelle Version“, „Partyportion“"
+          />
+        </div>
+        <div className="flex justify-end space-x-3">
+          <button type="button" onClick={onClose} className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Abbrechen</button>
+          <button type="button" onClick={confirm} disabled={busy} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700">{busy ? 'Erstellt...' : 'Variante erstellen'}</button>
         </div>
       </div>
     </div>
