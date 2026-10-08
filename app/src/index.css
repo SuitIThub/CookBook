@@ -37,3 +37,17 @@
   background: linear-gradient(135deg, rgb(127 29 29 / 0.25) 0%, rgb(154 52 18 / 0.2) 100%) !important;
   border-color: #fb923c !important;
 }
+
+/* LiveNutritionPanel product picker (same as the website's inline style) */
+.live-product-row { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; }
+.live-product-row .live-product-slot,
+.live-product-row .live-product-select,
+.live-product-row .live-link-product { width: 100%; }
+.live-product-row .live-product-name { overflow-wrap: anywhere; }
+@media (min-width: 1024px) {
+  .live-product-row { flex-direction: row; align-items: center; }
+  .live-product-row .live-product-name { flex: 1 1 auto; min-width: 0; }
+  .live-product-row .live-product-slot { width: auto; }
+  .live-product-row .live-product-select { width: auto; max-width: 20rem; }
+  .live-product-row .live-link-product { width: auto; white-space: nowrap; }
+}

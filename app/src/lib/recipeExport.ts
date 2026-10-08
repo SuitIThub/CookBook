@@ -13,8 +13,10 @@ export function recipeMarkdown(recipe: Recipe): string {
   return recipeToMarkdown(recipe);
 }
 
+/** Single-recipe JSON like /api/recipes/export?id=…&format=json (without images). */
 export function recipeJson(recipe: Recipe): string {
-  return JSON.stringify(recipe, null, 2);
+  const { images: _i, imageUrl: _u, ...rest } = recipe as any;
+  return JSON.stringify(rest, null, 2);
 }
 
 function slug(title: string): string {
