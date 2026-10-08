@@ -1,41 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { createConfirmer as confirmer, isValidGtin } from '@core/gtin';
 
 interface Props {
   onDetected: (ean: string) => void;
   onClose: () => void;
+  /** Keep scanning after a code (batch import); onClose ends it. */
+  continuous?: boolean;
 }
 
-/** Same code must be read this many times before it is accepted. */
-const CONFIRMATIONS = 3;
-
-/**
- * GTIN check-digit validation (EAN-13, EAN-8, UPC-A). A barcode that is only
- * partly in the frame can decode to a wrong number; the check digit (plus the
- * repeated-read confirmation) filters those out. UPC-E has its check digit on
- * the expanded form, so it only gets the confirmation.
- */
-export function isValidGtin(code: string, format?: string): boolean {
-  if (!/^\d+$/.test(code)) return false;
-  if (format && /upc_?e/i.test(format)) return code.length === 6 || code.length === 8;
-  if (![8, 12, 13, 14].includes(code.length)) return false;
-  const digits = code.split('').map(Number);
-  const check = digits.pop()!;
-  let sum = 0;
-  digits.reverse().forEach((d, i) => (sum += d * (i % 2 === 0 ? 3 : 1)));
-  return (10 - (sum % 10)) % 10 === check;
-}
-
-/** Counts reads per code; returns the code once it was seen often enough. */
-function confirmer() {
-  const seen = new Map<string, number>();
-  return (code: string, format?: string): string | null => {
-    if (!isValidGtin(code, format)) return null;
-    const n = (seen.get(code) ?? 0) + 1;
-    seen.set(code, n);
-    return n >= CONFIRMATIONS ? code : null;
-  };
-}
+/** Continuous mode: ignore the code that is still in front of the camera. */
+const REPEAT_MS = 4000;
 
 /**
  * Barcode scanner. On a device it uses ML Kit in live mode
@@ -44,11 +19,15 @@ function confirmer() {
  * falls back to the BarcodeDetector API over a camera preview. Both only accept
  * product barcodes with a valid check digit that were read repeatedly.
  */
-export default function BarcodeScanner({ onDetected, onClose }: Props) {
+export default function BarcodeScanner({ onDetected, onClose, continuous = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<'starting' | 'scanning' | 'unsupported' | 'error'>('starting');
   const [message, setMessage] = useState('');
   const [nativeLive, setNativeLive] = useState(false);
+  const [scanned, setScanned] = useState<{ count: number; last: string }>({ count: 0, last: '' });
+  // The scanner runs once per mount; always call the latest callbacks.
+  const cb = useRef({ onDetected, onClose });
+  cb.current = { onDetected, onClose };
 
   useEffect(() => {
     let cancelled = false;
@@ -79,17 +58,25 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
       if (cancelled) return;
 
       const confirm = confirmer();
+      const recent = new Map<string, number>();
       let done = false;
       try {
         const listener = await BarcodeScanner.addListener('barcodesScanned', (ev) => {
           if (done || cancelled) return;
           for (const b of ev.barcodes ?? []) {
             const code = confirm((b.rawValue || '').trim(), String(b.format ?? ''));
-            if (code) {
-              done = true;
-              void stopNative?.().then(() => onDetected(code));
-              return;
+            if (!code) continue;
+            if (continuous) {
+              if (Date.now() - (recent.get(code) ?? 0) < REPEAT_MS) continue;
+              recent.set(code, Date.now());
+              navigator.vibrate?.(60);
+              setScanned((s) => ({ count: s.count + 1, last: code }));
+              cb.current.onDetected(code);
+              continue;
             }
+            done = true;
+            void stopNative?.().then(() => cb.current.onDetected(code));
+            return;
           }
         });
         stopNative = async () => {
@@ -111,9 +98,9 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
             const { barcodes } = await BarcodeScanner.scan({ formats });
             if (cancelled) return;
             const b = barcodes[0];
-            if (!b) return onClose();
+            if (!b) return cb.current.onClose();
             const code = (b.rawValue || '').trim();
-            if (isValidGtin(code, String(b.format ?? ''))) return onDetected(code);
+            if (isValidGtin(code, String(b.format ?? ''))) return cb.current.onDetected(code);
             setMessage(`Ungültiger Code gelesen (${code}) — bitte erneut scannen.`);
           } catch (e) {
             if (!cancelled) {
@@ -141,15 +128,22 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         await video.play();
         setStatus('scanning');
         const confirm = confirmer();
+        const recent = new Map<string, number>();
         const tick = async () => {
           if (cancelled) return;
           try {
             for (const c of await detector.detect(video)) {
               const code = confirm(String(c.rawValue || '').trim(), c.format);
-              if (code) {
-                onDetected(code);
-                return;
+              if (!code) continue;
+              if (continuous) {
+                if (Date.now() - (recent.get(code) ?? 0) < REPEAT_MS) continue;
+                recent.set(code, Date.now());
+                setScanned((s) => ({ count: s.count + 1, last: code }));
+                cb.current.onDetected(code);
+                continue;
               }
+              cb.current.onDetected(code);
+              return;
             }
           } catch {
             /* transient */
@@ -172,7 +166,8 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
       stream?.getTracks().forEach((t) => t.stop());
       void stopNative?.();
     };
-  }, [onDetected, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [continuous]);
 
   if (nativeLive) {
     // Camera renders natively behind the (transparent) WebView; only this overlay is visible.
@@ -180,11 +175,12 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
       <div className="barcode-scanner-ui fixed inset-0 z-[60] flex flex-col items-center justify-between p-6">
         <p className="mt-10 rounded-lg bg-black/60 px-4 py-2 text-center text-sm text-white">
           Barcode vollständig in den Rahmen halten.
+          {continuous && <span className="mt-1 block text-xs">{scanned.count ? `${scanned.count} gescannt — zuletzt ${scanned.last}` : 'Mehrere Produkte nacheinander scannen.'}</span>}
           {message && <span className="mt-1 block text-xs text-yellow-300">{message}</span>}
         </p>
         <div className="aspect-[3/2] w-full max-w-sm rounded-xl border-4 border-white/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
         <button onClick={onClose} className="mb-6 rounded-lg bg-white px-6 py-3 text-sm font-medium text-gray-900 shadow-lg">
-          Abbrechen
+          {continuous ? `Fertig${scanned.count ? ` (${scanned.count})` : ''}` : 'Abbrechen'}
         </button>
       </div>
     );
@@ -203,6 +199,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         <p className="mt-3 text-sm text-secondary-500">
           {status === 'starting' && 'Kamera wird gestartet …'}
           {status === 'scanning' && 'Barcode vollständig ins Bild halten.'}
+          {status === 'scanning' && continuous && scanned.count > 0 && <span className="mt-1 block text-xs">{`${scanned.count} gescannt — zuletzt ${scanned.last}`}</span>}
           {status === 'unsupported' &&
             'Barcode-Scan wird in diesem Browser nicht unterstützt. Auf dem Gerät nutzt die App die native Kamera; sonst EAN manuell eingeben.'}
           {status === 'error' && `Fehler: ${message}`}
@@ -210,7 +207,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </p>
         <div className="mt-4 flex justify-end">
           <button onClick={onClose} className="rounded-lg border border-secondary-300 px-4 py-2 text-sm dark:border-secondary-600">
-            Schließen
+            {continuous ? 'Fertig' : 'Schließen'}
           </button>
         </div>
       </div>

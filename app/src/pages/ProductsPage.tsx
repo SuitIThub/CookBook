@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { assetUrl } from '@/lib/api';
@@ -81,6 +82,9 @@ export default function ProductsPage() {
           >
             Neues Produkt
           </button>
+          <Link to="/produkte/import" className="rounded bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700">
+            Mehrere hinzufügen
+          </Link>
           <button
             type="button"
             onClick={() => setShowMarkets(true)}

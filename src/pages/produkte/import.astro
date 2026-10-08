@@ -1,0 +1,264 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Mehrere Produkte hinzufügen">
+  <div class="container mx-auto max-w-3xl px-4 py-6 space-y-5">
+    <div>
+      <a href="/produkte" class="text-sm text-orange-600 hover:underline dark:text-orange-400">← Produktregister</a>
+      <h1 class="mt-1 text-3xl font-bold text-gray-900 dark:text-white">Mehrere Produkte hinzufügen</h1>
+      <p class="text-sm text-gray-600 dark:text-gray-400">Produkte nacheinander scannen oder suchen. Danach werden sie automatisch den Zutaten zugeordnet — du prüfst die Zuordnung vor dem Speichern.</p>
+    </div>
+
+    <!-- Schritt 1: erfassen -->
+    <section id="step-collect" class="space-y-4">
+      <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 space-y-3">
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="batch-scan" class="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm font-medium">Barcodes scannen</button>
+        </div>
+        <div class="flex gap-2">
+          <input id="batch-search" type="search" placeholder="Name, Marke oder EAN suchen …" class="flex-1 min-w-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white" />
+          <button type="button" id="batch-search-btn" class="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium">Suchen</button>
+        </div>
+        <p id="batch-status" class="text-xs text-gray-500 dark:text-gray-400"></p>
+        <div id="batch-results" class="max-h-72 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700"></div>
+      </div>
+
+      <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Erfasst (<span id="batch-count">0</span>)</h2>
+        <div id="batch-list" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
+        <p id="batch-empty" class="text-sm text-gray-500 dark:text-gray-400">Noch nichts erfasst.</p>
+      </div>
+
+      <div class="flex justify-end">
+        <button type="button" id="batch-match" disabled class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded font-medium disabled:opacity-50">Weiter: Zutaten zuordnen</button>
+      </div>
+    </section>
+
+    <!-- Schritt 2: zuordnen + prüfen -->
+    <section id="step-review" class="hidden space-y-4">
+      <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Zuordnung prüfen</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Zutat ändern, leeren (= nur Produkt anlegen) oder einen neuen Namen eintippen (= neue Zutat). „Standard“ macht das Produkt zum Standardprodukt der Zutat.</p>
+        <div id="review-list" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
+        <datalist id="catalogue-names"></datalist>
+      </div>
+      <p id="review-status" class="text-sm"></p>
+      <div class="flex justify-between gap-2">
+        <button type="button" id="review-back" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Zurück</button>
+        <button type="button" id="review-commit" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium disabled:opacity-50">Übernehmen</button>
+      </div>
+    </section>
+  </div>
+</Layout>
+
+<script>
+  import { addItem, commitRequest, CONFIDENCE_LABEL, itemFromLookup, matchRequest, type BatchItem, type BatchMatch } from '../../lib/productBatch';
+
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  let items: BatchItem[] = [];
+  let matches: BatchMatch[] = [];
+  const statusEl = $('batch-status');
+  const setStatus = (t: string) => (statusEl.textContent = t);
+
+  function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+  const thumb = (url?: string) => {
+    const box = el('div', 'h-10 w-10 flex-shrink-0 overflow-hidden rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-lg');
+    if (url) {
+      const img = el('img', 'h-full w-full object-cover');
+      img.src = url;
+      img.alt = '';
+      img.loading = 'lazy';
+      box.append(img);
+    } else box.textContent = '🥫';
+    return box;
+  };
+  const describe = (i: BatchItem) => [i.brand, i.packageLabel, i.ean ? `EAN ${i.ean}` : ''].filter(Boolean).join(' · ');
+
+  function renderList() {
+    const list = $('batch-list');
+    list.textContent = '';
+    $('batch-count').textContent = String(items.length);
+    $('batch-empty').classList.toggle('hidden', items.length > 0);
+    ($('batch-match') as HTMLButtonElement).disabled = items.length === 0;
+    for (const item of items) {
+      const row = el('div', 'flex items-center gap-3 py-2');
+      const text = el('div', 'min-w-0 flex-1');
+      text.append(el('div', 'truncate text-sm font-medium text-gray-900 dark:text-white', item.name), el('div', 'truncate text-xs text-gray-500 dark:text-gray-400', describe(item)));
+      if (item.registered) text.append(el('span', 'mt-0.5 inline-block rounded bg-blue-100 px-1.5 text-[10px] text-blue-800 dark:bg-blue-900/40 dark:text-blue-300', 'bereits im Register'));
+      const rm = el('button', 'text-red-500 hover:text-red-700 px-2 text-lg', '×');
+      rm.type = 'button';
+      rm.title = 'Entfernen';
+      rm.setAttribute('aria-label', `${item.name} entfernen`);
+      rm.addEventListener('click', () => {
+        items = items.filter((x) => x !== item);
+        renderList();
+      });
+      row.append(thumb(item.imageUrl), text, rm);
+      list.append(row);
+    }
+  }
+
+  function add(item: BatchItem | null) {
+    if (!item) return false;
+    const r = addItem(items, item);
+    items = r.list;
+    renderList();
+    return r.added;
+  }
+
+  async function lookupEan(ean: string) {
+    setStatus(`EAN ${ean} wird gesucht …`);
+    try {
+      const res = await fetch(`/api/products/lookup?ean=${encodeURIComponent(ean)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (!data.product) {
+        setStatus(`Kein Produkt zu EAN ${ean} gefunden — per Suche ergänzen.`);
+        return;
+      }
+      const item = itemFromLookup({ ...data.product, ean: data.product.ean ?? ean }, data.source === 'local' ? 'local' : 'openfoodfacts');
+      setStatus(add(item) ? `Hinzugefügt: ${item?.name}` : `${item?.name} ist schon in der Liste.`);
+    } catch (e) {
+      setStatus(`Suche fehlgeschlagen: ${(e as Error).message}`);
+    }
+  }
+
+  async function search() {
+    const q = ($('batch-search') as HTMLInputElement).value.trim();
+    if (!q) return;
+    if (/^\d{8,14}$/.test(q)) return lookupEan(q);
+    setStatus('Suche läuft …');
+    const box = $('batch-results');
+    box.textContent = '';
+    try {
+      const res = await fetch(`/api/products/lookup?q=${encodeURIComponent(q)}&pageSize=20`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const hits = [...(data.local ?? []).map((p: any) => itemFromLookup(p, 'local')), ...(data.results ?? []).map((p: any) => itemFromLookup(p, 'openfoodfacts'))].filter(Boolean) as BatchItem[];
+      setStatus(hits.length ? `${hits.length} Treffer — mit + hinzufügen.` : data.error ? `Online-Suche fehlgeschlagen: ${data.error}` : 'Keine Treffer.');
+      for (const hit of hits) {
+        const row = el('div', 'flex items-center gap-3 py-2');
+        const text = el('div', 'min-w-0 flex-1');
+        text.append(el('div', 'truncate text-sm text-gray-900 dark:text-white', hit.name), el('div', 'truncate text-xs text-gray-500 dark:text-gray-400', [hit.registered ? 'Register' : 'Open Food Facts', describe(hit)].filter(Boolean).join(' · ')));
+        const plus = el('button', 'rounded bg-orange-500 px-3 py-1 text-white hover:bg-orange-600', '+');
+        plus.type = 'button';
+        plus.setAttribute('aria-label', `${hit.name} hinzufügen`);
+        plus.addEventListener('click', () => {
+          plus.textContent = add(hit) ? '✓' : '✓';
+          plus.disabled = true;
+        });
+        row.append(thumb(hit.imageUrl), text, plus);
+        box.append(row);
+      }
+    } catch (e) {
+      setStatus(`Suche fehlgeschlagen: ${(e as Error).message}`);
+    }
+  }
+
+  async function runMatch() {
+    $('step-collect').classList.add('hidden');
+    $('step-review').classList.remove('hidden');
+    const list = $('review-list');
+    list.textContent = '';
+    list.append(el('p', 'py-3 text-sm text-gray-500', 'Zutaten werden zugeordnet …'));
+    let ai = {};
+    try {
+      ai = JSON.parse(localStorage.getItem('cookbook.ai.settings') || '{}');
+    } catch {}
+    try {
+      const [res, cat] = await Promise.all([
+        fetch('/api/products/batch/match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: matchRequest(items), ai }) }),
+        fetch('/api/ingredients/catalogue').then((r) => r.json()).catch(() => [])
+      ]);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      matches = data.matches;
+      const dl = $('catalogue-names');
+      dl.textContent = '';
+      for (const c of Array.isArray(cat) ? cat : []) {
+        const o = el('option');
+        o.value = c.name;
+        dl.append(o);
+      }
+      renderReview();
+    } catch (e) {
+      list.textContent = '';
+      list.append(el('p', 'py-3 text-sm text-red-600 dark:text-red-400', `Zuordnung fehlgeschlagen: ${(e as Error).message}`));
+    }
+  }
+
+  function renderReview() {
+    const list = $('review-list');
+    list.textContent = '';
+    items.forEach((item, i) => {
+      const m = matches[i];
+      const row = el('div', 'py-3 flex items-start gap-3');
+      const body = el('div', 'min-w-0 flex-1 space-y-1');
+      body.append(el('div', 'truncate text-sm font-medium text-gray-900 dark:text-white', item.name), el('div', 'truncate text-xs text-gray-500 dark:text-gray-400', describe(item)));
+      const line = el('div', 'flex flex-wrap items-center gap-2');
+      const input = el('input', 'min-w-0 flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white') as HTMLInputElement;
+      input.value = m?.ingredient ?? '';
+      input.placeholder = 'Zutat (leer = keine)';
+      input.setAttribute('list', 'catalogue-names');
+      input.dataset.index = String(i);
+      input.className += ' review-ingredient';
+      const conf = CONFIDENCE_LABEL[m?.confidence ?? 'keine'];
+      const badge = el('span', `rounded px-1.5 py-0.5 text-[10px] font-medium ${conf.cls}`, conf.label);
+      if (m?.reason) badge.title = m.reason;
+      const def = el('label', 'flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300');
+      const box = el('input') as HTMLInputElement;
+      box.type = 'checkbox';
+      box.className = 'review-default';
+      box.dataset.index = String(i);
+      def.append(box, document.createTextNode(' Standard'));
+      line.append(input, badge, def);
+      body.append(line);
+      if (m && m.ingredient && !m.existing) body.append(el('div', 'text-[11px] text-indigo-600 dark:text-indigo-400', 'Zutat wird neu angelegt.'));
+      row.append(thumb(item.imageUrl), body);
+      list.append(row);
+    });
+  }
+
+  async function commit() {
+    const btn = $('review-commit') as HTMLButtonElement;
+    const status = $('review-status');
+    const ingredients = [...document.querySelectorAll<HTMLInputElement>('.review-ingredient')].map((x) => x.value);
+    const defaults = [...document.querySelectorAll<HTMLInputElement>('.review-default')].map((x) => x.checked);
+    btn.disabled = true;
+    status.className = 'text-sm text-gray-600 dark:text-gray-300';
+    status.textContent = 'Speichere …';
+    try {
+      const res = await fetch('/api/products/batch/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: commitRequest(items, ingredients, defaults) }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      status.className = 'text-sm text-green-700 dark:text-green-400';
+      status.textContent = `Fertig: ${data.created} Produkt(e) angelegt, ${data.updated} vorhandene verknüpft, ${data.ingredientsCreated} Zutat(en) neu.`;
+      items = [];
+      setTimeout(() => (window.location.href = '/produkte'), 1800);
+    } catch (e) {
+      status.className = 'text-sm text-red-600 dark:text-red-400';
+      status.textContent = `Speichern fehlgeschlagen: ${(e as Error).message}`;
+      btn.disabled = false;
+    }
+  }
+
+  window.addEventListener('barcode-scanned', (e: Event) => void lookupEan((e as CustomEvent).detail.ean));
+  $('batch-scan').addEventListener('click', () => (window as any).openBarcodeScanner?.({ continuous: true }));
+  $('batch-search-btn').addEventListener('click', () => void search());
+  $('batch-search').addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') void search();
+  });
+  $('batch-match').addEventListener('click', () => void runMatch());
+  $('review-back').addEventListener('click', () => {
+    $('step-review').classList.add('hidden');
+    $('step-collect').classList.remove('hidden');
+  });
+  $('review-commit').addEventListener('click', () => void commit());
+  renderList();
+</script>

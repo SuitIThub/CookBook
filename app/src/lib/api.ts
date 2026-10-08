@@ -148,8 +148,8 @@ export async function apiGet<T>(path: string, opts?: { timeoutMs?: number; heade
   return r.body as T;
 }
 
-export async function apiPost<T>(path: string, body: unknown, opts?: { headers?: Record<string, string> }): Promise<T> {
-  const r = await raw('POST', path, { json: body, headers: opts?.headers });
+export async function apiPost<T>(path: string, body: unknown, opts?: { headers?: Record<string, string>; timeoutMs?: number }): Promise<T> {
+  const r = await raw('POST', path, { json: body, headers: opts?.headers, timeoutMs: opts?.timeoutMs });
   if (r.status < 200 || r.status >= 300) throw new ApiError(extractError(r.body, `POST ${path} failed with ${r.status}`), r.status, path);
   return r.body as T;
 }

@@ -992,3 +992,45 @@ ${sources}`;
       : parseProposedVariant(await ollamaProposeVariantRaw(userContent, config), 'Ollama');
   return proposed.recipeData;
 }
+
+/* ------------------------------------------------ structured JSON tasks */
+
+/**
+ * One-shot structured answer (JSON matching `schema`) from the given task
+ * model — OpenRouter with response_format json_schema (falls back to plain
+ * JSON if the model/provider rejects schemas), Ollama with `format`.
+ */
+export async function aiStructured<T>(prompt: string, schema: Record<string, unknown>, config?: AIRequestConfig): Promise<T> {
+  let raw: string;
+  if (getProvider(config) === 'openrouter') {
+    try {
+      raw = await openRouterChat([{ role: 'user', content: prompt }], config, {
+        temperature: 0.1,
+        response_format: { type: 'json_schema', json_schema: { name: 'result', strict: false, schema } }
+      });
+    } catch (err) {
+      console.warn('Structured output rejected, retrying as plain JSON:', err);
+      raw = await openRouterChat([{ role: 'user', content: `${prompt}\n\nAntworte NUR mit JSON.` }], config, { temperature: 0.1 });
+    }
+  } else {
+    const res = await fetch(getOllamaChatUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: getModelForProvider(config),
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+        format: schema,
+        options: { temperature: 0.1 }
+      })
+    });
+    if (!res.ok) throw new Error(`Ollama failed: ${res.status} ${await res.text()}`);
+    raw = ((await res.json()) as { message?: { content?: string } }).message?.content ?? '';
+  }
+  const json = extractJsonObject(raw).replace(/,(\s*[}\]])/g, '$1');
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    throw new Error(`Ungültige KI-Antwort: ${raw.slice(0, 200)}`);
+  }
+}

@@ -2906,6 +2906,9 @@ export class CookbookDatabase {
     const insert = this.db.prepare(
       'INSERT INTO ingredient_products (ingredient_id, product_id, is_default) VALUES (?, ?, 0)'
     );
+    // The links live in their own table; touching the product row records the
+    // change in the sync log so app replicas pick up the new links.
+    const touch = this.db.prepare('UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = ?');
     const tx = this.db.transaction((ids: string[]) => {
       del.run(productId);
       const seen = new Set<string>();
@@ -2914,6 +2917,7 @@ export class CookbookDatabase {
         seen.add(id);
         insert.run(id, productId);
       }
+      touch.run(productId);
     });
     tx(ingredientIds);
   }

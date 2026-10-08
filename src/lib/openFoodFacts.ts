@@ -28,6 +28,7 @@ const SEARCH_FIELDS = [
   'product_name_de',
   'generic_name',
   'generic_name_de',
+  'categories',
   'brands',
   'quantity',
   'product_quantity',
