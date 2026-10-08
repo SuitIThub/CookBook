@@ -75,13 +75,28 @@ export default function RecipesPage() {
   const navigate = useNavigate();
 
   const initial = readLayout();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // ?search= / ?category= (tag and category links on the recipe page), like the website.
   const [q, setQ] = useState(() => searchParams.get('search') || '');
   const [category, setCategory] = useState(() => searchParams.get('category') || '');
   const [view, setView] = useState<View>(initial.view);
   const [catMode, setCatMode] = useState<CatMode>(initial.categoryMode);
   const [showImport, setShowImport] = useState(false);
+  // Shared link ("Teilen → Kochbuch", website: /share-target → ?importUrl=) → import prefilled.
+  const sharedImportUrl = searchParams.get('importUrl');
+  const [importUrl, setImportUrl] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!sharedImportUrl) return;
+    setImportUrl(sharedImportUrl);
+    setShowImport(true);
+    setSearchParams(
+      (p) => {
+        p.delete('importUrl');
+        return p;
+      },
+      { replace: true }
+    );
+  }, [sharedImportUrl, setSearchParams]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // "Rezept hinzufügen" on a shopping list opens this page in selection mode.
@@ -385,7 +400,17 @@ export default function RecipesPage() {
         )}
       </div>
 
-      {showImport && <ImportModal onClose={() => setShowImport(false)} onImported={onImported} />}
+      {showImport && (
+        <ImportModal
+          key={importUrl ?? ''}
+          initialUrl={importUrl}
+          onClose={() => {
+            setShowImport(false);
+            setImportUrl(undefined);
+          }}
+          onImported={onImported}
+        />
+      )}
       {addToListFor && <AddToShoppingListModal recipeIds={[addToListFor.id]} onClose={() => setAddToListFor(null)} />}
       {bulkListOpen && <AddToShoppingListModal recipeIds={[...selectedIds]} onClose={() => setBulkListOpen(false)} />}
 

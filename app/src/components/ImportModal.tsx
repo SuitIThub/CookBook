@@ -4,11 +4,13 @@ import { importFromUrl, importFromText } from '@/lib/recipeImport';
 interface Props {
   onClose: () => void;
   onImported: (recipeId: string) => void;
+  /** Prefilled URL (shared link). */
+  initialUrl?: string;
 }
 
-export default function ImportModal({ onClose, onImported }: Props) {
+export default function ImportModal({ onClose, onImported, initialUrl }: Props) {
   const [mode, setMode] = useState<'url' | 'text'>('url');
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(initialUrl ?? '');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
