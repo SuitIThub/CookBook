@@ -43,28 +43,43 @@ Nach Rezepten (referenzieren Rezepte + Produkte).
    Sync + Auth erledigen den Rest.
 4. Verifikation je Stück (Playwright), ein Commit pro sinnvollem Increment.
 
-## Status
-- ✅ Fundament: geteilter Kern, Sync (Pull/Push), Auth (Token), Opt-out, Offline-
-  first (Rezepte-Ansicht-Minimal).
-- ✅ **F1 Produkte** (Register/CRUD/Supermärkte/Barcode→OFF).
-- ✅ **F2 Zutaten-Katalog** (Liste/Nährwerte, Sync).
-- 🔄 **F3 Rezepte**: Ansicht (Live-Nährwerte/Preis/Skalierung, **Bilder-Galerie**),
-  Bearbeiten/Anlegen (**Bilder-Upload/Löschen**), Kochmodus (Timer), Varianten,
-  **Import (URL/Text/JSON-LD)** ✅, **Export (Markdown/JSON/Clipboard)** ✅,
-  **KI-Chat (Streaming, Ollama/OpenRouter, Verlauf)** ✅, **KI-Variante aus Chat
-  anwenden** ✅, **KI-Edit (regionsbasiert, Highlights-Bestätigung) aus Chat
-  anwenden** ✅ — offen: erweiterte Zutaten-Controls (Alternativen/Verknüpfung).
-- 🔄 **F4 Einkaufslisten**: Übersicht (anlegen/löschen/öffnen), Detail (Rezepte
-  mit Portionen hinzufügen/entfernen, Artikel abhaken, manuelle Artikel), Sync
-  (`shopping_list` in Pull/Push/Registry). Offen: Supermarkt-/Preis-Panel,
-  Dauerlisten/Vorlagen, „Zur Liste hinzufügen" aus Rezept, Alternativen-Auswahl.
-- ⏭️ Danach: F5 Tracker.
+## Status (Stand 2026-10-08)
+- ✅ Fundament: geteilter Kern, Sync (Pull/Push), Auth (Token), Opt-out, Offline-first.
+- ✅ F1 Produkte · ✅ F2 Zutaten · ✅ F3 Rezepte (inkl. Import/Export/KI/Bilder/Varianten/Kochmodus)
+- ✅ F4 Einkaufslisten (Übersicht/Detail/Preis-Panel/Gruppierung) · ✅ F5 Tracker (**online-first**,
+  nutzt REST statt lokaler Replica — offline nicht verfügbar; bewusste Entscheidung, s. u.)
 
-## Sync-Korrekturen (F4)
-- **Push-Cursor:** Pull setzte den Push-Cursor auf `maxSeq` und verschluckte damit
-  noch nicht gepushte lokale Schreibvorgänge (da runSync erst pullt, dann pusht).
-  Jetzt absorbiert der Pull nur tatsächlich geleakte Echo-Einträge.
-- **Client-LWW beim Pull:** Gepullte Zeilen (inkl. server-rückgespiegelter eigener
-  Echos) überschrieben neuere lokale Edits. Jetzt wird nur angewandt, wenn kein
-  lokaler Datensatz existiert, kein Timestamp vorliegt oder die eingehende Zeile
-  mindestens so neu ist. Betrifft alle Entitäten (Rezepte/Produkte/… profitieren).
+## Sync-Härtung (2026-10-08)
+- Pull-Cursor **pro Entity-Typ** (ein globales max() übersprang Änderungen zwischen Typ-Requests).
+- Pull setzt den Push-Cursor nicht mehr (verschluckte Nutzer-Edits während eines laufenden Pulls).
+- Push läuft, sobald der Server erreichbar ist (ein fehlschlagender Typ blockiert keine Uploads).
+- **Delete-LWW**: Tombstone-Zeit (ms) vs. `updatedAt`, beidseitig; Server schickt bei Ablehnung
+  seine Zeile zurück (`results`), Client konvergiert sofort.
+- **Einkaufslisten: Drei-Wege-Merge pro Artikel/Rezept/Feld** (`src/lib/syncMerge.ts`) gegen
+  `sync_base` (letzter gemeinsamer Stand, clientseitig). Gleichzeitiges Abhaken auf zwei Geräten
+  geht nicht mehr verloren.
+- Private Rezepte rein lokal (geteilte Kopie wird serverseitig gelöscht, Remote-Änderungen ignoriert).
+- Live-Sync: `/api/sync/stream` (SSE, nur `seq`), Auto-Sync bei Start/Fokus/Vordergrund/online/60 s;
+  Sync-Indikator in der Nav (synchron / läuft / offline / Problem + Badge „ausstehend").
+- TanStack `networkMode: 'always'` (lokale Queries froren offline ein).
+- Verifiziert per Zwei-Browser-E2E gegen isolierte DB-Kopie (18/18).
+
+## Parity-Lücken (Screenshot-Abgleich Website ↔ App, 412 px, 2026-10-08)
+- **Einkaufsliste Detail**: Kopf (Zurück, Live-Badge), „Artikel hinzufügen"-Modal, „Rezept
+  hinzufügen", **Teilen**, „Einträge übernehmen?"-Modal (Vorlage/Sammelliste beim ersten Öffnen),
+  Rezeptkarten mit „N Zutaten in der Liste" + Hervorheben (Auge), Portionen-Stepper-Stil.
+- **Einkaufslisten Übersicht**: Auswählen (Mehrfachauswahl), Schnell hinzufügen, Bearbeiten-Button
+  → Seite `einkaufsliste/[id]/edit` fehlt in der App.
+- **Rezept Detail**: Reihenfolge/Stil der Aktionen (Bearbeiten/Exportieren/Zur Einkaufsliste/
+  Kochmodus-Aufklapper), „Importiert von", Portionen/Zeit/Schwierigkeit-Block, Tag-Karte mit
+  „Tag hinzufügen", Karte „Nährwerte & Preis (live berechnet)" (Supermarkt, Produkt pro Zutat,
+  „Als Meal Prep planen"), Galerie-Kachel „Bild hinzufügen", schwebender KI-Chat-Button.
+- **Rezepte Übersicht**: „Exportieren ▾", zentrierter Kopf, schwebender KI-Chat-Button.
+- **Header/global**: Datenspar-Modus, Alias-Einstellungen-Modal, KI-Einstellungen-Modal.
+- **Startseite** (`/`): Kacheln Rezepte/Einkaufslisten.
+- Favoriten nur lokal (Website: alias-synchronisiert).
+- ✅ identisch/nahe: Kochmodus, Zutaten, Produkte.
+
+## App-Extras (über die Website hinaus)
+- Offline-first mit lokaler Replica + Outbox, Live-Sync, Sync-Indikator, Barcode-Scan nativ.
+- Offen/Ideen: Android-Share-Intent (Website: Web-Share-Target) für Rezept-Import, Tracker offline.

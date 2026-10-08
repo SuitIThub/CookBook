@@ -119,11 +119,10 @@ Adapter; der 12-MB-shopping_lists-Smell separat untersuchen.
 - ✅ **Y-app**: geteilter Kern läuft in der App auf **sql.js** (WASM) via `@core`-Alias,
   Persistenz in IndexedDB. Im Browser verifiziert (Schema, CRUD, Reload-Persistenz).
   Rest-Check: sql.js-WASM im echten Capacitor-WebView (Route `/_localtest` als Probe).
-- ⏭️ **Y-sync** (offen, design-schwer): pull/push-Endpoints (`updated_at` + `sync_tombstones`),
-  Outbox, Last-Write-Wins, Opt-out pro Entity (alias-Achse), „Server First, lokal als Fallback".
-  Braucht Design-Entscheidungen → separat besprechen.
+- ✅ **Y-sync**: pull/push, Outbox, LWW inkl. Deletes, Drei-Wege-Merge für Einkaufslisten,
+  Opt-out (private Rezepte), Live-Stream. Details + aktueller Stand: `APP_PARITY.md`.
+- Hinweis: On-device-DB ist **sql.js + IndexedDB** (nicht `@capacitor-community/sqlite`).
 
 ## Bewusst später
-- Lokale SQLite / Sync / Tombstones (Phase 2).
-- Weitere Features (Einkaufsliste, Tracker, Produkte) nach bewiesenem Stack.
+- Tracker offline (aktuell online-first über REST).
 - Shared-Types als eigenes Package (erst wenn Drift real wird).
