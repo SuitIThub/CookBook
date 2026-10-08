@@ -25,6 +25,17 @@ export const SYNC_KEYS = [
   'cookbook.preferredSupermarket'
 ];
 
+/**
+ * Personal data that belongs to one alias and must never be carried over to
+ * another one on a switch (the other keys are device preferences).
+ */
+const PERSONAL_KEYS = [
+  'cookbook.recipes.favorites',
+  'cookbook.tracker.profile',
+  'cookbook.ingredient.defaults',
+  'cookbook.preferredSupermarket'
+];
+
 interface RemoteSetting {
   key: string;
   value: string | null;
@@ -212,6 +223,50 @@ function disconnect() {
   }
 }
 
+/**
+ * Switching to another alias: its settings win. Personal data of the previous
+ * alias is dropped locally (never uploaded to the new one); device preferences
+ * the new alias doesn't have yet are seeded from this device.
+ */
+async function switchSettings(alias: string): Promise<void> {
+  savePending([]);
+  const meta = getMeta();
+  applyingRemote = true;
+  for (const key of PERSONAL_KEYS) {
+    rawRemove(key);
+    delete meta[key];
+  }
+  applyingRemote = false;
+  saveMeta(meta);
+  for (const key of PERSONAL_KEYS) applyKeyEffect(key, null);
+
+  let remote: RemoteSetting[];
+  try {
+    const data = await apiGet<{ settings?: RemoteSetting[] }>(`/api/alias-settings?alias=${encodeURIComponent(alias)}`);
+    remote = (data?.settings ?? []).filter((s) => s && SYNC_KEYS.includes(s.key));
+  } catch {
+    return; // offline: the next pull applies the alias' settings
+  }
+  const known = new Set(remote.map((s) => s.key));
+  const m = getMeta();
+  for (const key of known) m[key] = 0; // remote wins on a switch
+  saveMeta(m);
+  applyRemote(remote);
+
+  const now = Date.now();
+  const seed: RemoteSetting[] = [];
+  const m2 = getMeta();
+  for (const key of SYNC_KEYS) {
+    if (known.has(key) || PERSONAL_KEYS.includes(key)) continue;
+    const v = rawGet(key);
+    if (v === null) continue;
+    m2[key] = now;
+    seed.push({ key, value: v, updatedAt: now });
+  }
+  saveMeta(m2);
+  if (!(await pushSettings(seed))) savePending(seed.map((s) => s.key));
+}
+
 /** Join/switch/leave an alias (website semantics: share this device's settings first, then pull). */
 export async function setAlias(newAlias: string): Promise<void> {
   const next = (newAlias || '').trim().slice(0, 128);
@@ -223,22 +278,9 @@ export async function setAlias(newAlias: string): Promise<void> {
     return;
   }
   rawSet(ALIAS_KEY, next);
-  if (next !== prev) {
-    const meta = getMeta();
-    const now = Date.now();
-    const settings: RemoteSetting[] = [];
-    for (const key of SYNC_KEYS) {
-      const v = rawGet(key);
-      if (v !== null) {
-        meta[key] = now;
-        settings.push({ key, value: v, updatedAt: now });
-      }
-    }
-    saveMeta(meta);
-    if (!(await pushSettings(settings))) savePending(settings.map((s) => s.key));
-  }
+  if (next !== prev) await switchSettings(next);
+  else await pullAliasSettings();
   connect();
-  await pullAliasSettings();
   listeners.forEach((l) => l());
   // The new profile's tracker rows (weight, diary, meal plans) come via the data sync.
   if (next !== prev) void import('./syncRunner').then((m) => m.runSync()).catch(() => {});

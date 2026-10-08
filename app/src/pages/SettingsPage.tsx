@@ -64,6 +64,18 @@ export default function SettingsPage() {
     }
   };
 
+  // Does the stored token belong to this alias? (Otherwise every write fails with 403.)
+  const [tokenCheck, setTokenCheck] = useState<'valid' | 'invalid' | 'unknown'>('unknown');
+  useEffect(() => {
+    if (!alias || !getToken()) {
+      setTokenCheck('unknown');
+      return;
+    }
+    apiGet<{ valid: boolean }>('/api/auth/check')
+      .then((r) => setTokenCheck(r.valid ? 'valid' : 'invalid'))
+      .catch(() => setTokenCheck('unknown'));
+  }, [alias]);
+
   const [push, setPush] = useState<PushStatus>(getPushStatus());
   useEffect(() => subscribePushStatus(setPush), []);
   const [reregistering, setReregistering] = useState(false);
@@ -130,7 +142,10 @@ export default function SettingsPage() {
         <div className="card-content space-y-3 text-sm text-gray-700 dark:text-gray-300">
           <h2 className="heading-secondary">Status</h2>
           <p>
-            Alias: <strong>{alias || '—'}</strong> · Token: <strong>{getToken() ? 'gesetzt (Schreibzugriff)' : 'keiner (nur Lesen)'}</strong>{' '}
+            Alias: <strong>{alias || '—'}</strong> · Token:{' '}
+            <strong className={tokenCheck === 'invalid' ? 'text-red-600 dark:text-red-400' : tokenCheck === 'valid' ? 'text-green-700 dark:text-green-400' : ''}>
+              {!getToken() ? 'keiner (nur Lesen)' : tokenCheck === 'valid' ? 'gültig (Schreibzugriff)' : tokenCheck === 'invalid' ? `ungültig für „${alias}“ — Speichern & Pings schlagen fehl` : 'gesetzt (nicht geprüft, offline)'}
+            </strong>{' '}
             <button onClick={openAliasSettings} className="ml-1 text-orange-600 hover:underline dark:text-orange-400">ändern</button>
           </p>
           <p>

@@ -82,6 +82,7 @@
           Ohne Token nur <strong>Lesezugriff</strong>. Mit gültigem Token:
           Speichern &amp; Synchronisieren. Wird nur auf diesem Gerät gespeichert (nicht geteilt).
         </p>
+        <p id="token-status" class="mt-1 hidden text-xs"></p>
       </div>
       <div id="alias-status" class="text-sm text-gray-500 dark:text-gray-400"></div>
     </div>
@@ -108,6 +109,9 @@
       var ALIAS_KEY = 'cookbook.alias';
       var META_KEY = 'cookbook.alias.meta';
       var SYNC_KEYS = ['theme', 'lowBandwidth', 'cookbook.ai.settings', 'cookbook.recipes.layout', 'cookbook.recipes.favorites', 'cookbook.tracker.profile', 'cookbook.ingredient.defaults', 'cookbook.preferredSupermarket'];
+      // Personal data of one alias — never carried over to another alias on a
+      // switch (the other keys are device preferences).
+      var PERSONAL_KEYS = ['cookbook.recipes.favorites', 'cookbook.tracker.profile', 'cookbook.ingredient.defaults', 'cookbook.preferredSupermarket'];
 
       var origSetItem = Storage.prototype.setItem;
       var origRemoveItem = Storage.prototype.removeItem;
@@ -281,21 +285,41 @@
         rawSet(ALIAS_KEY, newAlias);
 
         if (newAlias !== prev) {
-          // Newly joined alias: share this device's current settings first,
-          // then pull so the server-side last-write-wins merge decides.
+          // Switch: the new alias' settings win. Personal data of the previous
+          // alias is dropped locally (never uploaded to the new one); device
+          // preferences the new alias doesn't have yet are seeded from here.
+          pending = {};
           var meta = getMeta();
-          var now = Date.now();
-          var settings = [];
-          SYNC_KEYS.forEach(function (key) {
-            var v = rawGet(key);
-            if (v !== null) {
-              meta[key] = now;
-              settings.push({ key: key, value: v, updatedAt: now });
-            }
-          });
+          applyingRemote = true;
+          PERSONAL_KEYS.forEach(function (key) { rawRemove(key); delete meta[key]; });
+          applyingRemote = false;
           saveMeta(meta);
-          pushSettings(settings).then(function () { pull(); });
+          PERSONAL_KEYS.forEach(function (key) { applyKeyEffect(key, null); });
+          fetch('/api/alias-settings?alias=' + encodeURIComponent(newAlias))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              var remote = (data && data.settings ? data.settings : []).filter(function (s) { return s && SYNC_KEYS.indexOf(s.key) !== -1; });
+              var known = {};
+              var m = getMeta();
+              remote.forEach(function (s) { known[s.key] = true; m[s.key] = 0; });
+              saveMeta(m);
+              applyRemote(remote);
+              var now = Date.now();
+              var seed = [];
+              var m2 = getMeta();
+              SYNC_KEYS.forEach(function (key) {
+                if (known[key] || PERSONAL_KEYS.indexOf(key) !== -1) return;
+                var v = rawGet(key);
+                if (v === null) return;
+                m2[key] = now;
+                seed.push({ key: key, value: v, updatedAt: now });
+              });
+              saveMeta(m2);
+              return pushSettings(seed);
+            })
+            .catch(function () {});
           connect();
+          refreshUI();
         } else {
           connect();
           pull();
@@ -328,6 +352,21 @@
 
       var input = document.getElementById('alias-input');
       var tokenInput = document.getElementById('token-input');
+      var tokenStatus = document.getElementById('token-status');
+      // Show whether the saved token belongs to the saved alias (else every write → 403).
+      function checkToken() {
+        if (!tokenStatus) return;
+        var alias = sync.getAlias();
+        var tok = localStorage.getItem('cookbook.token') || '';
+        if (!alias || !tok) { tokenStatus.classList.add('hidden'); return; }
+        fetch('/api/auth/check')
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            tokenStatus.textContent = d.valid ? '✓ Token gültig für „' + alias + '“' : '✗ Token passt nicht zu „' + alias + '“ — Speichern und Pings schlagen fehl.';
+            tokenStatus.className = 'mt-1 text-xs ' + (d.valid ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400');
+          })
+          .catch(function () { tokenStatus.classList.add('hidden'); });
+      }
       var status = document.getElementById('alias-status');
       var saveBtn = document.getElementById('alias-save-btn');
       var clearBtn = document.getElementById('alias-clear-btn');
@@ -356,6 +395,7 @@
         if (input) input.value = sync.getAlias();
         if (tokenInput) tokenInput.value = localStorage.getItem('cookbook.token') || '';
         updateStatus();
+        checkToken();
         modal.classList.remove('hidden');
         if (input) setTimeout(function () { input.focus(); }, 0);
       }
