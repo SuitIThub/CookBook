@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "953102598411",
+    "project_id": "kochbuch-863eb",
+    "storage_bucket": "kochbuch-863eb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:953102598411:android:91462494aa3bd29d00220e",
+        "android_client_info": {
+          "package_name": "de.kochbuch.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCslvTkFuAiU7TKpkt2gzIhdR01VMxRFAQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
