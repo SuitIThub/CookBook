@@ -32,6 +32,18 @@
 
         </activity>
 
+        <!-- Push (pings): look of notifications delivered while the app is in the background. -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_kochbuch" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/kochbuch_orange" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="shopping_pings" />
+
+        <receiver android:name=".timers.TimerAlarmReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -48,6 +60,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- In-app update: hand downloaded release APKs to the package installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Cooking timers: notifications, exact alarms (also with the app closed), restore after reboot. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

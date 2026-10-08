@@ -1,0 +1,139 @@
+---
+/**
+ * "Anpingen": notify other aliases about this shopping list. Everyone with the
+ * Kochbuch app registered under that alias gets a push notification that opens
+ * the list (POST /api/shopping-lists/ping). Opened by #ping-list-btn.
+ */
+interface Props {
+  listId: string;
+}
+const { listId } = Astro.props;
+---
+
+<div id="ping-aliases-modal" data-list-id={listId} class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4" aria-modal="true">
+  <div class="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+    <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Mitbewohner anpingen</h2>
+      <button type="button" data-ping-close class="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-300" aria-label="Schließen">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+    <div class="space-y-3 p-4">
+      <p class="text-sm text-gray-600 dark:text-gray-300">Wer die Kochbuch-App mit seinem Alias nutzt, bekommt eine Benachrichtigung mit der Bitte, sich diese Einkaufsliste anzusehen.</p>
+      <div id="ping-aliases-list" class="space-y-1 text-sm text-gray-800 dark:text-gray-100"></div>
+      <label class="block text-sm text-gray-700 dark:text-gray-200">
+        Nachricht (optional)
+        <input id="ping-message" type="text" maxlength="300" placeholder="z. B. Bringst du Milch mit?" class="form-input mt-1 w-full" />
+      </label>
+      <p id="ping-status" class="hidden text-sm"></p>
+    </div>
+    <div class="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+      <button type="button" data-ping-close class="btn btn-secondary">Abbrechen</button>
+      <button type="button" id="ping-send-btn" class="btn btn-primary" disabled>Anpingen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  type AliasRow = { alias: string; hasDevice: boolean };
+  const modal = document.getElementById('ping-aliases-modal') as HTMLElement | null;
+  const listEl = document.getElementById('ping-aliases-list') as HTMLElement | null;
+  const statusEl = document.getElementById('ping-status') as HTMLElement | null;
+  const sendBtn = document.getElementById('ping-send-btn') as HTMLButtonElement | null;
+  const messageEl = document.getElementById('ping-message') as HTMLInputElement | null;
+
+  const setStatus = (text: string, kind: 'info' | 'ok' | 'error' = 'info') => {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.className = `text-sm ${kind === 'error' ? 'text-red-600 dark:text-red-400' : kind === 'ok' ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'}`;
+    statusEl.classList.toggle('hidden', !text);
+  };
+  const selected = () => Array.from(listEl?.querySelectorAll<HTMLInputElement>('input[type=checkbox]:checked') ?? []).map((c) => c.value);
+  const updateSend = () => {
+    if (sendBtn) sendBtn.disabled = selected().length === 0;
+  };
+  const close = () => {
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+  };
+
+  async function open() {
+    if (!modal || !listEl) return;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setStatus('');
+    if (messageEl) messageEl.value = '';
+    listEl.innerHTML = '<p class="text-gray-500">Lade Aliasse …</p>';
+    updateSend();
+    try {
+      const res = await fetch('/api/push/aliases');
+      if (res.status === 403) {
+        listEl.innerHTML = '';
+        setStatus('Zum Anpingen brauchst du einen Alias mit Token (Alias-Einstellungen).', 'error');
+        return;
+      }
+      const data = (await res.json()) as { configured: boolean; aliases: AliasRow[] };
+      if (!data.configured) setStatus('Hinweis: Push ist auf dem Server noch nicht eingerichtet.', 'error');
+      if (data.aliases.length === 0) {
+        listEl.innerHTML = '<p class="text-gray-500">Keine anderen Aliasse vorhanden.</p>';
+        return;
+      }
+      listEl.innerHTML = '';
+      for (const a of data.aliases) {
+        const row = document.createElement('label');
+        row.className = 'flex items-center gap-2 rounded px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-700/50';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.value = a.alias;
+        box.className = 'h-4 w-4';
+        box.addEventListener('change', updateSend);
+        const name = document.createElement('span');
+        name.textContent = a.alias;
+        const hint = document.createElement('span');
+        hint.className = 'ml-auto text-xs text-gray-500 dark:text-gray-400';
+        hint.textContent = a.hasDevice ? 'App verbunden' : 'keine App';
+        row.append(box, name, hint);
+        listEl.append(row);
+      }
+    } catch {
+      listEl.innerHTML = '';
+      setStatus('Aliasse konnten nicht geladen werden.', 'error');
+    }
+  }
+
+  async function send() {
+    if (!modal || !sendBtn) return;
+    const aliases = selected();
+    if (aliases.length === 0) return;
+    sendBtn.disabled = true;
+    setStatus('Sende …');
+    try {
+      const res = await fetch('/api/shopping-lists/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listId: modal.dataset.listId, aliases, message: messageEl?.value || '' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const missing: string[] = data.noDevice ?? [];
+      setStatus(
+        data.sent > 0
+          ? `Gesendet${missing.length ? ` — ohne App: ${missing.join(', ')}` : ''}.`
+          : `Niemand erreicht — ${missing.join(', ')} ${missing.length === 1 ? 'hat' : 'haben'} die App nicht verbunden.`,
+        data.sent > 0 ? 'ok' : 'error'
+      );
+      if (data.sent > 0) setTimeout(close, 1500);
+    } catch (error) {
+      setStatus(`Anpingen fehlgeschlagen: ${(error as Error).message}`, 'error');
+    } finally {
+      updateSend();
+    }
+  }
+
+  document.getElementById('ping-list-btn')?.addEventListener('click', () => void open());
+  sendBtn?.addEventListener('click', () => void send());
+  modal?.querySelectorAll('[data-ping-close]').forEach((b) => b.addEventListener('click', close));
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) close();
+  });
+</script>

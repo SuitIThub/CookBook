@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // Single version source (also read by android/app/build.gradle).
 const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
@@ -12,7 +12,9 @@ const ASTRO_DEV = process.env.ASTRO_DEV_URL ?? 'http://localhost:4321';
 export default defineConfig({
   plugins: [react()],
   define: {
-    __APP_VERSION__: JSON.stringify(APP_VERSION)
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    // Push needs Firebase (google-services.json); without it the plugin must not be called.
+    __FCM_ENABLED__: JSON.stringify(existsSync(fileURLToPath(new URL('./android/app/google-services.json', import.meta.url))))
   },
   resolve: {
     alias: {

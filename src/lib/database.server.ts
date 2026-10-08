@@ -9,6 +9,7 @@
 import { CookbookDatabase } from './database';
 import { BetterSqlite3Driver } from './db/betterSqlite3Driver';
 import { ensureAuthSchema, validateToken } from './auth.server';
+import { createPushStore, ensurePushSchema } from './push.server';
 
 export { CookbookDatabase } from './database';
 
@@ -20,3 +21,7 @@ ensureAuthSchema(driver);
 export function validateAuth(alias: string, token: string): boolean {
   return validateToken(driver, alias, token);
 }
+
+// Server-only registry of app devices for push notifications (pings).
+ensurePushSchema(driver);
+export const pushStore = createPushStore(driver);

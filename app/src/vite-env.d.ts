@@ -6,6 +6,8 @@ interface ImportMetaEnv {
 
 /** app/package.json version, injected by vite.config.ts. */
 declare const __APP_VERSION__: string;
+/** Android build includes google-services.json (push notifications), see vite.config.ts. */
+declare const __FCM_ENABLED__: boolean;
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;

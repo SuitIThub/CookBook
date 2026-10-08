@@ -5,6 +5,8 @@ import { startAutoSync } from './lib/syncRunner';
 import { installShareTarget } from './lib/shareTarget';
 import { checkForUpdate, canInstallInApp, SHOW_UPDATE_EVENT, type AvailableUpdate } from './lib/appUpdate';
 import UpdateDialog from './components/UpdateDialog';
+import { installPush, PING_RECEIVED_EVENT } from './lib/push';
+import type { PushNotificationSchema } from '@capacitor/push-notifications';
 import SyncIndicator from './components/sync/SyncIndicator';
 import { LowBandwidthToggle, AliasSettingsModal, AISettingsModal } from './components/settings/HeaderModals';
 import { ThemeToggle, openAliasSettings, openAiSettings, OPEN_ALIAS_EVENT, OPEN_AI_EVENT } from './components/settings/headerActions';
@@ -143,6 +145,14 @@ function GlobalModals() {
   const [alias, setAlias] = useState(false);
   const [ai, setAi] = useState(false);
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
+  const [ping, setPing] = useState<PushNotificationSchema | null>(null);
+  const navigate = useNavigate();
+  // A ping arriving while the app is open (Android shows nothing by itself).
+  useEffect(() => {
+    const onPing = (e: Event) => setPing((e as CustomEvent<PushNotificationSchema>).detail);
+    document.addEventListener(PING_RECEIVED_EVENT, onPing);
+    return () => document.removeEventListener(PING_RECEIVED_EVENT, onPing);
+  }, []);
   // On app start (Android): offer a newer GitHub release.
   useEffect(() => {
     if (!canInstallInApp()) return;
@@ -168,6 +178,29 @@ function GlobalModals() {
       {alias && <AliasSettingsModal onClose={() => setAlias(false)} />}
       {ai && <AISettingsModal onClose={() => setAi(false)} />}
       {update && <UpdateDialog update={update} onClose={() => setUpdate(null)} />}
+      {ping && (
+        <div className="fixed inset-x-3 top-3 z-[80] rounded-xl border border-orange-200 bg-white p-3 shadow-2xl dark:border-orange-800 dark:bg-gray-800">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">{ping.title}</p>
+          <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-300">{ping.body}</p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={() => setPing(null)} className="rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">
+              Später
+            </button>
+            {typeof ping.data?.route === 'string' && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(ping.data.route);
+                  setPing(null);
+                }}
+                className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600"
+              >
+                Ansehen
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -179,6 +212,8 @@ export default function App() {
 
   // "Teilen → Kochbuch" (Android): a shared link opens the recipe import.
   useEffect(() => installShareTarget((to) => navigate(to)), [navigate]);
+  // Pings (push): register this device for the alias; a tapped ping opens its list.
+  useEffect(() => installPush((to) => navigate(to)), [navigate]);
 
   useEffect(
     // Sync on start, on focus/foreground, when back online, periodically and
