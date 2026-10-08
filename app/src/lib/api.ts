@@ -20,7 +20,7 @@ import { getServerUrl, getAlias, getToken } from './settings';
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
-function apiBase(): string {
+export function apiBase(): string {
   const configured = getServerUrl();
   if (configured) return configured;
   return (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { runSync, ensureSyncSchemaVersion } from './lib/syncRunner';
+import { startAutoSync } from './lib/syncRunner';
+import SyncIndicator from './components/sync/SyncIndicator';
 import RecipesPage from './pages/RecipesPage';
 import RecipeDetailPage from './pages/RecipeDetailPage';
 import RecipeEditPage from './pages/RecipeEditPage';
@@ -109,12 +110,14 @@ function Nav() {
                 {item.label}
               </NavLink>
             ))}
+            <SyncIndicator />
             <ThemeToggle />
             <SettingsLink />
           </div>
 
           {/* Mobile / tablet controls */}
           <div className="flex items-center space-x-2 desktop:hidden">
+            <SyncIndicator />
             <ThemeToggle />
             <button
               type="button"
@@ -167,21 +170,12 @@ function Nav() {
 export default function App() {
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    // On an app update that changed the sync schema, force a one-time full
-    // re-pull so nothing stays stranded behind the old cursor.
-    ensureSyncSchemaVersion();
-    const sync = () => {
-      runSync()
-        .then((o) => {
-          if (o.online && (o.applied || o.deleted)) queryClient.invalidateQueries();
-        })
-        .catch(() => {});
-    };
-    sync();
-    window.addEventListener('focus', sync);
-    return () => window.removeEventListener('focus', sync);
-  }, [queryClient]);
+  useEffect(
+    // Sync on start, on focus/foreground, when back online, periodically and
+    // when the server reports a change; refresh views when data changed.
+    () => startAutoSync(() => queryClient.invalidateQueries()),
+    [queryClient]
+  );
 
   return (
     <CookingTimersProvider>

@@ -333,3 +333,9 @@ export function resetSyncCursor(): void {
   localStorage.removeItem(LEGACY_CURSOR_KEY);
   localStorage.removeItem(PUSH_CURSOR_KEY);
 }
+
+/** Number of entities with local edits not yet uploaded (outbox size). */
+export async function pendingCount(): Promise<number> {
+  const { db } = await getLocalDb();
+  return pendingKeys(db).size;
+}
