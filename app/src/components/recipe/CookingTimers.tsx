@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getLayoutMode } from '@core/layoutMode';
+import { dismissNativeAlarm, ensureTimerNotifications, nativeTimers, syncNativeTimers } from '@/lib/nativeTimers';
 
 /**
  * A React port of the website's MultiTimerManager, reproducing the visible
@@ -19,6 +20,11 @@ import { getLayoutMode } from '@core/layoutMode';
  * localStorage under the same `active-timers` key the website uses so they
  * survive reloads. The website's optional server-backed *global* timer sync
  * (SSE) is intentionally omitted — the app is offline-first.
+ *
+ * Running timers count down against an absolute end time (`endsAt`), so they
+ * stay correct while the app is in the background. On Android the running set
+ * is mirrored to the native CookTimers plugin (lib/nativeTimers.ts): exact
+ * alarms + a countdown notification keep working when the app is closed.
  */
 
 export interface CookTimer {
@@ -31,7 +37,9 @@ export interface CookTimer {
   recipeName?: string;
   stepDescription?: string;
   autoStarted?: boolean;
-  startTime?: number; // epoch ms while running
+  endsAt?: number; // epoch ms while running
+  /** @deprecated pre-endsAt persisted state */
+  startTime?: number;
 }
 
 interface TimerApi {
@@ -63,6 +71,14 @@ function formatTime(totalSeconds: number): string {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+/** Recompute a running timer's remaining seconds from its end time. */
+function tickTimer(t: CookTimer, now: number): CookTimer {
+  if (!t.isRunning || !t.endsAt) return t;
+  const remaining = Math.ceil((t.endsAt - now) / 1000);
+  if (remaining <= 0) return { ...t, remaining: 0, isRunning: false, isCompleted: true, endsAt: undefined };
+  return remaining === t.remaining ? t : { ...t, remaining };
+}
+
 function loadTimers(): CookTimer[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -70,15 +86,9 @@ function loadTimers(): CookTimer[] {
     const parsed = JSON.parse(raw) as CookTimer[];
     const now = Date.now();
     return parsed.map((t) => {
-      if (t.isRunning && t.startTime) {
-        const elapsed = Math.floor((now - t.startTime) / 1000);
-        const remaining = t.remaining - elapsed;
-        if (remaining <= 0) {
-          return { ...t, remaining: 0, isRunning: false, isCompleted: true, startTime: undefined };
-        }
-        return { ...t, remaining, startTime: now };
-      }
-      return t;
+      if (!t.isRunning) return t;
+      const endsAt = t.endsAt ?? now + t.remaining * 1000; // legacy entries had no end time
+      return tickTimer({ ...t, endsAt, startTime: undefined }, now);
     });
   } catch {
     return [];
@@ -122,25 +132,38 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
     const hasRunning = timers.some((t) => t.isRunning);
     if (!hasRunning) return;
     const iv = setInterval(() => {
-      setTimers((prev) =>
-        prev.map((t) => {
-          if (!t.isRunning) return t;
-          const remaining = t.remaining - 1;
-          if (remaining <= 0) {
-            return { ...t, remaining: 0, isRunning: false, isCompleted: true, startTime: undefined };
-          }
-          return { ...t, remaining };
-        })
-      );
+      const now = Date.now();
+      setTimers((prev) => prev.map((t) => tickTimer(t, now)));
     }, 1000);
     return () => clearInterval(iv);
   }, [timers]);
 
-  // Fire a vibration/notification once when a timer completes.
+  // Mirror the running timers to Android (alarms + countdown notification).
+  const runningKey = timers
+    .filter((t) => t.isRunning && t.endsAt)
+    .map((t) => `${t.id}:${t.endsAt}`)
+    .join('|');
+  useEffect(() => {
+    syncNativeTimers(
+      timers
+        .filter((t) => t.isRunning && t.endsAt)
+        .map((t) => ({
+          id: t.id,
+          label: t.label,
+          body: [t.recipeName, t.stepDescription].filter(Boolean).join(' — '),
+          endsAt: t.endsAt!
+        }))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runningKey]);
+
+  // Fire a vibration/notification once when a timer completes (web only; on
+  // Android the native alarm notification does this, also with the app closed).
   useEffect(() => {
     for (const t of timers) {
       if (t.isCompleted && !alarmed.current.has(t.id)) {
         alarmed.current.add(t.id);
+        if (nativeTimers) continue;
         try {
           navigator.vibrate?.([300, 150, 300, 150, 300]);
         } catch {
@@ -174,11 +197,15 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
           recipeName,
           stepDescription,
           autoStarted: autoStart,
-          startTime: autoStart ? Date.now() : undefined
+          endsAt: autoStart ? Date.now() + seconds * 1000 : undefined
         }
       ]);
       setExpanded(true);
       setSidebarOpen(true);
+      if (nativeTimers) {
+        ensureTimerNotifications();
+        return id;
+      }
       try {
         if ('Notification' in window && Notification.permission === 'default') {
           Notification.requestPermission().catch(() => {});
@@ -191,25 +218,43 @@ export function CookingTimersProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const start = (id: string) =>
-    setTimers((p) => p.map((t) => (t.id === id ? { ...t, isRunning: true, isCompleted: false, startTime: Date.now() } : t)));
-  const pause = (id: string) =>
-    setTimers((p) => p.map((t) => (t.id === id ? { ...t, isRunning: false, startTime: undefined } : t)));
-  const stop = (id: string) =>
+  const start = (id: string) => {
+    dismissNativeAlarm(id);
     setTimers((p) =>
-      p.map((t) =>
-        t.id === id ? { ...t, isRunning: false, isCompleted: false, remaining: t.duration, startTime: undefined } : t
-      )
+      p.map((t) => {
+        if (t.id !== id) return t;
+        const remaining = t.isCompleted || t.remaining <= 0 ? t.duration : t.remaining;
+        return { ...t, remaining, isRunning: true, isCompleted: false, endsAt: Date.now() + remaining * 1000 };
+      })
     );
+  };
+  const pause = (id: string) =>
+    setTimers((p) =>
+      p.map((t) => {
+        if (t.id !== id || !t.isRunning) return t;
+        const remaining = t.endsAt ? Math.max(0, Math.ceil((t.endsAt - Date.now()) / 1000)) : t.remaining;
+        return { ...t, remaining, isRunning: false, endsAt: undefined };
+      })
+    );
+  const stop = (id: string) => {
+    dismissNativeAlarm(id);
+    setTimers((p) =>
+      p.map((t) => (t.id === id ? { ...t, isRunning: false, isCompleted: false, remaining: t.duration, endsAt: undefined } : t))
+    );
+  };
   const adjust = (id: string, minutes: number) =>
     setTimers((p) =>
       p.map((t) => {
         if (t.id !== id) return t;
         const remaining = Math.max(0, t.remaining + minutes * 60);
-        return { ...t, remaining, duration: Math.max(t.duration, remaining), isCompleted: remaining === 0 ? t.isCompleted : false };
+        const endsAt = t.isRunning && t.endsAt ? Math.max(Date.now(), t.endsAt + minutes * 60000) : t.endsAt;
+        return { ...t, remaining, endsAt, duration: Math.max(t.duration, remaining), isCompleted: remaining === 0 ? t.isCompleted : false };
       })
     );
-  const remove = (id: string) => setTimers((p) => p.filter((t) => t.id !== id));
+  const remove = (id: string) => {
+    dismissNativeAlarm(id);
+    setTimers((p) => p.filter((t) => t.id !== id));
+  };
 
   const api = useMemo<TimerApi>(() => ({ addTimer }), [addTimer]);
 
