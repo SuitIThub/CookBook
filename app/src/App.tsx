@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { startAutoSync } from './lib/syncRunner';
+import { installShareTarget } from './lib/shareTarget';
 import SyncIndicator from './components/sync/SyncIndicator';
 import { LowBandwidthToggle, AliasSettingsModal, AISettingsModal } from './components/settings/HeaderModals';
 import { ThemeToggle, openAliasSettings, openAiSettings, OPEN_ALIAS_EVENT, OPEN_AI_EVENT } from './components/settings/headerActions';
@@ -160,6 +161,10 @@ function GlobalModals() {
 export default function App() {
   const queryClient = useQueryClient();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // "Teilen → Kochbuch" (Android): a shared link opens the recipe import.
+  useEffect(() => installShareTarget((to) => navigate(to)), [navigate]);
 
   useEffect(
     // Sync on start, on focus/foreground, when back online, periodically and

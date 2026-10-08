@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kochbuch</string>
+    <string name="title_activity_main">Kochbuch</string>
+    <string name="package_name">de.kochbuch.app</string>
+    <string name="custom_url_scheme">de.kochbuch.app</string>
+</resources>
