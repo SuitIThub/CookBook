@@ -1,4 +1,3 @@
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +6,13 @@ import './index.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false }
+    // networkMode 'always': most queries read the LOCAL replica, so they must
+    // keep running while the device is offline. The default ('online') pauses
+    // every query when navigator.onLine is false, freezing the whole UI after
+    // an offline edit. Online-only queries (tracker) just fail and show their
+    // error state instead.
+    queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false, networkMode: 'always' },
+    mutations: { networkMode: 'always' }
   }
 });
 

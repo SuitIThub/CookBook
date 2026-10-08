@@ -22,7 +22,7 @@ export default function SyncTestPage() {
         out.push('reset local replica + cursor');
 
         const pull = await pullFromServer();
-        out.push(`pull: ok=${pull.ok} applied=${pull.applied} deleted=${pull.deleted} cursor=${pull.cursor}`);
+        out.push(`pull: ok=${pull.ok} applied=${pull.applied} deleted=${pull.deleted} reachable=${pull.reachable}`);
 
         const { db } = await getLocalDb();
         const localCount = db.getAllRecipes().length;
