@@ -2,7 +2,6 @@ import type { SqlDriver } from './db/driver';
 import { v4 as uuidv4 } from 'uuid';
 import type { NutritionData, Recipe, ShoppingList, ShoppingListItem, ShoppingListRecipe, Quantity } from '../types/recipe';
 import type {
-  BodyProfile,
   CatalogueIngredient,
   DiaryComposition,
   DiaryEntry,
@@ -411,6 +410,18 @@ export class CookbookDatabase {
       `CREATE INDEX IF NOT EXISTS idx_sync_changes_type_seq ON sync_changes(entity_type, seq)`
     );
 
+    // Last version of an entity both this client and the server agreed on
+    // (client-side only in practice): the common ancestor for the three-way
+    // shopping-list merge (see syncMerge.ts).
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_base (
+        entity_type TEXT NOT NULL,
+        entity_id   TEXT NOT NULL,
+        data        TEXT NOT NULL,
+        PRIMARY KEY (entity_type, entity_id)
+      )
+    `);
+
     // Echo-suppression flag. When a client applies rows pulled from the server,
     // it sets applying=1 so the triggers below do NOT log those writes to
     // sync_changes — otherwise the client would push the server's own changes
@@ -421,9 +432,11 @@ export class CookbookDatabase {
     );
     this.db.exec(`INSERT OR IGNORE INTO sync_state (id, applying) VALUES (1, 0)`);
 
-    // Epoch milliseconds (second resolution is fine here), matching the ms
-    // convention already used by alias_settings.updated_at.
-    const NOW_MS = `CAST(strftime('%s','now') AS INTEGER) * 1000`;
+    // Epoch milliseconds, matching the ms convention of alias_settings.updated_at.
+    // Full ms resolution (not seconds): tombstone times are compared against row
+    // `updatedAt`s for delete-vs-edit last-write-wins, and an edit followed by a
+    // delete within the same second must still let the delete win.
+    const NOW_MS = `CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)`;
     const NOT_APPLYING = `WHEN (SELECT applying FROM sync_state WHERE id = 1) = 0`;
     const specs: { table: string; type: string; scoped: boolean }[] = [
       { table: 'recipes', type: 'recipe', scoped: false },
@@ -494,6 +507,45 @@ export class CookbookDatabase {
       // to let one row slip past the flag; this trim makes it deterministic.)
       this.db.prepare('DELETE FROM sync_changes WHERE seq > ?').run(before);
     }
+  }
+
+  /** Deletion time (epoch ms) of an entity's tombstone, or null when none. */
+  getTombstoneTime(type: string, id: string): number | null {
+    const r = this.db
+      .prepare('SELECT deleted_at FROM sync_tombstones WHERE entity_type = ? AND entity_id = ?')
+      .get(type, id) as any;
+    return r ? Number(r.deleted_at) : null;
+  }
+
+  /**
+   * Back-date a tombstone to when the delete actually happened (a client that
+   * deleted offline pushes it later; the trigger stamps the apply time).
+   */
+  setTombstoneTime(type: string, id: string, deletedAt: number): void {
+    this.db
+      .prepare('UPDATE sync_tombstones SET deleted_at = ? WHERE entity_type = ? AND entity_id = ?')
+      .run(deletedAt, type, id);
+  }
+
+  /** Common-ancestor snapshot for three-way merges (client side). */
+  getSyncBase<T = unknown>(type: string, id: string): T | null {
+    const r = this.db
+      .prepare('SELECT data FROM sync_base WHERE entity_type = ? AND entity_id = ?')
+      .get(type, id) as any;
+    return r ? (JSON.parse(r.data) as T) : null;
+  }
+
+  setSyncBase(type: string, id: string, data: unknown): void {
+    this.db
+      .prepare(
+        `INSERT INTO sync_base (entity_type, entity_id, data) VALUES (?, ?, ?)
+         ON CONFLICT(entity_type, entity_id) DO UPDATE SET data = excluded.data`
+      )
+      .run(type, id, JSON.stringify(data));
+  }
+
+  deleteSyncBase(type: string, id: string): void {
+    this.db.prepare('DELETE FROM sync_base WHERE entity_type = ? AND entity_id = ?').run(type, id);
   }
 
   /** Highest change-log sequence, used as the sync cursor high-water mark. */

@@ -23,7 +23,7 @@ let inFlight: Promise<SyncOutcome> | null = null;
  * high-water mark are never seen again (the cause of "shopping lists / the
  * Sammelliste don't load after updating the app").
  */
-const SYNC_SCHEMA_VERSION = '2026-08-23.shopping-full-parity';
+const SYNC_SCHEMA_VERSION = '2026-10-08.per-type-cursors-merge';
 const SCHEMA_VERSION_KEY = 'kochbuch.sync.schemaVersion';
 
 /** Run once at startup: force a full re-pull when the sync schema version changed. */
@@ -49,11 +49,13 @@ export function runSync(): Promise<SyncOutcome> {
   inFlight = (async () => {
     const pull = await pullFromServer();
     let pushed = 0;
-    if (pull.ok) {
+    // Push whenever the server answered at all — one entity type failing to
+    // pull (e.g. a huge payload timing out) must not hold back local edits.
+    if (pull.reachable) {
       const push = await pushToServer().catch(() => ({ ok: false, pushed: 0 }));
       pushed = push.pushed;
     }
-    return { online: pull.ok, applied: pull.applied, deleted: pull.deleted, pushed };
+    return { online: pull.reachable, applied: pull.applied, deleted: pull.deleted, pushed };
   })();
   try {
     return inFlight;
