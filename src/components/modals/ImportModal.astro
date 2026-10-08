@@ -280,7 +280,23 @@ declare global {
     }
   }
 
+  // Instagram reels: no recipe page to parse — the server analyses caption,
+  // speech and frames with AI (api/recipes/import/reel).
+  function isReelUrl(url: string): boolean {
+    try {
+      const u = new URL(url);
+      return /(^|\.)instagram\.com$/i.test(u.hostname) && /^\/(reels?|p|tv)\//i.test(u.pathname);
+    } catch {
+      return false;
+    }
+  }
+
   async function updateUrlPreview(url: string) {
+    if (isReelUrl(url)) {
+      if (detectedSite) detectedSite.textContent = 'Instagram-Reel — KI-Import aus Beschreibung, gesprochenem und eingeblendetem Text (dauert ca. 1–2 Minuten)';
+      urlPreview?.classList.remove('hidden');
+      return;
+    }
     try {
       new URL(url); // Validate URL format first
       
@@ -381,9 +397,54 @@ declare global {
     urlPreview?.classList.add('hidden');
   }
 
+  async function handleReelImport(url: string) {
+    const button = confirmImport as HTMLButtonElement | null;
+    const setStatus = (text: string) => {
+      if (button) button.textContent = text;
+    };
+    if (button) button.disabled = true;
+    setStatus('Reel wird geladen …');
+    try {
+      let ai = {};
+      try {
+        ai = JSON.parse(localStorage.getItem('cookbook.ai.settings') || '{}');
+      } catch {}
+      const start = await fetch('/api/recipes/import/reel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, ai })
+      });
+      const started = await start.json();
+      if (!start.ok) throw new Error(started.error || `HTTP ${start.status}`);
+      let job = started;
+      while (job.stage !== 'done' && job.stage !== 'error') {
+        await new Promise((r) => setTimeout(r, 2000));
+        const res = await fetch(`/api/recipes/import/reel?job=${encodeURIComponent(started.jobId)}`);
+        job = await res.json();
+        if (!res.ok) throw new Error(job.error || `HTTP ${res.status}`);
+        setStatus(job.message || 'Analysiere …');
+      }
+      if (job.stage === 'error') throw new Error(job.error || 'Unbekannter Fehler');
+      importModal?.classList.add('hidden');
+      const go = () => (window.location.href = `/rezept/${job.recipeId}`);
+      if (job.warnings?.length && window.showWarnings) window.showWarnings(job.warnings, go);
+      else go();
+    } catch (error) {
+      const msg = `Reel-Import fehlgeschlagen: ${(error as Error).message || error}`;
+      if (window.showError) window.showError(msg);
+      else alert(msg);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Importieren';
+      }
+    }
+  }
+
   async function handleUrlImport() {
     const url = recipeUrl?.value.trim();
     if (!url) return;
+    if (isReelUrl(url)) return handleReelImport(url);
 
     // Show loading state
     if (confirmImport) {

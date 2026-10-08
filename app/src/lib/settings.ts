@@ -14,10 +14,16 @@ export const AI_SETTINGS_KEY = 'cookbook.ai.settings';
 
 export type AiProvider = 'ollama' | 'openrouter';
 
+export type ReelVision = 'none' | 'ocr' | 'openrouter' | 'ollama';
+
 export interface AiSettings {
   provider: AiProvider;
   model: string;
   openRouterApiKey: string;
+  /** Reel import: how frames are analysed (website: same key). */
+  reelVision?: ReelVision;
+  /** Vision model for reelVision openrouter/ollama ('' = server default). */
+  reelVisionModel?: string;
 }
 
 export interface AppSettings {
@@ -81,10 +87,12 @@ export function getAiSettings(): AiSettings {
     return {
       provider: p.provider === 'openrouter' ? 'openrouter' : 'ollama',
       model: typeof p.model === 'string' ? p.model : '',
-      openRouterApiKey: typeof p.openRouterApiKey === 'string' ? p.openRouterApiKey : ''
+      openRouterApiKey: typeof p.openRouterApiKey === 'string' ? p.openRouterApiKey : '',
+      reelVision: ['none', 'ocr', 'openrouter', 'ollama'].includes(p.reelVision) ? p.reelVision : 'ocr',
+      reelVisionModel: typeof p.reelVisionModel === 'string' ? p.reelVisionModel : ''
     };
   } catch {
-    return { provider: 'ollama', model: '', openRouterApiKey: '' };
+    return { provider: 'ollama', model: '', openRouterApiKey: '', reelVision: 'ocr', reelVisionModel: '' };
   }
 }
 export function saveAiSettings(s: AiSettings): void {
@@ -120,6 +128,6 @@ export function saveSettings(s: AppSettings): void {
   };
   set(SERVER_URL_KEY, s.serverUrl.replace(/\/+$/, ''));
   set(TOKEN_KEY, s.token);
-  saveAiSettings({ provider: s.aiProvider, model: s.aiModel.trim(), openRouterApiKey: s.openRouterApiKey.trim() });
+  saveAiSettings({ ...getAiSettings(), provider: s.aiProvider, model: s.aiModel.trim(), openRouterApiKey: s.openRouterApiKey.trim() });
   // The alias itself is set via aliasSync.setAlias (joins the alias' settings).
 }

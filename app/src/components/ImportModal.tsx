@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { importFromUrl, importFromText } from '@/lib/recipeImport';
+import { importFromUrl, importFromText, importFromReel, isReelUrl } from '@/lib/recipeImport';
 
 interface Props {
   onClose: () => void;
@@ -14,15 +14,24 @@ export default function ImportModal({ onClose, onImported, initialUrl }: Props) 
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+  const reel = mode === 'url' && isReelUrl(url);
 
   const run = async () => {
     setBusy(true);
     setError(null);
     try {
+      if (reel) {
+        const r = await importFromReel(url, setProgress);
+        if (r.warnings.length) alert(r.warnings.join('\n\n'));
+        onImported(r.recipeId);
+        return;
+      }
       const id = mode === 'url' ? await importFromUrl(url.trim()) : await importFromText(text);
       onImported(id);
     } catch (e) {
       setError((e as Error).message);
+      setProgress(null);
       setBusy(false);
     }
   };
@@ -65,7 +74,9 @@ export default function ImportModal({ onClose, onImported, initialUrl }: Props) 
               onKeyDown={(e) => e.key === 'Enter' && url.trim() && run()}
             />
             <p className="mt-1 text-xs text-secondary-500">
-              Die Seite wird serverseitig ausgelesen (nur online, Token nötig).
+              {reel
+                ? 'Instagram-Reel — KI-Import aus Beschreibung, gesprochenem und eingeblendetem Text (dauert ca. 1–2 Minuten, nur online).'
+                : 'Die Seite wird serverseitig ausgelesen (nur online, Token nötig).'}
             </p>
           </div>
         ) : (
@@ -78,6 +89,7 @@ export default function ImportModal({ onClose, onImported, initialUrl }: Props) 
           />
         )}
 
+        {busy && progress && <p className="mt-3 text-sm text-secondary-600 dark:text-secondary-300">{progress}</p>}
         {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="mt-5 flex justify-end gap-2">

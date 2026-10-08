@@ -5,7 +5,7 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { apiGet } from '@/lib/api';
-import { getAlias, getToken, TOKEN_KEY, getAiSettings, saveAiSettings, type AiProvider } from '@/lib/settings';
+import { getAlias, getToken, TOKEN_KEY, getAiSettings, saveAiSettings, type AiProvider, type ReelVision } from '@/lib/settings';
 import { setAlias, onAliasSettingsChanged } from '@/lib/aliasSync';
 
 /* ------------------------------------------------------- Datenspar-Modus */
@@ -202,6 +202,8 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
   const [apiKey, setApiKey] = useState(initial.openRouterApiKey);
   const [models, setModels] = useState<{ id: string; label: string }[] | null>(null);
   const [model, setModel] = useState(initial.model);
+  const [reelVision, setReelVision] = useState<ReelVision>(initial.reelVision ?? 'ocr');
+  const [reelVisionModel, setReelVisionModel] = useState(initial.reelVisionModel ?? '');
   const [status, setStatus] = useState('');
   const [keyStatus, setKeyStatus] = useState('');
   const [usage, setUsage] = useState<{ free: string; credit: string } | null>(null);
@@ -274,7 +276,7 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
-    const s = { provider, model: model || '', openRouterApiKey: apiKey.trim() };
+    const s = { provider, model: model || '', openRouterApiKey: apiKey.trim(), reelVision, reelVisionModel: reelVisionModel.trim() };
     saveAiSettings(s);
     document.dispatchEvent(new CustomEvent('ai-settings-updated', { detail: s }));
     onClose();
@@ -369,6 +371,36 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
                 <p className="mt-1 text-[11px] text-indigo-800 dark:text-indigo-200">{usage.credit}</p>
               </div>
             )}
+          </div>
+          <div className="border-t border-gray-200 pt-3 dark:border-gray-700">
+            <label htmlFor="ai-reel-vision" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Reel-Import: Bildanalyse</label>
+            <select
+              id="ai-reel-vision"
+              value={reelVision}
+              onChange={(e) => setReelVision(e.target.value as ReelVision)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            >
+              <option value="ocr">Texterkennung (lokal, kostenlos)</option>
+              <option value="openrouter">KI-Bildanalyse über OpenRouter (Bruchteile eines Cents)</option>
+              <option value="ollama">KI-Bildanalyse über Ollama (lokal, Vision-Modell nötig)</option>
+              <option value="none">Aus (nur Beschreibung und Ton)</option>
+            </select>
+            {(reelVision === 'openrouter' || reelVision === 'ollama') && (
+              <div className="mt-2">
+                <label htmlFor="ai-reel-vision-model" className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Bildmodell (leer = Standard des Servers)</label>
+                <input
+                  id="ai-reel-vision-model"
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={reelVisionModel}
+                  onChange={(e) => setReelVisionModel(e.target.value)}
+                  placeholder={reelVision === 'openrouter' ? 'z. B. google/gemini-2.5-flash-lite' : 'z. B. qwen2.5vl:7b'}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                />
+              </div>
+            )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Wie eingeblendeter Text und Bildinhalt eines Instagram-Reels ausgewertet werden. Beschreibung und gesprochener Text werden immer genutzt.</p>
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-700">

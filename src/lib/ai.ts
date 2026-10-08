@@ -885,3 +885,97 @@ Gib nur das JSON mit variantName (max. 3 Wörter) und dem vollständigen recipeD
   }
   return parseProposedVariant(await ollamaProposeVariantRaw(userContent, config), 'Ollama');
 }
+
+/* ------------------------------------------------- reel import (video) */
+
+export type ReelVisionMode = 'none' | 'ocr' | 'openrouter' | 'ollama';
+
+const REEL_VISION_PROMPT = `Das sind Standbilder aus einem kurzen Koch-Video (z. B. Instagram-Reel), in zeitlicher Reihenfolge.
+Schreibe alles auf, was für das Rezept relevant ist:
+- eingeblendeten Text wörtlich (Zutaten, Mengen, Temperaturen, Zeiten, Schritte),
+- sichtbare Zutaten und Arbeitsschritte, wenn sie nicht als Text eingeblendet sind.
+Antworte als knappe Stichpunktliste auf Deutsch, ohne Einleitung. Erfinde nichts, was nicht zu sehen ist.`;
+
+/** Default vision models (overridable per user in the AI settings). */
+export function defaultReelVisionModel(mode: 'openrouter' | 'ollama'): string {
+  return mode === 'openrouter'
+    ? import.meta.env.REEL_VISION_MODEL_OPENROUTER || 'google/gemini-2.5-flash-lite'
+    : import.meta.env.REEL_VISION_MODEL_OLLAMA || 'qwen2.5vl:7b';
+}
+
+/**
+ * Describe recipe-relevant content of video frames (JPEG base64, no data:
+ * prefix) with a vision model via OpenRouter or Ollama.
+ */
+export async function describeReelFrames(
+  framesBase64: string[],
+  mode: 'openrouter' | 'ollama',
+  model: string,
+  openRouterApiKey?: string
+): Promise<string> {
+  if (framesBase64.length === 0) return '';
+  if (mode === 'openrouter') {
+    const apiKey = openRouterApiKey?.trim() || getOpenRouterEnvApiKey();
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: REEL_VISION_PROMPT },
+              ...framesBase64.map((b64) => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } }))
+            ]
+          }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error(`OpenRouter-Bildanalyse fehlgeschlagen (${res.status}): ${(await res.text()).slice(0, 300)}`);
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return data.choices?.[0]?.message?.content?.trim() ?? '';
+  }
+  const res = await fetch(getOllamaChatUrl(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      stream: false,
+      options: { temperature: 0.2 },
+      messages: [{ role: 'user', content: REEL_VISION_PROMPT, images: framesBase64 }]
+    })
+  });
+  if (!res.ok) throw new Error(`Ollama-Bildanalyse fehlgeschlagen (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  const data = (await res.json()) as { message?: { content?: string } };
+  return data.message?.content?.trim() ?? '';
+}
+
+/**
+ * Build a complete recipe (recipeData JSON) from the raw material of a cooking
+ * video: caption, speech transcript, on-screen text / frame descriptions.
+ */
+export async function recipeFromReelSources(sources: string, config?: AIRequestConfig): Promise<Record<string, unknown>> {
+  const userContent = `Erstelle aus dem folgenden Material eines Koch-Videos (Instagram-Reel) ein vollständiges Rezept als JSON (variantName + recipeData). Antworte NUR mit dem JSON-Objekt, kein anderer Text.
+
+Das Material kann unvollständig, doppelt oder ungeordnet sein (Beschreibung, gesprochener Text, eingeblendeter Text, Bildbeschreibungen). Führe es zu EINEM sauberen Rezept zusammen:
+- title: kurzer, klarer Rezeptname auf Deutsch (keine Emojis, keine Hashtags).
+- description: 1–3 Sätze, worum es geht. Keine Werbung, keine Hashtags, keine Aufrufe zum Folgen/Liken.
+- ingredientGroups: alle Zutaten mit Menge und Einheit. Pro Zutat genau EIN Eintrag in "quantities" ({ "amount": Zahl, "unit": "g" | "ml" | "EL" | "TL" | "Stück" | … }). Ist keine Menge genannt: amount 0 und unit "".
+- preparationGroups: die Zubereitung als klare, nummerierbare Schritte in sinnvoller Reihenfolge. Jeder Schritt mit "id", "text", "linkedIngredients": [], "intermediateIngredients": [].
+- metadata.servings: genannte Portionen, sonst 2. metadata.timeEntries: genannte Zeiten (id, label, minutes).
+- tags: 2–6 passende deutsche Schlagwörter. category: passende Kategorie.
+- variantName: "Reel".
+Erfinde keine Zutaten oder Mengen, die nirgends vorkommen. Übersetze fremdsprachiges Material ins Deutsche.
+Verwende für alle id-Felder kurze eindeutige Werte (z. B. "a1b2c3").
+
+--- MATERIAL ---
+${sources}`;
+
+  const proposed =
+    getProvider(config) === 'openrouter'
+      ? await openRouterProposeVariant(userContent, config)
+      : parseProposedVariant(await ollamaProposeVariantRaw(userContent, config), 'Ollama');
+  return proposed.recipeData;
+}
