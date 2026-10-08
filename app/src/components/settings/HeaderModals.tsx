@@ -5,7 +5,9 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { apiGet } from '@/lib/api';
-import { getAlias, getToken, TOKEN_KEY, getAiSettings, saveAiSettings, type AiProvider, type ReelVision } from '@/lib/settings';
+import { getAlias, getToken, TOKEN_KEY, getAiSettings, saveAiSettings, type AiProvider } from '@/lib/settings';
+import { resolveTasks, TASK_DEFAULTS, type TaskModel, type VisionMode } from '@core/aiTasks';
+import ModelPicker from './ModelPicker';
 import { setAlias, onAliasSettingsChanged } from '@/lib/aliasSync';
 
 /* ------------------------------------------------------- Datenspar-Modus */
@@ -200,10 +202,12 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
   const initial = getAiSettings();
   const [provider, setProvider] = useState<AiProvider>(initial.provider);
   const [apiKey, setApiKey] = useState(initial.openRouterApiKey);
-  const [models, setModels] = useState<{ id: string; label: string }[] | null>(null);
   const [model, setModel] = useState(initial.model);
-  const [reelVision, setReelVision] = useState<ReelVision>(initial.reelVision ?? 'ocr');
-  const [reelVisionModel, setReelVisionModel] = useState(initial.reelVisionModel ?? '');
+  // Per-task models ("Modelle für Aufgaben"); null = like the chat model.
+  const initialTasks = resolveTasks(initial);
+  const [structureTask, setStructureTask] = useState<TaskModel | null>(initialTasks.structure);
+  const [visionTask, setVisionTask] = useState<{ mode: VisionMode; model: string }>(initialTasks.vision);
+  const [matchingTask, setMatchingTask] = useState<TaskModel | null>(initialTasks.matching);
   const [status, setStatus] = useState('');
   const [keyStatus, setKeyStatus] = useState('');
   const [usage, setUsage] = useState<{ free: string; credit: string } | null>(null);
@@ -211,7 +215,6 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
 
   const load = async (prov: AiProvider, key: string, selected: string, keyTest = false) => {
     setLoading(true);
-    setModels(null);
     setStatus('');
     if (prov === 'openrouter') setUsage({ free: 'Nutzungsdaten werden geladen...', credit: '' });
     else setUsage(null);
@@ -220,19 +223,10 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
       if (prov === 'openrouter' && key) headers['x-openrouter-api-key'] = key;
       const data = await apiGet<ModelsResponse>(`/api/ai/models?provider=${encodeURIComponent(prov)}`, { headers, timeoutMs: 30000 });
       const list = Array.isArray(data.models) ? data.models : [];
-      const meta = new Map((data.modelDetails ?? []).filter((d) => d && typeof d.id === 'string').map((d) => [d.id, d]));
       const access = data.openRouterAccess ?? null;
       if (list.length === 0) {
-        setModels([]);
         setStatus('Keine Modelle verfügbar.');
       } else {
-        setModels(
-          list.map((m) => {
-            const d = meta.get(m);
-            const marker = d && d.cacheSupported ? (d.cacheMode === 'explicit' ? ' [Cache*]' : ' [Cache]') : '';
-            return { id: m, label: `${m}${marker}` };
-          })
-        );
         setModel(selected && list.includes(selected) ? selected : list[0]);
         if (prov === 'openrouter' && access) {
           if (access.userKeyValid) {
@@ -261,7 +255,6 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
         }
       }
     } catch (e) {
-      setModels([]);
       const msg = e instanceof Error ? e.message : 'Fehler beim Laden';
       setStatus(msg);
       if (prov === 'openrouter') setUsage({ free: 'Nutzungsdaten konnten nicht geladen werden.', credit: msg });
@@ -276,7 +269,12 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
-    const s = { provider, model: model || '', openRouterApiKey: apiKey.trim(), reelVision, reelVisionModel: reelVisionModel.trim() };
+    const s = {
+      provider,
+      model: model || '',
+      openRouterApiKey: apiKey.trim(),
+      tasks: { structure: structureTask, vision: visionTask, matching: matchingTask }
+    };
     saveAiSettings(s);
     document.dispatchEvent(new CustomEvent('ai-settings-updated', { detail: s }));
     onClose();
@@ -284,14 +282,14 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={(e) => e.target === e.currentTarget && onClose()} aria-modal="true">
-      <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">KI-Einstellungen</h2>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-300" aria-label="Schließen">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <div className="space-y-4 p-4">
+        <div className="space-y-4 overflow-y-auto p-4">
           <div>
             <label htmlFor="ai-provider-select" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Service</label>
             <select
@@ -346,24 +344,8 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
               <label htmlFor="ai-model-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Modell</label>
               <button type="button" onClick={() => void load(provider, apiKey.trim(), model)} className="text-xs text-indigo-600 hover:underline dark:text-indigo-400">Aktualisieren</button>
             </div>
-            <select
-              id="ai-model-select"
-              value={model}
-              disabled={loading || !models || models.length === 0}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            >
-              {loading || !models ? (
-                <option value="">Lade Modelle…</option>
-              ) : models.length === 0 ? (
-                <option value="">{status && status !== 'Keine Modelle verfügbar.' ? 'Fehler beim Laden' : 'Keine Modelle gefunden'}</option>
-              ) : (
-                models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))
-              )}
-            </select>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{status}</p>
+            <ModelPicker id="ai-model-select" provider={provider} apiKey={apiKey} task="chat" value={model} onChange={setModel} />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{loading ? 'Lade Modelle …' : status}</p>
             {provider === 'openrouter' && usage && (
               <div className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50/70 p-2 dark:border-indigo-800 dark:bg-indigo-900/20">
                 <p className="mb-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">OpenRouter Nutzung</p>
@@ -372,35 +354,60 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
               </div>
             )}
           </div>
-          <div className="border-t border-gray-200 pt-3 dark:border-gray-700">
-            <label htmlFor="ai-reel-vision" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Reel-Import: Bildanalyse</label>
-            <select
-              id="ai-reel-vision"
-              value={reelVision}
-              onChange={(e) => setReelVision(e.target.value as ReelVision)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-            >
-              <option value="ocr">Texterkennung (lokal, kostenlos)</option>
-              <option value="openrouter">KI-Bildanalyse über OpenRouter (Bruchteile eines Cents)</option>
-              <option value="ollama">KI-Bildanalyse über Ollama (lokal, Vision-Modell nötig)</option>
-              <option value="none">Aus (nur Beschreibung und Ton)</option>
-            </select>
-            {(reelVision === 'openrouter' || reelVision === 'ollama') && (
-              <div className="mt-2">
-                <label htmlFor="ai-reel-vision-model" className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Bildmodell (leer = Standard des Servers)</label>
-                <input
-                  id="ai-reel-vision-model"
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={reelVisionModel}
-                  onChange={(e) => setReelVisionModel(e.target.value)}
-                  placeholder={reelVision === 'openrouter' ? 'z. B. google/gemini-2.5-flash-lite' : 'z. B. qwen2.5vl:7b'}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                />
-              </div>
-            )}
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Wie eingeblendeter Text und Bildinhalt eines Instagram-Reels ausgewertet werden. Beschreibung und gesprochener Text werden immer genutzt.</p>
+          <div className="space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Modelle für Aufgaben</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Einzelne Aufgaben können ein eigenes, oft günstigeres oder besser geeignetes Modell nutzen.</p>
+            </div>
+            <TaskModelRow
+              label="Rezepte strukturieren"
+              hint="Rezepte aus Reels/Text erstellen (Zutaten, Schritte, Verknüpfungen)."
+              task="structure"
+              value={structureTask}
+              onChange={setStructureTask}
+              apiKey={apiKey}
+            />
+            <div>
+              <label htmlFor="ai-task-vision-mode" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Bilder lesen</label>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">Reel-Standbilder, Kassenbons und Rechnungen.</p>
+              <select
+                id="ai-task-vision-mode"
+                value={visionTask.mode}
+                onChange={(e) => setVisionTask({ mode: e.target.value as VisionMode, model: '' })}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              >
+                <option value="openrouter">KI über OpenRouter</option>
+                <option value="ollama">KI über Ollama (lokal, Vision-Modell nötig)</option>
+                <option value="ocr">Texterkennung (lokal, kostenlos, ungenauer)</option>
+                <option value="none">Aus</option>
+              </select>
+              {(visionTask.mode === 'openrouter' || visionTask.mode === 'ollama') && (
+                <div className="mt-2">
+                  <ModelPicker
+                    provider={visionTask.mode}
+                    apiKey={apiKey}
+                    task="vision"
+                    value={visionTask.model}
+                    onChange={(m) => setVisionTask({ ...visionTask, model: m })}
+                    inheritLabel={visionTask.mode === 'openrouter' ? `Standard (${TASK_DEFAULTS.vision.model})` : 'Standard des Servers'}
+                  />
+                </div>
+              )}
+            </div>
+            <TaskModelRow
+              label="Zuordnen"
+              hint="Produkte ↔ Zutaten, Kassenbon-Posten ↔ Produkte (viele kleine Anfragen)."
+              task="matching"
+              value={matchingTask}
+              onChange={setMatchingTask}
+              apiKey={apiKey}
+            />
+            {provider !== 'openrouter' &&
+              ([structureTask, matchingTask].some((t) => t?.provider === 'openrouter') || visionTask.mode === 'openrouter') && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Hinweis: Aufgaben über OpenRouter nutzen deinen OpenRouter-Key bzw. den des Servers (dann nur kostenlose Modelle).
+                </p>
+              )}
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-700">
@@ -408,6 +415,52 @@ export function AISettingsModal({ onClose }: { onClose: () => void }) {
           <button type="button" onClick={save} className="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700">Speichern</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** One "Modelle für Aufgaben" row: like the chat model, or an own provider + model. */
+function TaskModelRow({
+  label,
+  hint,
+  task,
+  value,
+  onChange,
+  apiKey
+}: {
+  label: string;
+  hint: string;
+  task: 'structure' | 'matching';
+  value: TaskModel | null;
+  onChange: (v: TaskModel | null) => void;
+  apiKey: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+        <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-300">
+          <input type="checkbox" checked={value === null} onChange={(e) => onChange(e.target.checked ? null : { provider: 'openrouter', model: '' })} />
+          wie Chat-Modell
+        </label>
+      </div>
+      <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>
+      {value !== null && (
+        <div className="flex gap-2">
+          <select
+            value={value.provider}
+            onChange={(e) => onChange({ provider: e.target.value as TaskModel['provider'], model: '' })}
+            className="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            aria-label={`${label}: Anbieter`}
+          >
+            <option value="openrouter">OpenRouter</option>
+            <option value="ollama">Ollama</option>
+          </select>
+          <div className="min-w-0 flex-1">
+            <ModelPicker provider={value.provider} apiKey={apiKey} task={task} value={value.model} onChange={(m) => onChange({ ...value, model: m })} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

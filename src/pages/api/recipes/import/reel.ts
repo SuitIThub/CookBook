@@ -1,30 +1,25 @@
 import type { APIRoute } from 'astro';
 import { getReelJob, isReelUrl, startReelImport } from '../../../../lib/reelImport.server';
-import type { AIRequestConfig, ReelVisionMode } from '../../../../lib/ai';
+import { resolveTasks, taskRequestConfig, type AiSettingsLike } from '../../../../lib/aiTasks';
 
 /**
  * Instagram reel import (see lib/reelImport.server.ts).
- *   POST { url, ai: { provider, model, openRouterApiKey?, reelVision?, reelVisionModel? } } → { jobId }
+ *   POST { url, ai: <the client's AI settings incl. tasks> } → { jobId }
  *   GET  ?job=<id> → { stage, message, recipeId?, warnings?, error? }
  * POST is a write (alias token required by the middleware).
  */
-const VISION_MODES: ReelVisionMode[] = ['none', 'ocr', 'openrouter', 'ollama'];
-
 export const POST: APIRoute = async ({ request }) => {
   const body = await request.json().catch(() => null);
   const url = typeof body?.url === 'string' ? body.url.trim() : '';
   if (!isReelUrl(url)) return json({ error: 'Bitte einen Instagram-Reel-Link angeben.' }, 400);
-  const ai = (body?.ai ?? {}) as Record<string, unknown>;
-  const config: AIRequestConfig = {
-    provider: ai.provider === 'openrouter' ? 'openrouter' : 'ollama',
-    model: typeof ai.model === 'string' ? ai.model : undefined,
-    openRouterApiKey: typeof ai.openRouterApiKey === 'string' ? ai.openRouterApiKey : undefined
-  };
-  const vision = VISION_MODES.includes(ai.reelVision as ReelVisionMode) ? (ai.reelVision as ReelVisionMode) : 'ocr';
+  // The client sends its AI settings; the task models decide which model
+  // structures the recipe and which one reads the frames.
+  const settings = (body?.ai ?? {}) as AiSettingsLike;
+  const vision = resolveTasks(settings).vision;
   const job = startReelImport(url, {
-    ai: config,
-    vision,
-    visionModel: typeof ai.reelVisionModel === 'string' ? ai.reelVisionModel : undefined
+    ai: taskRequestConfig(settings, 'structure'),
+    vision: vision.mode,
+    visionModel: vision.model || undefined
   });
   return json({ jobId: job.id, stage: job.stage, message: job.message });
 };

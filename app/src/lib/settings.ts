@@ -12,6 +12,8 @@ export const ALIAS_KEY = 'cookbook.alias';
 export const TOKEN_KEY = 'cookbook.token';
 export const AI_SETTINGS_KEY = 'cookbook.ai.settings';
 
+import type { AiTaskSettings } from '@core/aiTasks';
+
 export type AiProvider = 'ollama' | 'openrouter';
 
 export type ReelVision = 'none' | 'ocr' | 'openrouter' | 'ollama';
@@ -24,6 +26,8 @@ export interface AiSettings {
   reelVision?: ReelVision;
   /** Vision model for reelVision openrouter/ollama ('' = server default). */
   reelVisionModel?: string;
+  /** Per-task models (structure / vision / matching), see @core/aiTasks. */
+  tasks?: AiTaskSettings;
 }
 
 export interface AppSettings {
@@ -89,7 +93,8 @@ export function getAiSettings(): AiSettings {
       model: typeof p.model === 'string' ? p.model : '',
       openRouterApiKey: typeof p.openRouterApiKey === 'string' ? p.openRouterApiKey : '',
       reelVision: ['none', 'ocr', 'openrouter', 'ollama'].includes(p.reelVision) ? p.reelVision : 'ocr',
-      reelVisionModel: typeof p.reelVisionModel === 'string' ? p.reelVisionModel : ''
+      reelVisionModel: typeof p.reelVisionModel === 'string' ? p.reelVisionModel : '',
+      tasks: p.tasks && typeof p.tasks === 'object' ? p.tasks : undefined
     };
   } catch {
     return { provider: 'ollama', model: '', openRouterApiKey: '', reelVision: 'ocr', reelVisionModel: '' };

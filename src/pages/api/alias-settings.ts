@@ -6,6 +6,8 @@ const ALLOWED_KEYS = new Set([
   'theme',
   'lowBandwidth',
   'cookbook.ai.settings',
+  // Starred models in the model pickers.
+  'cookbook.ai.favoriteModels',
   'cookbook.recipes.layout',
   'cookbook.recipes.favorites',
   // Tracker profile: height/gender/age/activity/target — health data, but

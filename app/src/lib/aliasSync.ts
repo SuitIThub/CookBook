@@ -19,6 +19,7 @@ export const SYNC_KEYS = [
   'theme',
   'lowBandwidth',
   'cookbook.ai.settings',
+  'cookbook.ai.favoriteModels',
   'cookbook.recipes.layout',
   'cookbook.recipes.favorites',
   'cookbook.tracker.profile',
