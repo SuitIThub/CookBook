@@ -46,8 +46,10 @@ Nach Rezepten (referenzieren Rezepte + Produkte).
 ## Status (Stand 2026-10-08)
 - ✅ Fundament: geteilter Kern, Sync (Pull/Push), Auth (Token), Opt-out, Offline-first.
 - ✅ F1 Produkte · ✅ F2 Zutaten · ✅ F3 Rezepte (inkl. Import/Export/KI/Bilder/Varianten/Kochmodus)
-- ✅ F4 Einkaufslisten (Übersicht/Detail/Preis-Panel/Gruppierung) · ✅ F5 Tracker (**online-first**,
-  nutzt REST statt lokaler Replica — offline nicht verfügbar; bewusste Entscheidung, s. u.)
+- ✅ F4 Einkaufslisten (Übersicht/Detail/Bearbeiten/Preis-Panel/Gruppierung/Notizen/Teilen)
+- ✅ F5 Tracker **offline** (seit 3845c28): Endpunkt-Logik in `src/lib/trackerService.ts`, die App
+  ruft sie gegen die lokale Replica auf; `weight_log`/`meal_plan`/`diary_entry` werden pro Alias
+  synchronisiert (Pull nur für `X-Alias`, Push nur für eigene Zeilen, Cursor pro Typ+Alias).
 
 ## Sync-Härtung (2026-10-08)
 - Pull-Cursor **pro Entity-Typ** (ein globales max() übersprang Änderungen zwischen Typ-Requests).
@@ -64,22 +66,15 @@ Nach Rezepten (referenzieren Rezepte + Produkte).
 - TanStack `networkMode: 'always'` (lokale Queries froren offline ein).
 - Verifiziert per Zwei-Browser-E2E gegen isolierte DB-Kopie (18/18).
 
-## Parity-Lücken (Screenshot-Abgleich Website ↔ App, 412 px, 2026-10-08)
-- **Einkaufsliste Detail**: Kopf (Zurück, Live-Badge), „Artikel hinzufügen"-Modal, „Rezept
-  hinzufügen", **Teilen**, „Einträge übernehmen?"-Modal (Vorlage/Sammelliste beim ersten Öffnen),
-  Rezeptkarten mit „N Zutaten in der Liste" + Hervorheben (Auge), Portionen-Stepper-Stil.
-- **Einkaufslisten Übersicht**: Auswählen (Mehrfachauswahl), Schnell hinzufügen, Bearbeiten-Button
-  → Seite `einkaufsliste/[id]/edit` fehlt in der App.
-- **Rezept Detail**: Reihenfolge/Stil der Aktionen (Bearbeiten/Exportieren/Zur Einkaufsliste/
-  Kochmodus-Aufklapper), „Importiert von", Portionen/Zeit/Schwierigkeit-Block, Tag-Karte mit
-  „Tag hinzufügen", Karte „Nährwerte & Preis (live berechnet)" (Supermarkt, Produkt pro Zutat,
-  „Als Meal Prep planen"), Galerie-Kachel „Bild hinzufügen", schwebender KI-Chat-Button.
-- **Rezepte Übersicht**: „Exportieren ▾", zentrierter Kopf, schwebender KI-Chat-Button.
-- **Header/global**: Datenspar-Modus, Alias-Einstellungen-Modal, KI-Einstellungen-Modal.
-- **Startseite** (`/`): Kacheln Rezepte/Einkaufslisten.
-- Favoriten nur lokal (Website: alias-synchronisiert).
-- ✅ identisch/nahe: Kochmodus, Zutaten, Produkte.
+## Parity-Stand (Screenshot-Abgleich Website ↔ App, 412 px)
+Alle 8 Seiten auf Website-Parität umgebaut (Header/Nav, Start, Rezepte inkl. Suche/Hervorhebung/
+Export/Favoriten, Rezept-Detail inkl. Live-Nährwerte/Galerie/Entwurfs-Banner, Editor inkl.
+lokaler Entwürfe/KI-Edit-Review/Varianten, KI-Chat, Einkaufslisten Übersicht/Detail/Bearbeiten,
+Produkte, Zutaten, Tracker). Alias-Einstellungen (Theme, Datenspar-Modus, KI, Favoriten, Profil …)
+synchronisieren wie auf der Website.
 
 ## App-Extras (über die Website hinaus)
 - Offline-first mit lokaler Replica + Outbox, Live-Sync, Sync-Indikator, Barcode-Scan nativ.
-- Offen/Ideen: Android-Share-Intent (Website: Web-Share-Target) für Rezept-Import, Tracker offline.
+- Tracker offline nutzbar (Website braucht Verbindung).
+- Offen/Ideen: Android-Share-Intent (Website: Web-Share-Target) für Rezept-Import.
+- Gerätetest offen: Kamera/Barcode, Teilen-Sheet, Live-Sync im LAN auf echtem Android-Gerät.
