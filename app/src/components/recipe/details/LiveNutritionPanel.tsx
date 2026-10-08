@@ -156,7 +156,7 @@ export default function LiveNutritionPanel({ recipe, onOpenCatalogue, refreshKey
         </div>
         {n.incomplete.length > 0 && <div className="text-xs text-yellow-700 dark:text-yellow-300">{n.incomplete.length} Zutat(en) ohne Nährwerte</div>}
       </div>
-      <details className="mt-3" open>
+      <details className="mt-3">
         <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-200">Produkt pro Zutat (optional)</summary>
         <div className="mt-2 space-y-2">
           {data.ingredients.map((ing) => {
