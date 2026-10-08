@@ -18,6 +18,7 @@ import { onAliasSettingsChanged } from '@/lib/aliasSync';
 import { getDefaultSelection, resolveSelection, type AlternativeSelection } from '@core/alternatives';
 import { ensureFavoriteFamilyComplete, isFamilyFavorite, toggleFamilyFavorite } from '@core/favorites';
 import { useLowBandwidth } from '@/components/settings/HeaderModals';
+import { hasRecipeDraft } from '@/lib/recipeDrafts';
 import AIChatModal from '@/components/AIChatModal';
 import AddToShoppingListModal from '@/components/AddToShoppingListModal';
 import CatalogueModal from '@/components/CatalogueModal';
@@ -214,6 +215,19 @@ export default function RecipeDetailPage() {
       />
 
       <div className="space-y-6">
+        {hasRecipeDraft(recipe.id) && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h3 className="mb-1 text-sm font-medium text-yellow-800 dark:text-yellow-200">Unvollständiger Entwurf vorhanden</h3>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">Es gibt einen Entwurf für dieses Rezept, der noch nicht gespeichert wurde.</p>
+              </div>
+              <button onClick={() => navigate(`/rezept/${recipe.id}/bearbeiten`)} className="ml-4 whitespace-nowrap rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-yellow-600">
+                Entwurf fortsetzen
+              </button>
+            </div>
+          </div>
+        )}
         <RecipeTags recipe={recipe} onAddTag={(tags) => update({ tags })} />
         <LiveNutritionPanel recipe={recipe} onOpenCatalogue={setCatalogueFor} refreshKey={nutritionKey} />
         <RecipeImageGallery

@@ -11,12 +11,14 @@ import type {
   IntermediateIngredient
 } from '@/types';
 import { localRecipe, saveLocalRecipe, deleteLocalRecipe, localIngredients, localRecipes } from '@/lib/localData';
-import { uploadRecipeImage, deleteRecipeImage } from '@/lib/recipeImages';
 import { runSync } from '@/lib/syncRunner';
-import { assetUrl, apiGet } from '@/lib/api';
-import { discardDraft } from '@/lib/aiChat';
+import { apiGet } from '@/lib/api';
+import { discardDraft as discardServerDraft } from '@/lib/aiChat';
+import { loadRecipeDraft, saveRecipeDraft, deleteRecipeDraft, draftAgo } from '@/lib/recipeDrafts';
 import { getAvailableUnits } from '@core/units';
 import { NUTRITION_FIELDS } from '@core/nutrition';
+import RecipeImageGallery from '@/components/recipe/details/RecipeImageGallery';
+import { useLowBandwidth } from '@/components/settings/HeaderModals';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
 const num = (s: string) => {
@@ -189,9 +191,16 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
   const [loading, setLoading] = useState(!isNew);
   const [busy, setBusy] = useState(false);
   const [variantModal, setVariantModal] = useState(false);
+  const originalForm = useRef<Form | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [, setDraftTick] = useState(0);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const notifyDraft = (msg: string) => {
+    setDraftNotice(msg);
+    setTimeout(() => setDraftNotice(null), 3000);
+  };
+  const lowBandwidth = useLowBandwidth();
   const [error, setError] = useState<string | null>(null);
-  const [imgBusy, setImgBusy] = useState(false);
-  const [imgError, setImgError] = useState<string | null>(null);
   const [ingredientNames, setIngredientNames] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
@@ -214,7 +223,13 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
       return;
     }
     if (isNew) {
-      setForm(toForm(null));
+      const d = loadRecipeDraft<Form>(undefined);
+      originalForm.current = toForm(null);
+      if (d) {
+        setForm(d.form);
+        setDraftSavedAt(d.savedAt);
+        notifyDraft('Entwurf wurde geladen.');
+      } else setForm(toForm(null));
       return;
     }
     (async () => {
@@ -235,7 +250,13 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
           /* fall through to the stored recipe */
         }
       }
-      setForm(toForm(r));
+      originalForm.current = toForm(r);
+      const d = loadRecipeDraft<Form>(id);
+      if (d) {
+        setForm(d.form);
+        setDraftSavedAt(d.savedAt);
+        notifyDraft('Entwurf wurde geladen.');
+      } else setForm(toForm(r));
       setLoading(false);
     })();
   }, [id, isNew, variantDraft]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -278,6 +299,30 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
   }, []);
 
   const patch = (p: Partial<Form>) => setForm((f) => ({ ...f, ...p }));
+
+  /* ---- drafts (website: autosave while editing; kept on the device) ---- */
+  const draftsEnabled = !variantDraft && !aiEditToken;
+  useEffect(() => {
+    if (!draftsEnabled || loading || !originalForm.current) return;
+    const t = setTimeout(() => {
+      if (JSON.stringify(form) === JSON.stringify(originalForm.current)) {
+        deleteRecipeDraft(id);
+        setDraftSavedAt(null);
+      } else setDraftSavedAt(saveRecipeDraft(id, form));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [form, loading, draftsEnabled, id]);
+  useEffect(() => {
+    if (draftSavedAt == null) return;
+    const t = setInterval(() => setDraftTick((n) => n + 1), 10000);
+    return () => clearInterval(t);
+  }, [draftSavedAt]);
+  const discardDraft = () => {
+    deleteRecipeDraft(id);
+    setDraftSavedAt(null);
+    if (originalForm.current) setForm(originalForm.current);
+    navigate(isNew ? '/rezepte' : `/rezept/${id}`);
+  };
 
   // Every ingredient across all groups (for linking + alternative option lists).
   const allIngredients = useMemo(() => form.groups.flatMap((g) => g.items), [form.groups]);
@@ -430,7 +475,8 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
     setError(null);
     try {
       const saved = await saveLocalRecipe(isNew ? null : id!, data);
-      if (aiEditToken && id) await discardDraft(id).catch(() => {});
+      deleteRecipeDraft(id);
+      if (aiEditToken && id) await discardServerDraft(id).catch(() => {});
       queryClient.invalidateQueries();
       navigate(`/rezept/${saved.id}`);
     } catch (e) {
@@ -479,35 +525,6 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
     setExisting(r);
     queryClient.invalidateQueries({ queryKey: ['recipe', id] });
   };
-  const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !id) return;
-    setImgBusy(true);
-    setImgError(null);
-    try {
-      await uploadRecipeImage(id, file);
-      await refreshImages();
-    } catch (err) {
-      setImgError((err as Error).message);
-    } finally {
-      setImgBusy(false);
-    }
-  };
-  const removeImage = async (imageId: string) => {
-    if (!id) return;
-    setImgBusy(true);
-    setImgError(null);
-    try {
-      await deleteRecipeImage(id, imageId);
-      await refreshImages();
-    } catch (err) {
-      setImgError((err as Error).message);
-    } finally {
-      setImgBusy(false);
-    }
-  };
-
   if (loading) return <p className="text-gray-500">Lade …</p>;
 
   const linkingStepObj = linkingStep
@@ -523,6 +540,15 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
           </p>
         </div>
       )}
+      {draftSavedAt != null && (
+        <div id="draft-status-bar" className="mb-4 flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+          <p className="text-sm text-blue-700 dark:text-blue-300">Entwurf zuletzt aktualisiert: {draftAgo(draftSavedAt)}</p>
+          <button type="button" onClick={discardDraft} className="ml-4 rounded-md border border-red-300 bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-200 dark:border-red-700 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50">
+            Entwurf verwerfen
+          </button>
+        </div>
+      )}
+      {draftNotice && <div className="fixed right-4 top-4 z-50 rounded-lg bg-blue-500 px-4 py-2 text-white shadow-lg">{draftNotice}</div>}
       <h1 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">{variantInfo ? 'Neue Variante' : isNew ? 'Neues Rezept' : 'Rezept bearbeiten'}</h1>
       {aiBanner && (
         <div id="ai-edit-highlight-banner" className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50/70 p-3 dark:border-indigo-800 dark:bg-indigo-900/20">
@@ -661,27 +687,20 @@ export default function RecipeEditPage({ variantDraft = false }: { variantDraft?
           </div>
         </Card>
 
-        {/* Bilder */}
-        {!isNew && (
-          <Card>
-            <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Bilder</h2>
-            <div className="flex flex-wrap gap-3">
-              {(existing?.images ?? []).map((img) => (
-                <div key={img.id} className="relative h-24 w-24 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-                  <img src={assetUrl(img.url)} alt="" className="h-full w-full object-cover" />
-                  <button type="button" onClick={() => removeImage(img.id)} disabled={imgBusy} aria-label="Bild löschen" className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white hover:bg-black/80 disabled:opacity-50">
-                    ✕
-                  </button>
-                </div>
-              ))}
-              <label className={'flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 text-center text-xs text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 ' + (imgBusy ? 'pointer-events-none opacity-50' : '')}>
-                <span className="text-lg">＋</span>
-                {imgBusy ? 'Lädt …' : 'Bild'}
-                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickImage} />
-              </label>
-            </div>
-            {imgError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{imgError}</p>}
-          </Card>
+        {/* Bilder — website: RecipeImageGallery mode="edit" */}
+        {!isNew && existing && (
+          <RecipeImageGallery
+            recipe={existing}
+            mode="edit"
+            hidden={lowBandwidth}
+            onChanged={() => void refreshImages()}
+            onAddByUrl={async (img) => {
+              await saveLocalRecipe(existing.id, { images: [...(existing.images ?? []), img], imageUrl: existing.imageUrl || img.url } as any);
+              setExisting(await localRecipe(existing.id));
+              queryClient.invalidateQueries({ queryKey: ['recipe', existing.id] });
+              runSync().catch(() => {});
+            }}
+          />
         )}
 
         {/* Zutaten */}
