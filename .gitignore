@@ -24,9 +24,23 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
-cookbook.db
-cookbook.db-shm
-cookbook.db-wal
+# databases (incl. copies/backups) — contain personal data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# server output / logs
+nohup.out
+*.log
+
+# local research notes
+ean-product-apis.json
+calorie-nutrition-requirements.json
+
+# app build artifacts
+*.apk
+*.aab
 
 public/uploads/
 # Firebase service-account keys (server push) — never commit
