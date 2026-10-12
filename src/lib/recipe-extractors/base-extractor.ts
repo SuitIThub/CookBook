@@ -37,6 +37,85 @@ export interface ExtractorCapabilities {
   supportsCategoryExtraction: boolean | 'experimental';
 }
 
+/**
+ * The page has no structured recipe (no JSON-LD, no recognisable recipe
+ * markup) — the URL import then falls back to reading the page with AI.
+ */
+export class NoRecipeDataError extends Error {
+  constructor(url: string) {
+    super(`No structured recipe data found on ${url}`);
+    this.name = 'NoRecipeDataError';
+  }
+}
+
+/** Default timeout for fetch in ms (some sites like rewe.de are slow or use bot checks) */
+const FETCH_TIMEOUT_MS = 25000;
+
+/**
+ * Fetch HTML content from URL with browser-like headers to reduce bot blocking.
+ */
+export async function fetchPageHtml(url: string): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const urlObj = new URL(url);
+    const origin = `${urlObj.protocol}//${urlObj.host}`;
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
+        'Referer': origin + '/',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': urlObj.pathname === '/' ? 'none' : 'same-origin',
+        'Upgrade-Insecure-Requests': '1',
+      },
+      redirect: 'follow',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${url}: ${response.status}`);
+    }
+
+    return decodeHtml(new Uint8Array(await response.arrayBuffer()), response.headers.get('content-type'));
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message.startsWith('Failed to fetch')) throw err;
+      if (err.name === 'AbortError') {
+        throw new Error(`Failed to fetch ${url}: request timed out`);
+      }
+      if (err.cause instanceof Error && err.message.includes('fetch')) {
+        throw new Error(`Failed to fetch ${url}: ${err.cause.message}`);
+      }
+      throw new Error(`Failed to fetch ${url}: ${err.message}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Decode a page in its declared charset (HTTP header, else <meta charset>);
+ * older sites are often ISO-8859-1 / windows-1252. Defaults to UTF-8.
+ */
+function decodeHtml(bytes: Uint8Array, contentType: string | null): string {
+  const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096));
+  const charset =
+    contentType?.match(/charset=["']?([\w-]+)/i)?.[1] ??
+    head.match(/<meta[^>]+charset=["']?([\w-]+)/i)?.[1] ??
+    'utf-8';
+  try {
+    return new TextDecoder(charset.toLowerCase()).decode(bytes);
+  } catch {
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+}
+
 export abstract class BaseRecipeExtractor {
   abstract readonly name: string;
   abstract readonly domains: string[];
@@ -158,55 +237,10 @@ export abstract class BaseRecipeExtractor {
   }
   
   /**
-   * Default timeout for fetch in ms (some sites like rewe.de are slow or use bot checks)
-   */
-  private static readonly FETCH_TIMEOUT_MS = 25000;
-
-  /**
    * Fetch HTML content from URL with browser-like headers to reduce bot blocking.
    */
   protected async fetchHtml(url: string): Promise<string> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), BaseRecipeExtractor.FETCH_TIMEOUT_MS);
-
-    try {
-      const urlObj = new URL(url);
-      const origin = `${urlObj.protocol}//${urlObj.host}`;
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
-          'Referer': origin + '/',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': urlObj.pathname === '/' ? 'none' : 'same-origin',
-          'Upgrade-Insecure-Requests': '1',
-        },
-        redirect: 'follow',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ${url}: ${response.status}`);
-      }
-
-      return response.text();
-    } catch (err) {
-      if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          throw new Error(`Failed to fetch ${url}: request timed out`);
-        }
-        if (err.cause instanceof Error && err.message.includes('fetch')) {
-          throw new Error(`Failed to fetch ${url}: ${err.cause.message}`);
-        }
-        throw new Error(`Failed to fetch ${url}: ${err.message}`);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return fetchPageHtml(url);
   }
   
   /**

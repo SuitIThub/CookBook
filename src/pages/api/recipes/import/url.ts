@@ -1,9 +1,8 @@
 import type { APIRoute } from 'astro';
-import type { RecipeImage } from '../../../../types/recipe';
 import { db } from '../../../../lib/database.server';
 import { RecipeExtractorFactory } from '../../../../lib/recipe-extractors/factory';
-import { enrichRecipeData } from '../../../../lib/recipeEnrich';
-import { v4 as uuidv4 } from 'uuid';
+import { NoRecipeDataError } from '../../../../lib/recipe-extractors/base-extractor';
+import { extractRecipeFromUrl } from '../../../../lib/urlImport.server';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -17,97 +16,14 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
     
-    // Initialize the extractor factory
-    const factory = new RecipeExtractorFactory();
-    
-    // Check if we can extract from this URL
-    if (!factory.canExtractFromUrl(url)) {
+    if (!/^https?:\/\//i.test(url)) {
       return new Response(JSON.stringify({ error: 'Invalid URL format' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
-    
-    // Extract recipe data
-    console.log(`Extracting recipe from: ${url}`);
-    const extractedData = await factory.extractRecipe(url);
-    console.log(`Successfully extracted recipe: ${extractedData.title}`);
-    
-    // Convert to our recipe format
-    const extractor = factory.getExtractorForUrl(url);
-    const recipeData = extractor.convertToRecipeFormat(extractedData);
 
-    // Get extractor capabilities to generate warnings
-    const capabilities = extractor.getCapabilities();
-    const warnings: string[] = [];
-
-    // Always add ingredient verification warning
-    warnings.push('Bitte überprüfen Sie die extrahierten Zutaten auf Korrektheit und Vollständigkeit.');
-
-    // Add warnings based on experimental or unsupported features
-    if (!capabilities.supportsIngredientGroups) {
-      warnings.push('Die Zutaten wurden ohne Gruppierung importiert. Sie können diese manuell in Gruppen organisieren.');
-    }
-
-    if (!capabilities.supportsPreparationGroups) {
-      warnings.push('Die Zubereitungsschritte wurden ohne Gruppierung importiert. Sie können diese manuell in Gruppen organisieren.');
-    }
-
-    if (capabilities.supportsNutrition === 'experimental') {
-      warnings.push('Die Nährwertinformationen wurden experimentell extrahiert und sollten überprüft werden.');
-    }
-
-    if (capabilities.supportsTimeExtraction === 'experimental') {
-      warnings.push('Die Zeitangaben wurden experimentell extrahiert und sollten überprüft werden.');
-    }
-
-    if (capabilities.supportsDifficultyExtraction === 'experimental') {
-      warnings.push('Der Schwierigkeitsgrad wurde experimentell bestimmt und sollte überprüft werden.');
-    }
-
-    if (!capabilities.supportsImages && extractedData.imageUrl) {
-      warnings.push('Das Bild wurde möglicherweise nicht korrekt extrahiert und sollte überprüft werden.');
-    }
-
-    if (extractor.name === 'JSON-LD Generic Extractor') {
-      warnings.push('Es wurde der generische Extraktor verwendet. Bitte überprüfen Sie alle importierten Daten besonders sorgfältig.');
-    }
-    
-    // Convert imageUrl to images array for frontend compatibility
-    const images: RecipeImage[] = [];
-    if (extractedData.imageUrl) {
-      images.push({
-        id: `imported-${Date.now()}`,
-        filename: `imported-image-${Date.now()}.jpg`,
-        url: extractedData.imageUrl,
-        uploadedAt: new Date()
-      });
-    }
-
-    // Add source information and ensure required fields
-    const finalRecipeData = {
-      title: extractedData.title,
-      subtitle: extractedData.subtitle,
-      description: extractedData.description || '',
-      category: recipeData.category, // Add category from extractor
-      tags: recipeData.tags || [], // Add tags/keywords from extractor
-      metadata: recipeData.metadata || {
-        servings: extractedData.servings || 4,
-        timeEntries: [],
-        difficulty: extractedData.difficulty || 'mittel'
-      },
-      ingredientGroups: recipeData.ingredientGroups || [],
-      preparationGroups: recipeData.preparationGroups || [],
-      imageUrl: extractedData.imageUrl, // Keep for backward compatibility
-      images: images, // Add images array for frontend
-      sourceUrl: url // Save the source URL
-    };
-    
-    // Site recipes never link ingredients to steps; reuse catalogue spellings too.
-    const { stats: enrichStats } = enrichRecipeData(finalRecipeData, db.getAllCatalogueIngredients().map((c) => c.name));
-    if (enrichStats.linkedSteps > 0) {
-      warnings.push('Zutaten wurden den Zubereitungsschritten automatisch zugeordnet — bitte kurz prüfen.');
-    }
+    const { data: finalRecipeData, warnings, extractorName } = await extractRecipeFromUrl(url);
 
     // Create the recipe
     const createdRecipe = db.createRecipe(finalRecipeData);
@@ -115,7 +31,7 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(JSON.stringify({ 
       success: true, 
       recipe: createdRecipe,
-      extractorUsed: extractor.name,
+      extractorUsed: extractorName,
       sourceUrl: url,
       imported: 1,
       recipeId: createdRecipe.id,
@@ -126,6 +42,16 @@ export const POST: APIRoute = async ({ request }) => {
     });
     
   } catch (error) {
+    // No recipe data on the page → the client imports it with AI (api/recipes/import/web).
+    if (error instanceof NoRecipeDataError) {
+      return new Response(JSON.stringify({
+        error: 'Die Seite enthält keine Rezept-Daten.',
+        code: 'NO_RECIPE_DATA'
+      }), {
+        status: 422,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     console.error('Error importing recipe from URL:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     

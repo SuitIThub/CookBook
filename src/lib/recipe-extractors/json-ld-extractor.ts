@@ -1,4 +1,4 @@
-import { BaseRecipeExtractor, type ExtractedRecipeData } from './base-extractor';
+import { BaseRecipeExtractor, NoRecipeDataError, type ExtractedRecipeData } from './base-extractor';
 import type { NutritionData } from '../../types/recipe';
 import { nutritionFromJsonLd } from '../nutrition';
 
@@ -376,6 +376,11 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
       }
     }
 
+    // Without both lists this is no usable recipe — let the AI read the page instead.
+    if (ingredients.length === 0 || instructions.length === 0) {
+      throw new NoRecipeDataError(url);
+    }
+
     // Extract keywords and category from HTML
     const keywords = this.extractKeywords(html, title, `Recipe imported from ${url}`);
     const category = this.extractCategory(html, title, `Recipe imported from ${url}`);
@@ -385,8 +390,8 @@ export class JsonLdRecipeExtractor extends BaseRecipeExtractor {
       description: '', // Description is empty since URL is saved in sourceUrl
       keywords,
       category,
-      ingredients: ingredients.length > 0 ? ingredients : ['Bitte Zutaten manuell hinzufügen'],
-      instructions: instructions.length > 0 ? instructions : ['Bitte Zubereitungsschritte manuell hinzufügen'],
+      ingredients,
+      instructions,
       sourceUrl: url
     };
   }

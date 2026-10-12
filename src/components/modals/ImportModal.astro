@@ -63,9 +63,16 @@ declare global {
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-white"
           >
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Unterstützt: Chefkoch.de, Lecker.de und viele andere Websites mit Rezept-Daten
+            Unterstützt: Chefkoch.de, Lecker.de und viele andere Websites mit Rezept-Daten — Seiten ohne Rezept-Daten liest die KI aus
           </p>
         </div>
+        <label id="ai-review-option" class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+          <input type="checkbox" id="ai-review-import" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500 dark:border-gray-600 dark:bg-gray-700" />
+          <span>
+            Mit KI prüfen und ergänzen
+            <span class="block text-xs text-gray-500 dark:text-gray-400">Die KI gleicht das importierte Rezept mit der Seite ab und korrigiert oder ergänzt fehlende Angaben (dauert etwas länger).</span>
+          </span>
+        </label>
         <div id="url-preview" class="hidden p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
           <div class="space-y-3">
             <div class="text-sm text-gray-600 dark:text-gray-300">
@@ -213,6 +220,7 @@ declare global {
       updateImportButton();
     } else {
       hideUrlPreview();
+      document.getElementById('ai-review-option')?.classList.remove('hidden');
       updateImportButton();
     }
   });
@@ -292,6 +300,8 @@ declare global {
   }
 
   async function updateUrlPreview(url: string) {
+    // Reels are always read by the AI — no separate review option.
+    document.getElementById('ai-review-option')?.classList.toggle('hidden', isReelUrl(url));
     if (isReelUrl(url)) {
       if (detectedSite) detectedSite.textContent = 'Instagram-Reel — KI-Import aus Beschreibung, gesprochenem und eingeblendetem Text (dauert ca. 1–2 Minuten)';
       urlPreview?.classList.remove('hidden');
@@ -397,29 +407,33 @@ declare global {
     urlPreview?.classList.add('hidden');
   }
 
-  async function handleReelImport(url: string) {
+  // AI imports run as server jobs (30 s – 2 min); poll their progress.
+  //   reel: Instagram reels (caption, speech, frames) — api/recipes/import/reel
+  //   web:  pages without recipe data (page text)     — api/recipes/import/web
+  //         or, with review, normal import checked/completed by the AI
+  async function handleAiImport(kind: 'reel' | 'web', url: string, review = false) {
     const button = confirmImport as HTMLButtonElement | null;
     const setStatus = (text: string) => {
       if (button) button.textContent = text;
     };
     if (button) button.disabled = true;
-    setStatus('Reel wird geladen …');
+    setStatus(kind === 'reel' ? 'Reel wird geladen …' : review ? 'Rezept wird ausgelesen …' : 'Seite wird per KI gelesen …');
     try {
       let ai = {};
       try {
         ai = JSON.parse(localStorage.getItem('cookbook.ai.settings') || '{}');
       } catch {}
-      const start = await fetch('/api/recipes/import/reel', {
+      const start = await fetch(`/api/recipes/import/${kind}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, ai })
+        body: JSON.stringify({ url, ai, review })
       });
       const started = await start.json();
       if (!start.ok) throw new Error(started.error || `HTTP ${start.status}`);
       let job = started;
       while (job.stage !== 'done' && job.stage !== 'error') {
         await new Promise((r) => setTimeout(r, 2000));
-        const res = await fetch(`/api/recipes/import/reel?job=${encodeURIComponent(started.jobId)}`);
+        const res = await fetch(`/api/recipes/import/${kind}?job=${encodeURIComponent(started.jobId)}`);
         job = await res.json();
         if (!res.ok) throw new Error(job.error || `HTTP ${res.status}`);
         setStatus(job.message || 'Analysiere …');
@@ -430,7 +444,7 @@ declare global {
       if (job.warnings?.length && window.showWarnings) window.showWarnings(job.warnings, go);
       else go();
     } catch (error) {
-      const msg = `Reel-Import fehlgeschlagen: ${(error as Error).message || error}`;
+      const msg = `${kind === 'reel' ? 'Reel-Import' : 'KI-Import'} fehlgeschlagen: ${(error as Error).message || error}`;
       if (window.showError) window.showError(msg);
       else alert(msg);
     } finally {
@@ -444,7 +458,11 @@ declare global {
   async function handleUrlImport() {
     const url = recipeUrl?.value.trim();
     if (!url) return;
-    if (isReelUrl(url)) return handleReelImport(url);
+    if (isReelUrl(url)) return handleAiImport('reel', url);
+    // Optional AI review: normal import + AI check against the page, as a job.
+    if ((document.getElementById('ai-review-import') as HTMLInputElement | null)?.checked) {
+      return handleAiImport('web', url, true);
+    }
 
     // Show loading state
     if (confirmImport) {
@@ -462,6 +480,11 @@ declare global {
       });
 
       const result = await response.json();
+
+      // No recipe data on the page → let the AI read it instead.
+      if (response.status === 422 && result.code === 'NO_RECIPE_DATA') {
+        return await handleAiImport('web', url);
+      }
 
       if (response.ok) {
         // Hide import modal
@@ -685,6 +708,8 @@ declare global {
     if (recipeUrl) {
       recipeUrl.value = '';
     }
+    const aiReview = document.getElementById('ai-review-import') as HTMLInputElement | null;
+    if (aiReview) aiReview.checked = false;
     hideUrlPreview();
     
     // Reset text input

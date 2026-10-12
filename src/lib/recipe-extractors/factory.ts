@@ -1,4 +1,4 @@
-import type { BaseRecipeExtractor, ExtractedRecipeData } from './base-extractor';
+import { NoRecipeDataError, type BaseRecipeExtractor, type ExtractedRecipeData } from './base-extractor';
 import { ChefkochExtractor } from './chefkoch-extractor';
 import { LeckerExtractor } from './lecker-extractor';
 import { GaumenfreundinExtractor } from './gaumenfreundin-extractor';
@@ -57,15 +57,22 @@ export class RecipeExtractorFactory {
   async extractRecipe(url: string): Promise<ExtractedRecipeData> {
     const extractor = this.getExtractorForUrl(url);
     
+    // An extractor that finds no ingredients or no steps found no recipe.
+    const nonEmpty = (data: ExtractedRecipeData): ExtractedRecipeData => {
+      if (!data.ingredients?.length || !data.instructions?.length) throw new NoRecipeDataError(url);
+      return data;
+    };
+
     try {
-      return await extractor.extractRecipe(url);
+      return nonEmpty(await extractor.extractRecipe(url));
     } catch (error) {
       // If the specific extractor fails, try the fallback
       if (extractor !== this.fallbackExtractor) {
         console.warn(`Extractor ${extractor.name} failed for ${url}, trying fallback`);
         try {
-          return await this.fallbackExtractor.extractRecipe(url);
+          return nonEmpty(await this.fallbackExtractor.extractRecipe(url));
         } catch (fallbackError) {
+          if (fallbackError instanceof NoRecipeDataError) throw fallbackError;
           throw new Error(`Both specific and fallback extractors failed: ${error}`);
         }
       } else {

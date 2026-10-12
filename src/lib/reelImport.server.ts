@@ -21,6 +21,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { getImportJob, startImportJob, type ImportJob } from './importJobs.server';
 import { db } from './database.server';
 import { describeReelFrames, defaultReelVisionModel, recipeFromReelSources, type AIRequestConfig, type ReelVisionMode } from './ai';
 import { sanitizeRecipeData } from './aiRecipeSanitize';
@@ -40,25 +41,11 @@ export function isReelUrl(url: string): boolean {
 
 /* --------------------------------------------------------------- jobs */
 
-export type ReelStage = 'download' | 'audio' | 'transcribe' | 'frames' | 'vision' | 'recipe' | 'done' | 'error';
-export interface ReelJob {
-  id: string;
-  stage: ReelStage;
-  message: string;
-  recipeId?: string;
-  warnings?: string[];
-  error?: string;
-  createdAt: number;
-}
-const jobs = new Map<string, ReelJob>();
+export type ReelStage = 'download' | 'audio' | 'transcribe' | 'frames' | 'vision' | 'recipe';
+export type ReelJob = ImportJob<ReelStage>;
 
-function pruneJobs() {
-  const cutoff = Date.now() - 30 * 60 * 1000;
-  for (const [id, job] of jobs) if (job.createdAt < cutoff) jobs.delete(id);
-}
-
-export function getReelJob(id: string): ReelJob | undefined {
-  return jobs.get(id);
+export function getReelJob(id: string): ImportJob | undefined {
+  return getImportJob(id);
 }
 
 export interface ReelImportOptions {
@@ -69,17 +56,7 @@ export interface ReelImportOptions {
 
 /** Start a reel import in the background; poll with getReelJob(). */
 export function startReelImport(url: string, options: ReelImportOptions): ReelJob {
-  pruneJobs();
-  const job: ReelJob = { id: randomUUID(), stage: 'download', message: 'Reel wird geladen …', createdAt: Date.now() };
-  jobs.set(job.id, job);
-  const set = (stage: ReelStage, message: string) => Object.assign(job, { stage, message });
-  void runReelImport(url, options, set)
-    .then((r) => Object.assign(job, { stage: 'done', message: 'Fertig', recipeId: r.recipeId, warnings: r.warnings }))
-    .catch((e) => {
-      console.error('Reel import failed:', e);
-      Object.assign(job, { stage: 'error', message: 'Fehlgeschlagen', error: (e as Error).message || String(e) });
-    });
-  return job;
+  return startImportJob<ReelStage>('download', 'Reel wird geladen …', (set) => runReelImport(url, options, set));
 }
 
 /* ----------------------------------------------------------- pipeline */

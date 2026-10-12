@@ -15,20 +15,20 @@ export default function ImportModal({ onClose, onImported, initialUrl }: Props) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
+  const [aiReview, setAiReview] = useState(false);
   const reel = mode === 'url' && isReelUrl(url);
 
   const run = async () => {
     setBusy(true);
     setError(null);
     try {
-      if (reel) {
-        const r = await importFromReel(url, setProgress);
+      if (mode === 'url') {
+        const r = reel ? await importFromReel(url, setProgress) : await importFromUrl(url.trim(), setProgress, aiReview);
         if (r.warnings.length) alert(r.warnings.join('\n\n'));
         onImported(r.recipeId);
         return;
       }
-      const id = mode === 'url' ? await importFromUrl(url.trim()) : await importFromText(text);
-      onImported(id);
+      onImported(await importFromText(text));
     } catch (e) {
       setError((e as Error).message);
       setProgress(null);
@@ -76,8 +76,24 @@ export default function ImportModal({ onClose, onImported, initialUrl }: Props) 
             <p className="mt-1 text-xs text-secondary-500">
               {reel
                 ? 'Instagram-Reel — KI-Import aus Beschreibung, gesprochenem und eingeblendetem Text (dauert ca. 1–2 Minuten, nur online).'
-                : 'Die Seite wird serverseitig ausgelesen (nur online, Token nötig).'}
+                : 'Die Seite wird serverseitig ausgelesen (nur online, Token nötig). Seiten ohne Rezept-Daten liest die KI aus.'}
             </p>
+            {!reel && (
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-secondary-700 dark:text-secondary-300">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-primary-600"
+                  checked={aiReview}
+                  onChange={(e) => setAiReview(e.target.checked)}
+                />
+                <span>
+                  Mit KI prüfen und ergänzen
+                  <span className="block text-xs text-secondary-500">
+                    Die KI gleicht das importierte Rezept mit der Seite ab und korrigiert oder ergänzt fehlende Angaben (dauert etwas länger).
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
         ) : (
           <textarea

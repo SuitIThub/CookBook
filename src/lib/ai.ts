@@ -961,15 +961,43 @@ export async function recipeFromReelSources(
   config?: AIRequestConfig,
   catalogueNames: string[] = []
 ): Promise<Record<string, unknown>> {
+  return recipeFromSources('reel', sources, config, catalogueNames);
+}
+
+/**
+ * Build a complete recipe (recipeData JSON) from the visible text of a web
+ * page that has no structured recipe data (no JSON-LD).
+ */
+export async function recipeFromWebPage(
+  pageText: string,
+  config?: AIRequestConfig,
+  catalogueNames: string[] = []
+): Promise<Record<string, unknown>> {
+  return recipeFromSources('web', pageText, config, catalogueNames);
+}
+
+const SOURCE_INTRO = {
+  reel: `Erstelle aus dem folgenden Material eines Koch-Videos (Instagram-Reel) ein vollständiges Rezept als JSON (variantName + recipeData). Antworte NUR mit dem JSON-Objekt, kein anderer Text.
+
+Das Material kann unvollständig, doppelt oder ungeordnet sein (Beschreibung, gesprochener Text, eingeblendeter Text, Bildbeschreibungen). Führe es zu EINEM sauberen Rezept zusammen:`,
+  web: `Erstelle aus dem folgenden Text einer Webseite ein vollständiges Rezept als JSON (variantName + recipeData). Antworte NUR mit dem JSON-Objekt, kein anderer Text.
+
+Der Text wurde automatisch aus der Seite gelesen und enthält neben dem Rezept oft Navigation, Werbung, Kommentare, Lebensgeschichten oder weitere Rezept-Vorschläge. Nimm NUR das Hauptrezept der Seite (passend zum Seitentitel) und ignoriere alles andere. Gibt es Zutatenlisten mit Zwischenüberschriften (z. B. "Für den Teig", "Für die Füllung"), übernimm sie als eigene ingredientGroups mit "title"; ebenso Zubereitungs-Abschnitte als eigene preparationGroups mit "title".`
+};
+
+async function recipeFromSources(
+  kind: keyof typeof SOURCE_INTRO,
+  sources: string,
+  config?: AIRequestConfig,
+  catalogueNames: string[] = []
+): Promise<Record<string, unknown>> {
   const catalogueBlock = catalogueNames.length
     ? `
 VORHANDENE ZUTATEN IM KOCHBUCH (verwende für eine Zutat GENAU diesen Namen, wenn sie gemeint ist — Zusätze wie "gehackt" oder "frisch" gehören in "description", nicht in den Namen):
 ${catalogueNames.join(', ')}
 `
     : '';
-  const userContent = `Erstelle aus dem folgenden Material eines Koch-Videos (Instagram-Reel) ein vollständiges Rezept als JSON (variantName + recipeData). Antworte NUR mit dem JSON-Objekt, kein anderer Text.
-
-Das Material kann unvollständig, doppelt oder ungeordnet sein (Beschreibung, gesprochener Text, eingeblendeter Text, Bildbeschreibungen). Führe es zu EINEM sauberen Rezept zusammen:
+  const userContent = `${SOURCE_INTRO[kind]}
 - title: kurzer, klarer Rezeptname auf Deutsch (keine Emojis, keine Hashtags).
 - description: 1–3 Sätze, worum es geht. Keine Werbung, keine Hashtags, keine Aufrufe zum Folgen/Liken.
 - ingredientGroups: alle Zutaten mit Menge und Einheit. Pro Zutat genau EIN Eintrag in "quantities" ({ "amount": Zahl, "unit": "g" | "ml" | "EL" | "TL" | "Stück" | … }). Ist keine Menge genannt: amount 0 und unit "".
@@ -977,9 +1005,9 @@ Das Material kann unvollständig, doppelt oder ungeordnet sein (Beschreibung, ge
 - linkedIngredients (WICHTIG): in JEDEM Schritt alle Zutaten verknüpfen, die in diesem Schritt verwendet werden — als [{ "ingredientId": "<id der Zutat aus ingredientGroups>", "selectedQuantityIndex": 0 }]. Jede Zutat sollte in mindestens einem Schritt verknüpft sein.
 - Zutatennamen: kurz und einheitlich (z. B. "Zwiebel", nicht "1 große Zwiebel, gewürfelt"); Mengen gehören in "quantities", Zusätze in "description".
 - Jede Zutat einzeln: "Salz und Pfeffer" sind ZWEI Zutaten ("Salz", "Pfeffer"), nicht eine. Gemeinsame Zusätze gehören zu jeder der Zutaten in "description": "Salz und Pfeffer aus der Mühle" → "Salz" (description "aus der Mühle") und "Pfeffer" (description "aus der Mühle").
-- metadata.servings: genannte Portionen, sonst 2. metadata.timeEntries: genannte Zeiten (id, label, minutes).
+- metadata.servings: genannte Portionen, sonst 2. metadata.timeEntries: genannte Zeiten als einzelne Abschnitte (id, label, minutes), z. B. "Zubereitung", "Ruhezeit", "Backzeit" — KEINE Gesamtzeit, die wird automatisch aus den Abschnitten berechnet. Ist nur eine Gesamtzeit genannt, wird sie ein Eintrag "Zubereitung"; sind Abschnitte UND eine größere Gesamtzeit genannt, wird die Differenz ein passender weiterer Abschnitt (z. B. "Ruhezeit" oder "Garzeit").
 - tags: 2–6 passende deutsche Schlagwörter. category: passende Kategorie.
-- variantName: "Reel".
+- variantName: "${kind === 'reel' ? 'Reel' : 'Webseite'}".
 Erfinde keine Zutaten oder Mengen, die nirgends vorkommen. Übersetze fremdsprachiges Material ins Deutsche.
 Verwende für alle id-Felder kurze eindeutige Werte (z. B. "a1b2c3").
 ${catalogueBlock}
@@ -991,6 +1019,62 @@ ${sources}`;
       ? await openRouterProposeVariant(userContent, config)
       : parseProposedVariant(await ollamaProposeVariantRaw(userContent, config), 'Ollama');
   return proposed.recipeData;
+}
+
+/**
+ * Check a recipe extracted from structured page data (site extractor /
+ * JSON-LD) against the page's visible text: fix wrong values, add what is
+ * missing. Returns the complete corrected recipe and a list of the changes.
+ */
+export async function reviewImportedRecipe(
+  extracted: Record<string, unknown>,
+  pageText: string,
+  config?: AIRequestConfig,
+  catalogueNames: string[] = []
+): Promise<{ changes: string[]; recipeData: Record<string, unknown> }> {
+  const catalogueBlock = catalogueNames.length
+    ? `
+VORHANDENE ZUTATEN IM KOCHBUCH (verwende für eine Zutat GENAU diesen Namen, wenn sie gemeint ist):
+${catalogueNames.join(', ')}
+`
+    : '';
+  const prompt = `Ein Rezept wurde automatisch aus den strukturierten Daten einer Webseite importiert. Prüfe es gegen den Text der Seite und korrigiere oder ergänze es.
+
+Prüfe insbesondere:
+- Zutaten: fehlt eine Zutat, ist eine Menge/Einheit falsch oder fehlt sie, ist der Name verstümmelt oder enthält er Mengen/Zusätze ("1 große Zwiebel, gewürfelt" → Name "Zwiebel", Menge 1 Stück, description "groß, gewürfelt")? Pro Zutat genau EIN Eintrag in "quantities".
+- Zutatengruppen: hat die Seite Zwischenüberschriften ("Für den Teig", "Für die Soße"), sollen die Zutaten so gruppiert sein (ingredientGroups mit "title").
+- Zubereitung: fehlende, abgeschnittene oder zusammengeklebte Schritte; Abschnitte der Seite als preparationGroups mit "title".
+- metadata: Portionen, Zeiten (einzelne Abschnitte wie "Zubereitung", "Backzeit", "Ruhezeit" — KEINE Gesamtzeit als eigenen Eintrag), Schwierigkeit ("leicht" | "mittel" | "schwer"), wenn auf der Seite genannt. metadata.nutrition (calories, protein, carbohydrates, fat) nur, wenn die Seite Nährwerte nennt — immer PRO PORTION (Angaben fürs ganze Rezept durch die Portionen teilen).
+- linkedIngredients: in jedem Schritt die verwendeten Zutaten verknüpfen ([{ "ingredientId": "<id>", "selectedQuantityIndex": 0 }]).
+
+Regeln:
+- Was bereits stimmt, bleibt UNVERÄNDERT — inklusive aller "id"-Werte. Neue Einträge bekommen neue kurze eindeutige ids.
+- Zutatennamen nur ändern, wenn sie falsch oder verstümmelt sind — nicht bloß, weil die Seite sie anders schreibt ("Eier" bleibt "Eier", "Vanillin-Zucker" bleibt "Vanillin-Zucker").
+- Nur ändern, was die Seite belegt. Nichts erfinden, nichts weglassen, was im Rezept steht und auf der Seite vorkommt.
+- Der Seitentext enthält auch Navigation, Werbung, Kommentare und andere Rezepte — beachte nur das Hauptrezept.
+- Sprache des Rezepts beibehalten.
+- "changes": jede Änderung als kurzer deutscher Satz für Kochende, OHNE JSON-Feldnamen (z. B. "Portionen 1 → 12 korrigiert", "Zutat „Backpulver“ (1 TL) ergänzt", "Menge Mehl 25 g → 250 g korrigiert", "Zutaten in Gruppen „Teig“ und „Belag“ aufgeteilt", "Backzeit 45 Min. ergänzt"). Das Verknüpfen von Zutaten mit Schritten nicht auflisten. Keine Änderungen → leere Liste.
+- "recipeData": das VOLLSTÄNDIGE Rezept nach der Prüfung (title, description, metadata, ingredientGroups, preparationGroups, tags, category).
+${catalogueBlock}
+--- IMPORTIERTES REZEPT (JSON) ---
+${JSON.stringify(extracted)}
+
+--- TEXT DER WEBSEITE ---
+${pageText}`;
+  const schema = {
+    type: 'object',
+    properties: {
+      changes: { type: 'array', items: { type: 'string' } },
+      recipeData: RECIPE_VARIANT_FORMAT.properties.recipeData
+    },
+    required: ['changes', 'recipeData']
+  };
+  const result = await aiStructured<{ changes?: unknown; recipeData?: unknown }>(prompt, schema, config);
+  if (!result?.recipeData || typeof result.recipeData !== 'object') throw new Error('Die KI lieferte kein Rezept zurück.');
+  return {
+    changes: Array.isArray(result.changes) ? result.changes.filter((c): c is string => typeof c === 'string' && c.trim() !== '') : [],
+    recipeData: result.recipeData as Record<string, unknown>
+  };
 }
 
 /* ------------------------------------------------ structured JSON tasks */
