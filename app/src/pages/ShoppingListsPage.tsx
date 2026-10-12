@@ -3,8 +3,8 @@
  * ShoppingListsHeader / ShoppingListCard / EmptyShoppingListsState.
  * Local-first; live updates arrive through the background sync.
  */
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ShoppingList } from '@/types';
 import { localShoppingLists, createLocalShoppingList, deleteLocalShoppingList } from '@/lib/localData';
@@ -28,7 +28,13 @@ export default function ShoppingListsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = useQuery({ queryKey: ['shoppingLists'], queryFn: localShoppingLists });
-  const [showCreate, setShowCreate] = useState(false);
+  // Dashboard shortcut: ?new=1 opens "Neue Liste".
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showCreate, setShowCreate] = useState(() => searchParams.has('new'));
+  useEffect(() => {
+    if (searchParams.has('new')) setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);

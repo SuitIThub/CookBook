@@ -31,6 +31,7 @@ import { runSync, subscribeSyncStatus, getSyncStatus, type SyncStatus } from '@/
 import { apiBase } from '@/lib/api';
 import { unitOptions, formatQuantityForDisplay, amountText } from '@/lib/unitDisplay';
 import ShoppingListMarketPanel from '@/components/ShoppingListMarketPanel';
+import { PurchaseSuggestionBanner } from '@dashboard/cooking';
 import { ViewNotesModal, AddNoteModal, hasNote } from '@/components/shopping_list/NoteModals';
 
 const PERMANENT_LIST_IDS = ['permanent-shopping-list', 'global-template-shopping-list'];
@@ -412,6 +413,9 @@ export default function ShoppingListDetailPage() {
       </div>
 
       <ShoppingListMarketPanel list={list} onChanged={refresh} />
+
+      {/* "Eingekauft?" → recipes onto "Demnächst kochen" (shared with the website) */}
+      {!list.isPermanent && <PurchaseSuggestionBanner list={list} />}
 
       {showBanner && permanentSummary && (
         <div className="mb-4 rounded-lg border border-primary-200 bg-primary-50 p-4 dark:border-primary-700 dark:bg-primary-900/20">

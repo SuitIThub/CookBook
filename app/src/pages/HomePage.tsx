@@ -1,7 +1,7 @@
 /**
  * Start page — port of src/pages/index.astro (HomeLayout: no nav bar, icon
  * buttons top-right, logo, welcome text, two cards). Like the website, an
- * active alias forwards to the tracker unless ?welcome=1 is given.
+ * active alias forwards to the dashboard unless ?welcome=1 is given.
  */
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { getAlias } from '@/lib/settings';
@@ -10,7 +10,7 @@ import { ThemeToggle, openAliasSettings, openAiSettings } from '@/components/set
 
 export default function HomePage() {
   const location = useLocation();
-  if (getAlias() && !location.search.includes('welcome=1')) return <Navigate to="/tracker" replace />;
+  if (getAlias() && !location.search.includes('welcome=1')) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="relative">

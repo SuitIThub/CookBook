@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  content: ['./index.html', './src/**/*.{ts,tsx}', '../src/dashboard/**/*.{ts,tsx}'],
   darkMode: 'class',
   // The website defines its own .container (max-w-7xl, centered) in components.css.
   // Disable Tailwind's core container so ours matches the site exactly.

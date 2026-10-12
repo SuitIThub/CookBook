@@ -153,6 +153,9 @@ const { title } = Astro.props;
           
           <!-- Desktop navigation (large landscape viewports only) -->
           <div class="hidden desktop:flex items-center space-x-4">
+            <a href="/dashboard" class="nav-link">
+              Dashboard
+            </a>
             <a href="/rezepte" class="nav-link">
               Rezepte
             </a>
@@ -292,6 +295,9 @@ const { title } = Astro.props;
         <!-- Mobile menu -->
         <div id="mobile-menu" class="hidden border-t border-gray-200 dark:border-gray-700 mt-2 pt-4 pb-4">
           <div class="flex flex-col space-y-3">
+            <a href="/dashboard" class="nav-link text-base">
+              Dashboard
+            </a>
             <a href="/rezepte" class="nav-link text-base">
               Rezepte
             </a>

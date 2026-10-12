@@ -18,7 +18,8 @@ import {
 import { collectIngredientsFromGroups, computeRecipeNutrition } from './recipeNutrition';
 import { filterRecipeBySelection, getDefaultSelection, resolveSelection } from './alternatives';
 import type { CatalogueIngredient, DiaryComposition, DiarySource, MealPlanStatus, Product } from '../types/tracker';
-import type { NutritionData } from '../types/recipe';
+import type { NutritionData, Recipe } from '../types/recipe';
+import { mainIngredientNames, recommendRecipes, DEFAULT_CRITERIA, type RecommendationCandidate, type RecommendationCriteria } from './weekRecommendations';
 
 export interface ServiceResult {
   status: number;
@@ -330,17 +331,29 @@ export function recipeSuggestions(db: CookbookDatabase, params: { kcal: unknown;
   const limit = Math.min(20, Math.max(1, Number.parseInt(String(params.limit ?? '6'), 10) || 6));
   if (!Number.isFinite(remainingKcal) || remainingKcal <= 0) return ok({ remainingKcal: 0, suggestions: [] });
 
-  const catalogueByName = new Map<string, CatalogueIngredient>();
-  for (const cat of db.getAllCatalogueIngredients()) catalogueByName.set(cat.name.trim().toLowerCase(), cat);
-  const productsById = new Map<string, Product>();
-  for (const product of db.getAllProducts()) productsById.set(product.id, product);
-
   const minKcal = remainingKcal * 0.35; // ignore tiny snacks that barely use the budget
   const maxKcal = remainingKcal * 1.1; // small overshoot tolerated
   const wantProtein = Number.isFinite(remainingProtein) && remainingProtein > 0;
   const scored: { id: string; title: string; imageUrl?: string; kcal: number; protein: number; estimated: boolean; score: number }[] = [];
 
-  for (const recipe of db.getAllRecipes()) {
+  for (const { recipe, kcal, protein, estimated } of recipesWithServingNutrition(db)) {
+    if (kcal == null || !(kcal > 0) || kcal < minKcal || kcal > maxKcal) continue;
+    const p = Number(protein) || 0;
+    const score = wantProtein ? p / Math.max(1, kcal) : -Math.abs(kcal - remainingKcal);
+    scored.push({ id: recipe.id, title: recipe.title, imageUrl: recipe.imageUrl || recipe.images?.[0]?.url, kcal: Math.round(kcal), protein: Math.round(p), estimated, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return ok({ remainingKcal: Math.round(remainingKcal), suggestions: scored.slice(0, limit).map(({ score: _s, ...rest }) => rest) });
+}
+
+/** Per-serving kcal/protein of every (non-draft) recipe, live from catalogue + products. */
+function recipesWithServingNutrition(db: CookbookDatabase): { recipe: Recipe; kcal?: number; protein?: number; estimated: boolean }[] {
+  const catalogueByName = new Map<string, CatalogueIngredient>();
+  for (const cat of db.getAllCatalogueIngredients()) catalogueByName.set(cat.name.trim().toLowerCase(), cat);
+  const productsById = new Map<string, Product>();
+  for (const product of db.getAllProducts()) productsById.set(product.id, product);
+
+  return db.getAllRecipes().map((recipe) => {
     const selection = resolveSelection(recipe, getDefaultSelection(recipe));
     const visible = collectIngredientsFromGroups(filterRecipeBySelection(recipe, selection).ingredientGroups);
     const res = computeRecipeNutrition({ recipe, visibleIngredients: visible, servings: recipe.metadata?.servings, catalogueByName, productsById });
@@ -352,11 +365,64 @@ export function recipeSuggestions(db: CookbookDatabase, params: { kcal: unknown;
       protein = recipe.metadata.nutrition.protein ?? undefined;
       estimated = true;
     }
-    if (kcal == null || !(kcal > 0) || kcal < minKcal || kcal > maxKcal) continue;
-    const p = Number(protein) || 0;
-    const score = wantProtein ? p / Math.max(1, kcal) : -Math.abs(kcal - remainingKcal);
-    scored.push({ id: recipe.id, title: recipe.title, imageUrl: recipe.imageUrl || recipe.images?.[0]?.url, kcal: Math.round(kcal), protein: Math.round(p), estimated, score });
+    return { recipe, kcal: kcal ?? undefined, protein: protein ?? undefined, estimated };
+  });
+}
+
+/**
+ * Dashboard "Für nächste Woche empfohlen": scores all recipes (variants
+ * excluded) by the criteria the widget enables — favorites, long not eaten
+ * (diary + meal plans of the alias), per-meal calorie target, variety.
+ * Recipes planned from today on are left out.
+ */
+export function weekRecommendations(
+  db: CookbookDatabase,
+  params: { alias: unknown; favoriteIds?: unknown; criteria?: Partial<RecommendationCriteria>; targetMealKcal?: unknown; count?: unknown; seed?: unknown; now?: number }
+): ServiceResult {
+  const alias = normalizeAlias(params.alias);
+  if (!alias) return err('alias required');
+  const now = params.now ?? Date.now();
+  const criteria: RecommendationCriteria = { ...DEFAULT_CRITERIA };
+  for (const key of Object.keys(DEFAULT_CRITERIA) as (keyof RecommendationCriteria)[]) {
+    if (typeof params.criteria?.[key] === 'boolean') criteria[key] = params.criteria[key] as boolean;
   }
-  scored.sort((a, b) => b.score - a.score);
-  return ok({ remainingKcal: Math.round(remainingKcal), suggestions: scored.slice(0, limit).map(({ score: _s, ...rest }) => rest) });
+  const count = Math.min(14, Math.max(1, Number.parseInt(String(params.count ?? '5'), 10) || 5));
+  const targetMealKcal = Math.max(0, Number(params.targetMealKcal) || 0);
+  const seed = Number.isFinite(Number(params.seed)) ? Number(params.seed) : 0;
+  const favoriteIds = new Set(Array.isArray(params.favoriteIds) ? params.favoriteIds.filter((x): x is string => typeof x === 'string') : []);
+
+  // When was each recipe last eaten / cooked? Diary (half a year) + meal plans.
+  const lastEaten = new Map<string, number>();
+  const seen = (id: string | undefined, at: number) => {
+    if (id && at <= now && at > (lastEaten.get(id) ?? -Infinity)) lastEaten.set(id, at);
+  };
+  const from = new Date(now - 183 * 86_400_000).toISOString();
+  for (const e of db.getDiaryEntriesForAlias(alias, from, new Date(now).toISOString())) seen(e.recipeId, new Date(e.eatenAt).getTime());
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const plannedIds = new Set<string>();
+  for (const plan of db.getMealPlansForAlias(alias, from)) {
+    if (plan.status === 'skipped') continue;
+    const at = new Date(plan.scheduledAt).getTime();
+    if (at >= startOfToday.getTime()) plannedIds.add(plan.recipeId);
+    else seen(plan.recipeId, at);
+  }
+
+  const candidates: RecommendationCandidate[] = recipesWithServingNutrition(db)
+    .filter(({ recipe }) => !recipe.parentRecipeId)
+    .map(({ recipe, kcal, protein, estimated }) => ({
+      id: recipe.id,
+      title: recipe.title,
+      imageUrl: recipe.imageUrl || recipe.images?.[0]?.url,
+      category: recipe.category || undefined,
+      mainIngredients: mainIngredientNames(collectIngredientsFromGroups(recipe.ingredientGroups).map((i) => i.name)),
+      kcal,
+      protein,
+      estimated
+    }));
+
+  return ok({
+    criteria,
+    recommendations: recommendRecipes({ candidates, criteria, favoriteIds, lastEaten, plannedIds, targetMealKcal, now, count, seed })
+  });
 }

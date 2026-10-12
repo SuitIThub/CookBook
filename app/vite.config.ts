@@ -23,8 +23,12 @@ export default defineConfig({
       '@shared': fileURLToPath(new URL('../src/types', import.meta.url)),
       // The shared, driver-agnostic data layer (CookbookDatabase + SqlDriver).
       // Backed by sql.js in the app, better-sqlite3 on the server.
-      '@core': fileURLToPath(new URL('../src/lib', import.meta.url))
-    }
+      '@core': fileURLToPath(new URL('../src/lib', import.meta.url)),
+      // Shared React UI (dashboard widgets), rendered as an island on the website.
+      '@dashboard': fileURLToPath(new URL('../src/dashboard', import.meta.url))
+    },
+    // Shared .tsx files live outside app/ — make them use the app's React, not a second copy.
+    dedupe: ['react', 'react-dom']
   },
   server: {
     port: 5173,

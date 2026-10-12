@@ -20,14 +20,18 @@ import {
   diaryGet,
   diaryPost,
   diaryPut,
+  mealPlansDelete,
   mealPlansGet,
+  mealPlansPost,
   recipeSuggestions,
+  weekRecommendations,
   weightDelete,
   weightGet,
   weightPost,
   type ServiceResult,
 } from '@core/trackerService';
 import type { NutritionData } from '@shared/recipe';
+import type { Recommendation, RecommendationCriteria } from '@core/weekRecommendations';
 import type {
   BodyProfile,
   DiaryComposition,
@@ -176,6 +180,34 @@ export async function getActivePlans(activeOnIso: string): Promise<MealPlan[]> {
   if (!alias) return [];
   const data = await read<{ plans: MealPlan[] }>((db) => mealPlansGet(db, { alias, activeOn: activeOnIso }));
   return data.plans || [];
+}
+
+/** Plans starting in the range (dashboard: "Geplante Gerichte"). */
+export async function getPlans(fromIso: string, toIso: string): Promise<MealPlan[]> {
+  const alias = getAlias();
+  if (!alias) return [];
+  const data = await read<{ plans: MealPlan[] }>((db) => mealPlansGet(db, { alias, from: fromIso, to: toIso }));
+  return data.plans || [];
+}
+
+export async function createPlan(input: { recipeId: string; scheduledAt: string; servings: number }): Promise<MealPlan> {
+  return write<MealPlan>((db) => mealPlansPost(db, { alias: getAlias(), ...input }));
+}
+
+export async function deletePlan(id: string): Promise<void> {
+  await write((db) => mealPlansDelete(db, id));
+}
+
+/** Dashboard "Für nächste Woche empfohlen" on the local replica (same logic as the server). */
+export async function getRecommendations(params: {
+  favoriteIds: string[];
+  criteria: RecommendationCriteria;
+  targetMealKcal: number;
+  count: number;
+  seed: number;
+}): Promise<Recommendation[]> {
+  const data = await read<{ recommendations: Recommendation[] }>((db) => weekRecommendations(db, { alias: getAlias(), ...params }));
+  return data.recommendations || [];
 }
 
 // --------------------------------------------------------- recipe helpers ----

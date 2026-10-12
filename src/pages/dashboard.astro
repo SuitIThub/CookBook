@@ -1,0 +1,9 @@
+---
+import Layout from '../layouts/Layout.astro';
+import WebsiteDashboard from '../dashboard/WebsiteDashboard';
+---
+
+<Layout title="Dashboard">
+  <!-- Shared React dashboard (also used by the app); needs the alias from localStorage → client only. -->
+  <WebsiteDashboard client:only="react" />
+</Layout>

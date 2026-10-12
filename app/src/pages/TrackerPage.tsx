@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   calculateCalorieGoal,
   addNutrition,
@@ -314,6 +314,13 @@ export default function TrackerPage() {
 
 // ===========================================================================
 function TrackerBody({ alias, dark }: { alias: string; dark: boolean }) {
+  // Dashboard shortcuts: /tracker?action=scan|product|free|weight (read once, then dropped from the URL).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [shortcut] = useState(() => searchParams.get('action'));
+  useEffect(() => {
+    if (searchParams.has('action')) setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [profile, setProfile] = useState<BodyProfile>(() => tracker.readLocalProfile());
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
@@ -498,6 +505,7 @@ function TrackerBody({ alias, dark }: { alias: string; dark: boolean }) {
 
       {/* Free entry */}
       <FreeEntrySection
+        autoAction={shortcut === 'scan' || shortcut === 'product' || shortcut === 'free' ? shortcut : undefined}
         selectedDay={selectedDay}
         isSelectedToday={isSelectedToday}
         requestScan={requestScan}
@@ -512,6 +520,7 @@ function TrackerBody({ alias, dark }: { alias: string; dark: boolean }) {
 
       {/* Weight */}
       <WeightSection
+        autoFocus={shortcut === 'weight'}
         weightLogs={weightLogs}
         profile={profile}
         dark={dark}
@@ -961,14 +970,18 @@ function ProductSearchBox({
   initialGrams,
   requestScan,
   onChange,
+  autoAction,
 }: {
   includeIngredients?: boolean;
   catalogueIngredientId?: string;
   initialGrams?: number;
   requestScan: (onEan: (ean: string) => void) => void;
   onChange: (pick: Pick | null, grams: number | undefined, scaled: NutritionData) => void;
+  /** Dashboard shortcut: start the scanner / focus the search right away. */
+  autoAction?: 'scan' | 'product';
 }) {
   const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
   const [results, setResults] = useState<Pick[]>([]);
   const [status, setStatus] = useState('');
   const [picked, setPicked] = useState<Pick | null>(null);
@@ -1156,6 +1169,13 @@ function ProductSearchBox({
     if (picked) emit(picked, amt, u);
   };
 
+  useEffect(() => {
+    if (autoAction === 'scan') requestScan((ean) => { setQuery(ean); lookupEan(ean); });
+    else if (autoAction === 'product') searchRef.current?.focus();
+    // Only once, when opened from a shortcut.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const grams = picked ? resolveGrams(picked, amount, unit) : undefined;
   const scaledKcal = picked && grams != null ? scaleNutrition(picked.nutritionPer100g || {}, grams / 100).calories : undefined;
 
@@ -1163,6 +1183,7 @@ function ProductSearchBox({
     <div>
       <div className="flex flex-wrap gap-2">
         <input
+          ref={searchRef}
           type="search"
           value={query}
           onChange={(e) => onQueryInput(e.target.value)}
@@ -1334,8 +1355,12 @@ function MealPrepRow({ plan, onMarkEaten }: { plan: MealPlan; onMarkEaten: (plan
 }
 
 // ===================================================== Free entry section ===
-function FreeEntrySection({ selectedDay, isSelectedToday, requestScan, onAdded }: { selectedDay: Date; isSelectedToday: boolean; requestScan: (onEan: (ean: string) => void) => void; onAdded: (eatenAtIso: string) => void }) {
-  const [open, setOpen] = useState(false);
+function FreeEntrySection({ selectedDay, isSelectedToday, requestScan, onAdded, autoAction }: { selectedDay: Date; isSelectedToday: boolean; requestScan: (onEan: (ean: string) => void) => void; onAdded: (eatenAtIso: string) => void; autoAction?: 'scan' | 'product' | 'free' }) {
+  const [open, setOpen] = useState(!!autoAction);
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (autoAction) sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [autoAction]);
   const [picked, setPicked] = useState<Pick | null>(null);
   const [grams, setGrams] = useState<number | undefined>(undefined);
   const [label, setLabel] = useState('');
@@ -1427,7 +1452,7 @@ function FreeEntrySection({ selectedDay, isSelectedToday, requestScan, onAdded }
   };
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+    <section ref={sectionRef} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 text-left">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Freier Eintrag</h2>
         <span className={`text-sm text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">▼</span>
@@ -1436,7 +1461,7 @@ function FreeEntrySection({ selectedDay, isSelectedToday, requestScan, onAdded }
         <form onSubmit={submit} className="mt-3 space-y-3">
           <div>
             <div className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">Produkt (Register, Barcode oder Open Food Facts)</div>
-            <ProductSearchBox key={resetKey} requestScan={requestScan} onChange={onPickChange} />
+            <ProductSearchBox key={resetKey} requestScan={requestScan} onChange={onPickChange} autoAction={resetKey === 0 && (autoAction === 'scan' || autoAction === 'product') ? autoAction : undefined} />
           </div>
 
           <p className="text-[11px] text-gray-500">
@@ -1445,7 +1470,7 @@ function FreeEntrySection({ selectedDay, isSelectedToday, requestScan, onAdded }
 
           <div className="grid grid-cols-1 items-end gap-2 text-sm sm:grid-cols-4">
             <label className="block sm:col-span-2">Bezeichnung
-              <input value={label} onChange={(e) => setLabel(e.target.value)} required placeholder="z.B. Kaffee mit Milch" className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 dark:border-gray-600 dark:bg-gray-900" />
+              <input autoFocus={autoAction === 'free' && resetKey === 0} value={label} onChange={(e) => setLabel(e.target.value)} required placeholder="z.B. Kaffee mit Milch" className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 dark:border-gray-600 dark:bg-gray-900" />
             </label>
             <label className="block">kcal
               <input type="number" step="1" value={kcal} onChange={(e) => setKcal(e.target.value)} className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 dark:border-gray-600 dark:bg-gray-900" />
@@ -1881,7 +1906,13 @@ function buildWeightChart(weightLogs: WeightLog[], profile: BodyProfile, range: 
   return { svg: parts.join(''), legend, forecastNote };
 }
 
-function WeightSection({ weightLogs, profile, dark, onAdd, onDelete }: { weightLogs: WeightLog[]; profile: BodyProfile; dark: boolean; onAdd: (weightKg: number, day: string) => Promise<void>; onDelete: (id: string) => void }) {
+function WeightSection({ weightLogs, profile, dark, onAdd, onDelete, autoFocus }: { weightLogs: WeightLog[]; profile: BodyProfile; dark: boolean; onAdd: (weightKg: number, day: string) => Promise<void>; onDelete: (id: string) => void; autoFocus?: boolean }) {
+  const weightInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!autoFocus) return;
+    weightInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    weightInputRef.current?.focus({ preventScroll: true });
+  }, [autoFocus]);
   const [range, setRange] = useState<WeightRange>(() => readWeightRange());
   const [showBmi, setShowBmi] = useState(() => readShowBmi());
   const [weight, setWeight] = useState('');
@@ -1969,7 +2000,7 @@ function WeightSection({ weightLogs, profile, dark, onAdd, onDelete }: { weightL
       <form onSubmit={submit} className="mb-3 mt-3 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200">
           Gewicht (kg)
-          <input type="number" step="0.1" required value={weight} onChange={(e) => setWeight(e.target.value)} className="w-24 rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900" />
+          <input ref={weightInputRef} type="number" step="0.1" required value={weight} onChange={(e) => setWeight(e.target.value)} className="w-24 rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-900" />
         </label>
         <label className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200">
           Datum

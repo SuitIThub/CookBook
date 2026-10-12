@@ -2639,3 +2639,41 @@ import Layout from '../layouts/Layout.astro';
     if (e.key === 'cookbook.alias' || e.key === PROFILE_KEY) loadTracker();
   });
 </script>
+
+<script>
+  // Dashboard shortcuts: /tracker?action=scan|product|free|weight opens the
+  // matching part of the page once the tracker body is visible.
+  (function () {
+    const action = new URLSearchParams(location.search).get('action');
+    if (!action) return;
+    const started = Date.now();
+    const run = () => {
+      const body = document.getElementById('tracker-body');
+      if (!body || body.classList.contains('hidden')) {
+        if (Date.now() - started < 8000) setTimeout(run, 100);
+        return;
+      }
+      history.replaceState(null, '', location.pathname);
+      const free = document.getElementById('tracker-free-entry') as HTMLDetailsElement | null;
+      const focus = (id: string) => {
+        const el = document.getElementById(id);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (el as HTMLElement | null)?.focus({ preventScroll: true });
+      };
+      if (action === 'weight') {
+        focus('tw-weight');
+        return;
+      }
+      if (free) free.open = true;
+      if (action === 'scan') {
+        free?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('td-scan')?.click();
+      } else if (action === 'product') {
+        focus('td-product-search');
+      } else if (action === 'free') {
+        focus('td-label');
+      }
+    };
+    run();
+  })();
+</script>

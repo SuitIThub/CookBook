@@ -81,7 +81,8 @@ export default function RecipesPage() {
   const [category, setCategory] = useState(() => searchParams.get('category') || '');
   const [view, setView] = useState<View>(initial.view);
   const [catMode, setCatMode] = useState<CatMode>(initial.categoryMode);
-  const [showImport, setShowImport] = useState(false);
+  // Dashboard shortcut: ?import=1 opens the import dialog.
+  const [showImport, setShowImport] = useState(() => searchParams.has('import'));
   // Shared link ("Teilen → Kochbuch", website: /share-target → ?importUrl=) → import prefilled.
   const sharedImportUrl = searchParams.get('importUrl');
   const [importUrl, setImportUrl] = useState<string | undefined>(undefined);
@@ -185,6 +186,23 @@ export default function RecipesPage() {
     if (originals.length === 0) return;
     navigate(`/rezept/${originals[Math.floor(Math.random() * originals.length)].id}`);
   };
+
+  // Dashboard shortcuts: drop ?import=1 from the URL; ?random=1 opens a random recipe once the list is there.
+  const wantRandom = searchParams.has('random');
+  useEffect(() => {
+    if (!searchParams.has('import') && !(wantRandom && originals.length > 0)) return;
+    if (wantRandom) {
+      navigate(`/rezept/${originals[Math.floor(Math.random() * originals.length)].id}`, { replace: true });
+      return;
+    }
+    setSearchParams(
+      (p) => {
+        p.delete('import');
+        return p;
+      },
+      { replace: true }
+    );
+  }, [wantRandom, originals, searchParams, setSearchParams, navigate]);
 
   const deleteRecipe = async (r: Recipe) => {
     if (!confirm(`Rezept „${r.title}“ wirklich löschen?`)) return;

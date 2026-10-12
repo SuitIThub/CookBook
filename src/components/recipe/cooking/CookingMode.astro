@@ -1,6 +1,7 @@
 ---
 import type { Recipe, PreparationStep, PreparationGroup, IngredientGroup, Ingredient, LinkedIngredient } from '../../../types/recipe';
 import MultiTimerManager from '../../timer/MultiTimerManager.astro';
+import { WebsiteRecipeCookBar } from '../../../dashboard/WebsiteCooking';
 import { formatQuantity } from '../../../lib/units';
 import { filterRecipeBySelection } from '../../../lib/alternatives';
 
@@ -136,11 +137,15 @@ const totalSteps = preparationGroups.reduce((sum, group) => sum + group.steps.le
   <!-- Header with close button -->
   <header class="flex justify-between items-center p-4 md:p-6 border-b border-gray-200 dark:border-gray-700">
     <h1 class="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 dark:text-white">{recipe.title}</h1>
+    <div class="flex items-center gap-2 flex-shrink-0">
+    <!-- "Gekocht" + question after a long time in cooking mode (shared React, also in the app) -->
+    <WebsiteRecipeCookBar client:only="react" compact recipe={{ id: recipe.id, title: recipe.title, servings: recipe.metadata?.servings }} />
     <a href={`/rezept/${recipe.id}`} class="p-2 md:p-3 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
       <svg class="w-6 h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
       </svg>
     </a>
+    </div>
   </header>
 
   <!-- Main content area -->

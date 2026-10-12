@@ -18,6 +18,10 @@ const ALLOWED_KEYS = new Set([
   // for live price/nutrition. Per-alias so two users don't overwrite each other.
   'cookbook.ingredient.defaults',
   'cookbook.preferredSupermarket',
+  // Dashboard widgets + their settings (incl. the note widget's text).
+  'cookbook.dashboard.layout',
+  // "Demnächst kochen" list + declined shopping-list suggestions.
+  'cookbook.cookQueue',
 ]);
 
 function normalizeAlias(value: unknown): string {

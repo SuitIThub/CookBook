@@ -381,3 +381,23 @@ const selectedCategory = Astro.url.searchParams.get('category') || '';
     }
   }
 </script> 
+<script>
+  // Dashboard shortcuts: /rezepte?import=1 opens the import dialog, ?random=1 picks a random recipe.
+  (function () {
+    const params = new URLSearchParams(location.search);
+    const wantImport = params.has('import');
+    const wantRandom = params.has('random');
+    if (!wantImport && !wantRandom) return;
+    history.replaceState(null, '', location.pathname);
+    const started = Date.now();
+    const run = () => {
+      if (wantImport && typeof window.openImportModal === 'function') return window.openImportModal();
+      const random = document.getElementById('random-recipe-btn');
+      if (wantRandom && random) return random.click();
+      if (Date.now() - started < 5000) setTimeout(run, 100);
+    };
+    // After all page scripts have attached their handlers.
+    if (document.readyState === 'complete') run();
+    else window.addEventListener('load', run, { once: true });
+  })();
+</script>

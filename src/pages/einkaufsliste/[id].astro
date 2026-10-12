@@ -9,6 +9,7 @@ import AddNoteModal from '../../components/modals/AddNoteModal.astro';
 import ImageGalleryModal from '../../components/modals/ImageGalleryModal.astro';
 import ShoppingListMarketPanel from '../../components/shopping_list/ShoppingListMarketPanel.astro';
 import PingAliasesModal from '../../components/shopping_list/PingAliasesModal.astro';
+import { WebsiteListCookSuggest } from '../../dashboard/WebsiteCooking';
 
 const { id } = Astro.params;
 
@@ -146,6 +147,9 @@ const uncheckedItems = shoppingList.items.filter(item => !item.isChecked);
       listId={shoppingList.id}
       initialSupermarketId={shoppingList.preferredSupermarketId ?? null}
     />
+
+    <!-- "Eingekauft?" → recipes onto "Demnächst kochen" (shared React, also in the app) -->
+    <WebsiteListCookSuggest client:only="react" listId={shoppingList.id} />
 
     <!-- Sammelliste-Erinnerung nach dem ersten Import-Prompt (wenn noch Inhalt vorhanden) -->
     {showTransferBanner && permanentListSummary && (

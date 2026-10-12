@@ -19,6 +19,7 @@ The user interface is in German; UI labels below are quoted in German.
 ## Contents
 
 - [Features](#features)
+  - [Dashboard](#dashboard)
   - [Recipes](#recipes)
   - [Recipe import](#recipe-import)
   - [AI assistant](#ai-assistant)
@@ -34,6 +35,17 @@ The user interface is in German; UI labels below are quoted in German.
 ---
 
 ## Features
+
+### Dashboard
+
+- Personal start page per alias (`/dashboard`; `/` forwards there once an alias is set), same on website and app
+- **Widgets**: day balance, today's diary, week balance, weight (trend + quick entry), open meal-prep portions (strike off), goal & body, recipes for the remaining budget, favorites, recommendations for next week, planned meals with a date (+ shopping list for the plan), "Demnächst kochen", current shopping lists, a single list to tick off, shortcuts, random recipe, newest recipes, running timers, price changes from receipts, notes
+- **Edit mode**: drag & drop (mouse, touch, arrow keys), width 1–3 columns, settings per widget, add/remove; 1 column on phones, 2 on tablets, 3 on desktops
+- **Recommendations for next week**: favorites, "not eaten for a long time", per-meal calorie target and variety — each switchable per widget; plan a recipe as meal prep in one click
+- **AI week plan**: the AI assembles a balanced meal-prep plan from the recommendations (dish, cooking day, portions, reason) and plans it on request
+- **"Demnächst kochen"**: a list of dishes you intend to cook soon (no date) — fill it from the dashboard, the recipe page ("+ Demnächst kochen") or the shopping list: once (nearly) all ingredients of a recipe are ticked off, the list offers to put it there. "Gekocht ✓" on the recipe page, in cooking mode or in the widget takes it off and can add the portions to the tracker as meal prep; after 20 minutes on a recipe/cooking-mode page you are asked whether you cooked it
+- **Shortcuts** start barcode scanning, bulk product scanning, receipt import, recipe import, new list, weight entry … directly
+- Layout and settings (including notes) sync between the devices of the alias
 
 ### Recipes
 
@@ -54,6 +66,8 @@ The user interface is in German; UI labels below are quoted in German.
 ### Recipe import
 
 - **From websites**: dedicated extractors for Chefkoch, Lecker and Gaumenfreundin, generic support for every site with JSON-LD recipe data
+- **Pages without recipe data** are read by the AI (visible page text → complete recipe with groups, quantities and step links)
+- **"Mit KI prüfen und ergänzen"** (optional): the AI checks a normal import against the page and corrects or completes it; every change is listed
 - **From text/JSON** and from files (`.json`, `.rcb`)
 - **Instagram reels**: the server downloads the reel, transcribes the spoken text locally (Whisper), analyses still frames (OCR or AI image analysis, configurable) and has the AI build a complete recipe from it — including thumbnail and source
 - **Share → Kochbuch**: share links from the browser or the Instagram app directly to the website (Web Share Target) or the Android app
@@ -167,6 +181,7 @@ Download: the latest `kochbuch-<version>.apk` from [Releases](https://github.com
 - **Server-only modules** are named `*.server.ts` (token checks, push, admin, reel and receipt pipelines …) and never end up in the app bundle.
 - **Sync**: triggers record every change in `sync_changes` (monotonic `seq`) and deletions in `sync_tombstones`. The app pulls changes via `/api/sync/pull` (one cursor per type) and pushes its own via `/api/sync/push` — last-write-wins including deletes, shopping lists as a per-item three-way merge (`src/lib/syncMerge.ts`), tracker data only for the caller's alias. `/api/sync/stream` announces new changes via SSE.
 - **Auth**: `src/middleware.ts` requires `X-Alias` + `X-Auth-Token` for writing requests (exception: `/api/admin/*` with `X-Admin-Token`).
+- **Dashboard**: `src/dashboard/` holds React components shared by both clients — on the website as an Astro React island (`/dashboard`), in the app via the `@dashboard` alias. Each client supplies its data source (`DashboardData`: website fetch, app local replica). Recommendations are computed in `src/lib/weekRecommendations.ts` / `trackerService.weekRecommendations` (server endpoint and app replica alike).
 - **AI**: `src/lib/ai.ts` (Ollama/OpenRouter, chat, structured JSON answers, image analysis), `src/lib/aiTasks.ts` (models per task), `src/lib/aiModelCatalog.ts` (model list with recommendations).
 
 ### Project structure
@@ -177,6 +192,7 @@ CookBook/
 │   ├── pages/                # Astro pages (rezepte, rezept/[id], einkaufsliste/[id], produkte, zutaten, tracker, admin …)
 │   │   └── api/              # REST API (recipes, shopping-lists, products, receipts, ai, sync, tracker, push, admin …)
 │   ├── components/           # Astro components
+│   ├── dashboard/            # shared React dashboard (website island + app)
 │   ├── layouts/              # layout with header, fetch wrapper (auth headers), modals
 │   ├── lib/                  # shared core + *.server.ts (server only)
 │   │   └── recipe-extractors/  # website extractors (Chefkoch, Lecker, Gaumenfreundin, JSON-LD)

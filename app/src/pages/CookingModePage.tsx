@@ -11,6 +11,8 @@ import type {
   PreparationStep,
   PreparationGroup
 } from '@/types';
+import { RecipeCookBar } from '@dashboard/cooking';
+import { appCreatePlan } from '@/lib/dashboardData';
 import { useCookTimers } from '@/components/recipe/CookingTimers';
 
 /* ------------------------------------------------------------------ helpers */
@@ -219,15 +221,19 @@ function CookingContent({ recipe }: { recipe: Recipe }) {
         <h1 className="text-xl font-bold text-gray-900 sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl dark:text-white">
           {recipe.title}
         </h1>
-        <Link
-          to={`/rezept/${recipe.id}`}
-          className="rounded-full p-2 transition-colors hover:bg-gray-100 md:p-3 dark:hover:bg-gray-800"
-          aria-label="Kochmodus schließen"
-        >
-          <svg className="h-6 w-6 text-gray-600 md:h-8 md:w-8 lg:h-10 lg:w-10 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </Link>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {/* "Gekocht" + question after a long time in cooking mode (shared with the website) */}
+          <RecipeCookBar compact recipe={{ id: recipe.id, title: recipe.title, servings: recipe.metadata?.servings }} createPlan={appCreatePlan()} />
+          <Link
+            to={`/rezept/${recipe.id}`}
+            className="rounded-full p-2 transition-colors hover:bg-gray-100 md:p-3 dark:hover:bg-gray-800"
+            aria-label="Kochmodus schließen"
+          >
+            <svg className="h-6 w-6 text-gray-600 md:h-8 md:w-8 lg:h-10 lg:w-10 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </Link>
+        </div>
       </header>
 
       {/* Slides */}

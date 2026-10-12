@@ -28,6 +28,8 @@ import LiveNutritionPanel from '@/components/recipe/details/LiveNutritionPanel';
 import RecipeImageGallery from '@/components/recipe/details/RecipeImageGallery';
 import IngredientsList from '@/components/recipe/details/IngredientsList';
 import PreparationSteps from '@/components/recipe/details/PreparationSteps';
+import { RecipeCookBar } from '@dashboard/cooking';
+import { appCreatePlan } from '@/lib/dashboardData';
 
 /** Website: persist the chosen alternative as the new default (isAlternativeDefault). */
 function applySelectionToGroups(groups: (Ingredient | IngredientGroup)[], selection: AlternativeSelection): any[] {
@@ -215,6 +217,8 @@ export default function RecipeDetailPage() {
       />
 
       <div className="space-y-6">
+        {/* "Demnächst kochen" / "Gekocht" — shared with the website */}
+        <RecipeCookBar recipe={{ id: recipe.id, title: recipe.title, servings: recipe.metadata?.servings }} createPlan={appCreatePlan()} />
         {hasRecipeDraft(recipe.id) && (
           <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
             <div className="flex items-start justify-between">

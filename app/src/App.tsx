@@ -29,9 +29,11 @@ import ShoppingListsPage from './pages/ShoppingListsPage';
 import ShoppingListDetailPage from './pages/ShoppingListDetailPage';
 import ShoppingListEditPage from './pages/ShoppingListEditPage';
 import TrackerPage from './pages/TrackerPage';
+import DashboardPage from './pages/DashboardPage';
 import { CookingTimersProvider } from './components/recipe/CookingTimers';
 
 const NAV: { to: string; label: string }[] = [
+  { to: '/dashboard', label: 'Dashboard' },
   { to: '/rezepte', label: 'Rezepte' },
   { to: '/einkaufslisten', label: 'Einkaufslisten' },
   { to: '/zutaten', label: 'Zutaten' },
@@ -251,6 +253,7 @@ export default function App() {
           <Route path="/einkaufsliste/:id" element={<ShoppingListDetailPage />} />
           <Route path="/einkaufsliste/:id/bearbeiten" element={<ShoppingListEditPage />} />
           <Route path="/tracker" element={<TrackerPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/einstellungen" element={<SettingsPage />} />
           <Route path="/admin/aliasse" element={<AdminAliasesPage />} />
           <Route path="/_optouttest" element={<OptoutTestPage />} />

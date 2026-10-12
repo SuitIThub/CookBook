@@ -212,4 +212,18 @@ try {
       }
     });
   </script>
+  <script>
+    // Dashboard shortcut: /einkaufslisten?new=1 opens "Neue Liste".
+    if (new URLSearchParams(location.search).has('new')) {
+      history.replaceState(null, '', location.pathname);
+      const started = Date.now();
+      const run = () => {
+        const btn = document.getElementById('create-shopping-list-btn');
+        if (btn) btn.click();
+        else if (Date.now() - started < 5000) setTimeout(run, 100);
+      };
+      if (document.readyState === 'complete') run();
+      else window.addEventListener('load', run, { once: true });
+    }
+  </script>
 </Layout> 

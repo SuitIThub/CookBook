@@ -16,6 +16,7 @@ import EditFormActions from '../../components/recipe/edit/EditFormActions.astro'
 import ShoppingListModal from '../../components/modals/ShoppingListModal.astro';
 import VariantModal from '../../components/modals/VariantModal.astro';
 import RecipeAIChatModal from '../../components/modals/RecipeAIChatModal.astro';
+import { WebsiteRecipeCookBar } from '../../dashboard/WebsiteCooking';
 
 const { id } = Astro.params;
 
@@ -131,6 +132,9 @@ try {
 
     <!-- View Mode Content -->
     <div id="view-content" class="space-y-6">
+      <!-- "Demnächst kochen" / "Gekocht" (shared React, also in the app) -->
+      <WebsiteRecipeCookBar client:only="react" recipe={{ id: recipe.id, title: recipe.title, servings: recipe.metadata?.servings }} />
+
       <!-- Draft notification banner -->
       <div id="draft-notification" class="hidden bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
         <div class="flex items-start justify-between">

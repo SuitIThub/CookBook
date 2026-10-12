@@ -19,7 +19,10 @@
     "paths": {
       "@/*": ["./src/*"],
       "@shared/*": ["../src/types/*"],
-      "@core/*": ["../src/lib/*"]
+      "@core/*": ["../src/lib/*"],
+      "@dashboard/*": ["../src/dashboard/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
     }
   },
   "include": ["src", "vite.config.ts"]

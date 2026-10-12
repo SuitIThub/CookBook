@@ -107,14 +107,14 @@ import AliasSettingsModal from '../components/modals/AliasSettingsModal.astro';
 </HomeLayout>
 
 <script is:inline>
-  // When an alias is set, the homepage automatically forwards to /tracker.
+  // When an alias is set, the homepage automatically forwards to the dashboard.
   // This keeps the tracker the natural landing page for people who use the
   // calorie feature, while keeping the welcome page for unauthenticated
   // (alias-less) sessions.
   try {
     var alias = (localStorage.getItem('cookbook.alias') || '').trim();
     if (alias && !location.search.includes('welcome=1')) {
-      location.replace('/tracker');
+      location.replace('/dashboard');
     }
   } catch (e) {}
 </script>

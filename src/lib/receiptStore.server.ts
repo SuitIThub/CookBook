@@ -81,6 +81,38 @@ export function createReceiptStore(driver: SqlDriver) {
         .all(productId) as { supermarket_id: string; price: number; observed_at: string }[];
       return Object.fromEntries(rows.map((r) => [r.supermarket_id, { price: r.price, observedAt: r.observed_at }]));
     },
+    /**
+     * Latest price changes (dashboard): per product + supermarket the newest
+     * recorded price compared with the one before it; unchanged prices skipped.
+     */
+    recentChanges(limit: number): { productId: string; productName: string; supermarketId: string; supermarketName: string; price: number; previousPrice: number; observedAt: string }[] {
+      const rows = driver
+        .prepare(
+          `SELECT h.product_id, h.supermarket_id, h.price, h.observed_at,
+                  (SELECT p2.price FROM price_history p2
+                    WHERE p2.product_id = h.product_id AND p2.supermarket_id = h.supermarket_id AND p2.observed_at < h.observed_at
+                    ORDER BY p2.observed_at DESC LIMIT 1) AS previous_price,
+                  pr.name AS product_name, s.name AS supermarket_name
+           FROM price_history h
+           JOIN products pr ON pr.id = h.product_id
+           LEFT JOIN supermarkets s ON s.id = h.supermarket_id
+           WHERE h.observed_at = (SELECT MAX(observed_at) FROM price_history WHERE product_id = h.product_id AND supermarket_id = h.supermarket_id)
+           ORDER BY h.observed_at DESC, h.created_at DESC`
+        )
+        .all() as { product_id: string; supermarket_id: string; price: number; observed_at: string; previous_price: number | null; product_name: string; supermarket_name: string | null }[];
+      return rows
+        .filter((r) => r.previous_price != null && Math.abs(r.previous_price - r.price) >= 0.005)
+        .slice(0, limit)
+        .map((r) => ({
+          productId: r.product_id,
+          productName: r.product_name,
+          supermarketId: r.supermarket_id,
+          supermarketName: r.supermarket_name ?? '',
+          price: r.price,
+          previousPrice: r.previous_price as number,
+          observedAt: r.observed_at
+        }));
+    },
     /** Loose goods sold by weight: give a product without pack size "1 kg (lose)" so €/kg prices fit. */
     ensureKiloPack(productId: string): number | null {
       driver.prepare("UPDATE products SET net_grams = 1000, package_label = '1 kg (lose)' WHERE id = ? AND (net_grams IS NULL OR net_grams = 0)").run(productId);

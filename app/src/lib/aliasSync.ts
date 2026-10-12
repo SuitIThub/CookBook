@@ -24,7 +24,9 @@ export const SYNC_KEYS = [
   'cookbook.recipes.favorites',
   'cookbook.tracker.profile',
   'cookbook.ingredient.defaults',
-  'cookbook.preferredSupermarket'
+  'cookbook.preferredSupermarket',
+  'cookbook.dashboard.layout',
+  'cookbook.cookQueue'
 ];
 
 /**
@@ -35,7 +37,9 @@ const PERSONAL_KEYS = [
   'cookbook.recipes.favorites',
   'cookbook.tracker.profile',
   'cookbook.ingredient.defaults',
-  'cookbook.preferredSupermarket'
+  'cookbook.preferredSupermarket',
+  'cookbook.dashboard.layout',
+  'cookbook.cookQueue'
 ];
 
 interface RemoteSetting {
@@ -159,6 +163,10 @@ function applyKeyEffect(key: string, value: string | null) {
     document.dispatchEvent(new CustomEvent('cookbook:favorites-changed'));
   } else if (key === 'cookbook.ingredient.defaults' || key === 'cookbook.preferredSupermarket') {
     document.dispatchEvent(new CustomEvent('cookbook:ingredient-defaults-changed'));
+  } else if (key === 'cookbook.dashboard.layout') {
+    document.dispatchEvent(new CustomEvent('cookbook:dashboard-layout-changed'));
+  } else if (key === 'cookbook.cookQueue') {
+    document.dispatchEvent(new CustomEvent('cookbook:cook-queue-changed'));
   }
 }
 
